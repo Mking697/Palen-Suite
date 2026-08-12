@@ -2,6 +2,9 @@
 
 Instructions for Claude Code working in this repository.
 
+**Start by reading `STATUS.md`** — what has happened, where the deploy got to,
+and what to do next. This file is the rules; that one is the state.
+
 ## What this is
 
 A BOQ engine for PUF sandwich panel cold rooms. It takes the dimensions off a
@@ -80,7 +83,11 @@ plain HTML/CSS/JS loaded straight from disk.
 Any change to a rule, formula or workflow updates the matching file in the same
 change — `README.md` for status and formulas, `GUIDE.md` for how to use it,
 `DEPLOY.md` for anything about pushing or hosting, `DESIGN.md` for where the
-drawing + BOQ work is going, this file for conventions.
+drawing + BOQ work is going, `STATUS.md` for what has happened and what is
+next, this file for conventions.
+
+`STATUS.md` is the handover. Update it whenever a phase lands, a deploy moves,
+or a decision is taken that the next session would otherwise have to rediscover.
 
 ## Open questions
 

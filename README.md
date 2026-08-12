@@ -233,6 +233,7 @@ engine worthless — see `CLAUDE.md`.
 
 ## Docs
 
+- `STATUS.md` — **start here**: what has happened, where the deploy got to, what is next
 - `CLAUDE.md` — conventions and the rule about never fitting inputs to a sheet
 - `DESIGN.md` — the plan for drawings + BOQ from one job input, and the phases
 - `GUIDE.md` — how to add a new job (Hinglish, for the drawing office)
