@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panel Calculator — Hikom</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <span class="brand-mark">HP</span>
+        <span>
+          <strong>Panel Calculator</strong>
+          <small>dimensions in &rarr; drawings and BOQ out</small>
+        </span>
+      </div>
+
+      <div class="job-fields">
+        <label>Job No<input id="jobNo" type="text" value="HI-" /></label>
+        <label>Density<span class="unit-tag">kg/m&sup3;</span><input id="density" type="number" value="40" /></label>
+      </div>
+
+      <div class="top-actions">
+        <select id="exampleSel" title="Load a verified job into the form">
+          <option value="">Load example…</option>
+        </select>
+        <button class="btn" id="printBtn">Print</button>
+      </div>
+    </header>
+
+    <div class="app">
+      <aside class="form" id="form"></aside>
+      <main class="out" id="out">
+        <p class="muted">Fill in a room to see its drawings and BOQ.</p>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

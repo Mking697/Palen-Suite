@@ -1,0 +1,421 @@
+# Design — one job in, drawings + BOQ out
+
+Target: type the dimensions of a job once and get the wall / ceiling / floor /
+door drawings **and** the SHEET FABRICATION BOQ, for any room shape the shop
+actually builds — single, multiple, connected (combo), and angled/triangle,
+with or without doors.
+
+This is the plan for getting there from what exists today. Nothing here changes
+a verified BOQ number; see [What must not change](#what-must-not-change).
+
+## Where we are
+
+| | Have | Missing |
+|---|---|---|
+| BOQ engine (`core/`) | verified line-by-line on 3 jobs | no geometry — a wall is a length plus flags |
+| Legacy calculator | plan SVG, DXF/SVG export, wall elevations | unverified BOQ, geometry hardcoded to 4 walls |
+
+The two halves cannot be joined as they stand, because **neither one knows
+where anything is**. `WallSpec` is `{ id, length, cornerStart, cornerEnd }` —
+enough to split a run, not enough to draw a line. Legacy knows positions but
+only for `W1/W2/L1/L2` plus one pentagon special case, which is why a triangle
+room or a third room has nowhere to go.
+
+## What the legacy calculator already does
+
+Read off `legacy/index.html` in full. Most of this is production behaviour the
+new engine has no concept of, so it belongs in the plan rather than being
+rediscovered later.
+
+| Legacy feature | Where | New engine |
+|---|---|---|
+| 6 sheet materials × thickness list, **per wall** | `SHEET_DATA`, `readWallSheets` | ✗ one fixed "PPGI 0.4MM" column |
+| Same material picker **per door**, plus core Puf / Rockwool / Honeycomb | `readDoorSheets`, `dmat_*` | ✗ |
+| Door type Sliding 60mm / Hinges 45mm | `readDoor` | ✗ door takes the wall thickness |
+| Door placed by **From Left / From Right** | `doorPlacement` | ✗ position not modelled |
+| **Door top panel** when door is shorter than the wall | `wallCalc`, `topStd/topNon` | ✗ — already flagged as missing for HI-15279 |
+| **Machine max panel length** splits long panels | `splitLen`, `maxLen` | ✗ no limit at all |
+| Ceiling light / laminar cutout, click-positioned | `lightRect`, `ceilingCells` | ✗ |
+| Ceiling split into Top/Bottom/Left/Right regions round the cutout | `ceilingCells` | ✗ |
+| 7 flashing types with manual dims, total running metre | `FLASHING_DATA`, `readFlashing` | ✗ — open item says no formula |
+| **Corner cut**: a 45° chamfer across the corner, `leg = size/√2` | `roomShape`, `drawChamfer` | ✗ — and not the same thing as a corner panel |
+| Angled wall from unequal widths, "TO BE CUT AT SITE" + true diagonal | `roomShape` isPent | ✗ compiler throws |
+| Wall thickness drawn as an inner offset polygon | `buildWallPlan` | n/a — drawing |
+| Plan SVG, ceiling SVG, walls DXF, ceiling DXF, CSV, localStorage | `svgFromGeom`, `dxfFromGeom` | ✗ to be ported |
+
+Four of these are not gaps but **conflicts**, and they are what the open
+questions at the bottom now cover:
+
+1. **Corner cut ≠ corner panel.** The verified sheets print a corner panel
+   600 wide at `cornerLeg` 300 — two 300 legs folded round a 90° corner. Legacy
+   takes a corner *size* of 800 and lays it flat across the corner as a
+   chamfer, making the legs `800/√2 = 566` and turning the 90° vertex into two
+   135° ones. Those are different constructions, not different notation.
+2. **Door thickness.** Legacy fixes it by door type — sliding 60, hinges 45 —
+   independent of the wall. `boq.ts` keys the door blank off the *wall*
+   thickness, and in all four verified sheets the door rows print the wall
+   thickness. Both cannot be right.
+3. **Where the odd panel sits.** `splitRun` puts the balance last; legacy puts
+   the remainder column *first* on the ceiling. Invisible to the BOQ because
+   `tally` sorts widest-first, but the drawing has to place it somewhere.
+4. **Machine length limit.** Legacy defaults to 3050, yet HI-15279's verified
+   sheet prints 1180 × 3340 roof panels. So 3050 is only a default someone
+   edits — but the new engine has no limit at all, and would happily emit a
+   panel longer than the line can make.
+
+Flashing is the one place legacy answers an open question rather than raising
+one: the estimator types the dimensions in and the tool totals the running
+metre. No formula is attempted, which matches what `README.md` concluded.
+
+## The one decision
+
+**A room is a closed polygon of points in millimetres, placed on a job-wide
+coordinate system.** Everything else is derived from it.
+
+That single change is what unlocks all four shapes at once, because every
+feature the shop cares about is a property of the outline:
+
+| Drawing shows | Derived from the outline |
+|---|---|
+| wall run | edge length |
+| corner panel | convex 90° vertex between two own walls |
+| butt joint | concave 90° vertex (L-shape re-entrant) |
+| cut at site | vertex that is not 90° (triangle / angled) |
+| partition | edge segment shared with another room's edge |
+| ceiling notch | `own` end = edge with no neighbour; `shared` = partition |
+| door position | interval along an edge, at an offset |
+
+Note the outline is the **external envelope**, which is what the existing job
+files already record: HI-15191's freezer is `ext 3050 × 4575` and its walls are
+`3050, 4575, 3050, 4575`. The polygon for that room is the external rectangle,
+and its edge lengths are today's wall lengths unchanged. That is what makes the
+migration provable rather than hopeful.
+
+## Pipeline
+
+The compiler sits **above** the verified engine, not inside it. `layout.ts` and
+`boq.ts` are not touched.
+
+```
+        RoomOutline (points, mm)  +  per-edge overrides
+                     │
+        ┌────────────┴─────────────┐
+        │                          │
+   plan.ts                      draw/
+   compileWalls()               planView / elevation / ceiling / floor / door
+        │                          │
+        ▼                          ▼
+   WallSpec[]  ───► layout.ts   Drawing IR { lines, dims, notes, cells }
+                       │              │
+                       ▼         ┌────┴────┐
+                    boq.ts       │         │
+                       │      svg.ts    dxf.ts
+                       ▼         │         │
+                   BoqBlock[]    ▼         ▼
+                               screen   AutoCAD
+```
+
+Two rules keep the halves honest:
+
+1. **Quantities come from `boq.ts` only.** The drawing never counts anything.
+   If a drawing needs a panel count it reads the same `RoomLayout` the BOQ read.
+   Any other arrangement lets the drawing and the sheet drift apart, and a
+   drawing that disagrees with the BOQ is worse than no drawing.
+2. **`core/` stays pure.** `plan.ts` and `draw/` are geometry and string
+   building — no DOM, no file IO. The SVG renderer emits a string; the browser
+   sets `innerHTML`. That keeps DXF export working server-side and headless.
+
+## Data model
+
+```ts
+export type Pt = [Mm, Mm];
+
+export interface RoomOutline {
+  /** external envelope, clockwise, closed implicitly */
+  points: Pt[];
+  /** overrides keyed by edge index (points[i] -> points[i+1]) */
+  edges?: Record<number, EdgeOverride>;
+  /** overrides keyed by vertex index */
+  vertices?: Record<number, VertexOverride>;
+}
+
+export interface EdgeOverride {
+  id?: string;                 // 'N' / 'E' — printed on the drawing
+  door?: DoorSpec;
+  equalPieces?: number;        // existing draftsman escapes, unchanged
+  panels?: Mm[];
+  buttJoint?: boolean;
+  /** skins on this wall; defaults to the room's, which defaults to PPGI 0.4 */
+  skin?: SkinSpec[];
+}
+
+/** One sheet material at one thickness. Legacy allows several per wall. */
+export interface SkinSpec {
+  material: 'PPGI' | 'GI' | 'EGP' | 'SS' | 'PCGI' | 'HPCL';
+  thickness: number;           // mm, e.g. 0.4
+}
+
+export interface DoorSpec {
+  label: string;
+  clearW: Mm;
+  clearH: Mm;
+  moduleW: Mm;
+  /** legacy's placement: give left, right, both, or neither for centred */
+  fromLeft?: Mm;
+  fromRight?: Mm;
+  core?: 'Puf' | 'Rockwool' | 'Honeycomb';
+  skin?: SkinSpec[];
+}
+
+export interface VertexOverride {
+  /** which of the two walls runs through a concave corner; the other butts */
+  through?: 'prev' | 'next';
+  /** suppress the corner panel (partition ends, site-cut angles) */
+  corner?: false;
+}
+```
+
+`RoomSpec` keeps every field it has and gains `outline`. `walls: WallSpec[]`
+becomes the *compiler output*, not hand-written input — so the existing engine
+receives exactly what it receives today.
+
+At job level rooms gain a placement:
+
+```ts
+interface RoomSpec { /* … as today … */ outline: RoomOutline; at?: Pt; }
+interface JobSpec  { /* … as today … */ title?: string; client?: string; site?: string; }
+```
+
+## How each case falls out
+
+**Single room.** Outline is a rectangle from `ext.w × ext.l`. The compiler walks
+the edges, deducts `cornerLeg` at each convex 90° vertex, and calls `splitRun`.
+Byte-identical to today.
+
+**Multiple rooms.** Each room has its own outline and an `at` offset. No
+interaction — the BOQ already prints one block per room.
+
+**Connected / combo rooms.** After placement, edges are tested pairwise for
+collinear overlap. An overlapping segment is a **partition**: it belongs to one
+room (first-listed wins, or explicit), the other room simply does not own that
+wall, no corner panel is generated at its ends, and the neighbour's ceiling end
+becomes `shared`. This is exactly the arrangement the sheets already show —
+HI-15279's chiller "owns only three walls, the fourth is the freezer's", and
+HI-15191's ante room has 2 corner panels instead of 4. Rooms sharing a
+thickness merge into one printed block via the existing `boqGroup`.
+
+**L-shape.** A concave 90° vertex. One wall runs through, the other butts into
+its face and loses one wall thickness — today's `buttEnd`. Which one runs
+through is a draftsman decision, so it is a `through` override with a default
+rule; the default is whatever reproduces HI-15223, and if no single rule does,
+it stays explicit rather than being guessed.
+
+**Triangle / angled.** A vertex that is not 90°. No corner panel; the wall is
+marked cut-at-site, which is what legacy already prints along the diagonal
+together with its true length. The last panel on such a wall is a trapezoid,
+and **how the shop blanks a trapezoid is not known** — see open questions. Until
+that is answered the engine draws the angle and refuses to invent a blank size.
+
+**With / without door.** A door already consumes `moduleW` from its wall run.
+Adding `offset` gives the drawing its position, and makes the door detail
+drawable. There is a likely payoff here: HI-15279's freezer door wall carries
+`equalPieces: 2` *because* the door sits centred (`300 | 810 | door | 810 |
+300`). A centred door may reproduce `810 + 810` from the rule itself, turning an
+override back into a modelled fact. That is a hypothesis to test against the
+sheet, not a claim — if it does not reproduce, the override stays.
+
+## Drawings
+
+Legacy already has the right shape for this and it should be ported, not
+rewritten: `buildGeom()` produces a renderer-independent IR and
+`svgFromGeom()` / `dxfFromGeom()` draw it. Keep the IR, replace the geometry.
+
+```
+core/draw/types.ts     Line | Dim | Note | Cell | Fill  (the IR)
+core/draw/plan.ts      room outline, panel divisions, door swing, dimensions
+core/draw/elevation.ts one drawing per wall: panel widths, height, door opening
+core/draw/ceiling.ts   ceiling panel runs + light / laminar cutouts
+core/draw/floor.ts     slab outline, or panelised divisions
+core/draw/door.ts      leaf, frame, clear opening
+core/draw/svg.ts       IR -> SVG string   (ported from svgFromGeom)
+core/draw/dxf.ts       IR -> DXF string   (ported from dxfFromGeom, layers kept)
+```
+
+The DXF layer names in legacy (`WALL`, `PANEL`, `DOOR`, `DIM`, `LIGHT`, `TEXT`,
+`CUT`) are already what the drawing office expects — keep them exactly.
+
+## Job output
+
+One job produces one pack: cover (job no, client, site), plan, one elevation
+per wall, ceiling, floor, door detail, then the SHEET FABRICATION block per
+room and the job total. The viewer's existing print stylesheet is the delivery
+mechanism — print to PDF. DXF downloads per drawing.
+
+## Editor
+
+The viewer grows an editor without growing a dependency:
+
+- **left** — job tree: job → rooms → walls
+- **centre** — plan view (SVG); click a wall to select it, drag a door
+- **right** — numeric inputs for the selection; every shop constant from
+  `rules.ts` exposed
+- **tabs** — Plan · Elevations · Ceiling · Floor · BOQ · Verify
+
+Storage splits by purpose: the three verified jobs stay TS files in
+`core/jobs/` because they are ground truth, while jobs the estimator creates
+are JSON written by the server into `jobs/`. Ground truth is not editable from
+a browser.
+
+## What must not change
+
+`npm run check` must print `ALL ROWS MATCH across 3 jobs` with the same 6
+documented deviations, at every step. The migration is only correct if the
+compiled `WallSpec[]` equals today's hand-written one, so phase 1 adds a test
+that asserts exactly that, per wall, per room — not just matching totals.
+
+Corollary: **no phase is allowed to make a sheet match by adjusting an input.**
+The rule in `CLAUDE.md` applies to the outline exactly as it applies to a wall
+length. An outline is transcribed from the drawing.
+
+## Phases
+
+Each phase ends with the repo green and something usable.
+
+| # | Delivers | Proof it worked |
+|---|---|---|
+| 1 ✅ | `core/plan.ts` — outline → `WallSpec[]`; rooms migrated to outlines | compiled walls equal the hand-written walls, `npm run check` green |
+| 2 ✅ | `core/draw/` + SVG/DXF renderers; drawings in the viewer | every drawn panel is a panel the BOQ priced, asserted per wall |
+| 3 | Adjacency: shared edges → partitions, corner suppression, `boqGroup` merge | unlocks HI-15279 Ambient+Milk and HI-15252, both already pending |
+| 3a ✅ | Room placement — `at` on a room, one job layout with connected rooms touching | the ante room draws above the freezer, not on top of it |
+| 4 | What legacy has and the engine lacks: machine max panel length, door top panel, door placement, per-wall skins, flashing as manual input, ceiling light cutout | each one reproduces the legacy figure on the same input, and `npm run check` stays green |
+| 5 ✅ | The calculator: form in, drawings and BOQ out, on one screen | a job entered from a drawing with no code edit |
+| 6 | Angled, chamfered and triangle rooms | needs the corner and blanking answers below first |
+
+Phase 4 is bigger than it looks because per-wall skins change the shape of the
+printed sheet — today the BOQ has one "PPGI 0.4MM" column because all four
+source sheets use exactly that. Adding materials must not disturb those four,
+so the default stays PPGI 0.4 and the column only splits when a job asks for
+something else.
+
+**The BOQ is the SHEET FABRICATION sheet and nothing else.** Legacy's own
+summary — standard / non-standard panel counts and running square metres — is
+not carried over; it is replaced, not joined. Flashing running metre survives
+as its own figure because it is a separate purchase, not a panel count.
+
+### Phase 2 result
+
+Done. `core/draw/` builds a renderer-independent drawing, and `svg.ts` /
+`dxf.ts` draw it — the same split legacy had, with its DXF layer names kept
+exactly. Each drawable room produces a plan, one elevation per wall it owns, a
+ceiling layout and a floor layout, and every one downloads as DXF.
+
+`core/verify/draw.test.ts` enforces the rule that matters: the multiset of
+panel widths on the drawings equals the multiset `layoutRoom` produced, per
+room, and each wall's segments fill its clear run. A drawing cannot show a
+panel the BOQ did not price.
+
+HI-15223 is reported as not drawable, with the reason, rather than being
+skipped — it still has no outline.
+
+### Room placement
+
+A room carries `at`, its position on the job plan, and `jobPlan` composes every
+room into a single WALL PANEL LAYOUT. That is what the drawing office issues: a
+freezer and its ante room are one drawing, touching along the wall they share,
+not two unrelated pictures. Creating a room against a wall in the calculator
+sets `at` from the parent's position and size, so the two come out adjacent
+without anyone typing a coordinate. A room added on its own is placed clear of
+the others instead of being drawn on top of them.
+
+`at` cannot affect the BOQ — moving a room changes nothing about what it is
+built from — and `jobPlan` is composition only: each room's geometry still
+comes from `roomPlan`, which gets it from `layoutRoom`.
+
+The room plan is therefore no longer one of a room's own drawings. `roomDrawings`
+returns the elevations, the ceiling and the floor; the layout belongs to the job.
+
+### Phase 5 result
+
+Done, and it reorders what matters. The tool is the calculator: one screen,
+form on the left, drawings and SHEET FABRICATION on the right, updating as the
+estimator types. The verified jobs are no longer the product — they are a
+*Load example* dropdown, which is what they always were: proof the engine is
+right, not the thing anyone uses.
+
+The whole page is one call. `POST /api/render` takes a job and returns its BOQ
+and every drawing together, so the two halves of the screen can never be a step
+out of sync with each other.
+
+Two things the form deliberately does not ask for. **Ceiling ends and floor
+spans** are derived from which walls are marked as the neighbour's, because
+they always were the same fact stated twice. And **wall lengths** are derived
+from the room's width and length, because a wall list that disagrees with the
+envelope is the bug that HI-15223 turned out to have.
+
+What the form cannot yet express — `equalPieces`, an explicit `panels` list, a
+butt joint — is carried through untouched from a loaded example and shown on
+the wall as a read-only chip, so opening a verified job in the tool cannot
+quietly change it.
+
+Phase 3 is where the verification work pays for itself: both jobs listed as
+pending in `README.md` are blocked on precisely this.
+
+### Phase 1 result
+
+Done. `core/plan.ts` compiles an outline to the wall list, and
+`core/verify/plan.test.ts` holds it to the hand-written walls per wall, per
+room. `npm run check` still prints `ALL ROWS MATCH across 3 jobs` with the same
+6 deviations — not one BOQ figure moved.
+
+Four of the five verified rooms are on outlines. The fifth, HI-15223, is not,
+and the reason is the first thing the geometry model found: **its transcribed
+wall lengths do not close a polygon.** The horizontal chain closes exactly,
+the vertical one is out by exactly one wall thickness, on the side carrying all
+three butt joints. The BOQ never noticed because the engine subtracts per wall
+and never walks the loop. That room stays on its hand-written wall list until
+the drawing settles which dimension is measured to the other face — it cannot
+be drawn before then, and inventing the missing 60mm is exactly what
+`CLAUDE.md` forbids.
+
+That is the argument for the whole design in one example: geometry catches what
+per-wall arithmetic cannot.
+
+## Open questions for the shop
+
+Per `CLAUDE.md` these get answered, not guessed.
+
+**From the legacy comparison:**
+
+1. **Corner cut or corner panel?** The sheets fold a corner panel round a 90°
+   corner (`2 × cornerLeg` wide); legacy chamfers the corner flat at 45°
+   (`leg = size/√2`). Are both used, and on what does the choice depend? A
+   chamfered room is a different polygon, so this decides the geometry, not
+   just a blank size. Blocks phase 6.
+2. **Door thickness.** Sliding 60 / hinges 45 by type, as legacy has it, or the
+   wall thickness, as the sheets print it? If it is by type, `DOOR_BLANK_OFFSETS`
+   is keyed on the wrong thing.
+3. **Machine maximum panel length.** What is it actually? Legacy defaults to
+   3050 but HI-15279's sheet prints 3340-long roof panels, so the default is
+   not the limit. The engine currently has none, and will emit a panel the line
+   cannot make.
+4. **Where does the odd panel go?** `splitRun` puts the balance last, legacy
+   puts the ceiling remainder first. The BOQ cannot tell the difference; the
+   drawing can.
+5. **Is a door top panel always cut?** Legacy makes one whenever the door is
+   shorter than the wall. Do the sheets that have no top row simply have
+   full-height doors, or is it sometimes omitted?
+
+**Already open:**
+
+6. **Trapezoid blanking.** On an angled wall the end panel is not rectangular.
+   Is it blanked at its widest dimension +40, or cut from a standard panel at
+   site with no separate blank line? Blocks phase 6.
+7. **Partition ownership.** When two rooms of *different* thickness share a
+   wall, which room's block prints it, and at which thickness?
+8. **Door dimensioning.** Are doors dimensioned from a corner on the layout
+   drawing? If yes, that offset is transcribable input and `equalPieces` may
+   stop being needed.
+
+Still open from `README.md` and unchanged by this design: flashing RMTR has no
+formula, floor blank at 1260 vs a 1250 coil, butt joint inner delta from a
+single sample, density 40 vs 42.

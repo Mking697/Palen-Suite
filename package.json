@@ -1,0 +1,17 @@
+{
+  "name": "panel-calculator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PUF panel wall/ceiling layout + SHEET FABRICATION BOQ engine",
+  "scripts": {
+    "dev": "node server/serve.ts",
+    "test": "node core/verify/split.test.ts && node core/verify/plan.test.ts && node core/verify/draw.test.ts",
+    "verify": "node core/verify/run.ts",
+    "check": "npm run test && npm run verify",
+    "chat-backup": "node tools/chat-backup.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

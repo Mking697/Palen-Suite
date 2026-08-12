@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Calculator + Wall & Ceiling 2D Drawing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0d1117;--panel:#141b24;--panel-2:#1a232e;--line:#26323f;--ink:#e6edf3;
+    --muted:#8b9aa8;--accent:#ffd23f;--accent-2:#3fb6ff;--good:#4ade80;--warn:#fb7185;--grid:rgba(63,182,255,.06);}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'IBM Plex Mono',monospace;color:var(--ink);
+    background:linear-gradient(var(--grid) 1px,transparent 1px) 0 0/26px 26px,
+      linear-gradient(90deg,var(--grid) 1px,transparent 1px) 0 0/26px 26px,
+      radial-gradient(1200px 600px at 80% -10%,rgba(255,210,63,.07),transparent 60%),var(--bg);
+    -webkit-font-smoothing:antialiased;padding:32px 18px 80px;}
+  .wrap{max-width:1080px;margin:0 auto;}
+  header{margin-bottom:26px;border-bottom:1px solid var(--line);padding-bottom:20px;}
+  .eyebrow{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--accent-2);margin:0 0 8px;}
+  h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(28px,5vw,46px);line-height:1;margin:0;letter-spacing:-.02em;}
+  h1 span{color:var(--accent);}
+  .sub{color:var(--muted);font-size:13px;margin-top:12px;max-width:660px;line-height:1.6;}
+  .layout{display:grid;grid-template-columns:1fr;gap:22px;}
+  @media(min-width:880px){.layout{grid-template-columns:380px 1fr;align-items:start;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;position:relative;}
+  .card::before{content:"";position:absolute;top:0;left:22px;right:22px;height:2px;background:linear-gradient(90deg,var(--accent),transparent);border-radius:2px;}
+  .card h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:16px;margin:0 0 18px;letter-spacing:.02em;display:flex;gap:8px;align-items:center;}
+  .tag{font-size:10px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);padding:3px 7px;border-radius:6px;letter-spacing:.1em;}
+  label{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px;}
+  .field{margin-bottom:16px;}
+  input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:15px;padding:11px 13px;border-radius:9px;transition:border-color .15s,box-shadow .15s;}
+  input:focus{outline:none;border-color:var(--accent-2);box-shadow:0 0 0 3px rgba(63,182,255,.15);}
+  .unit{position:relative;}
+  .unit::after{content:"mm";position:absolute;right:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;}
+  .wallgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px;}
+  .mini{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-2);margin:0 0 5px;}
+  .walllist{display:flex;flex-direction:column;gap:12px;}
+  .wf-head{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:5px;}
+  .wf-head .mini{margin:0;}
+  .wf-chips{display:flex;gap:5px;}
+  .chip{background:var(--bg);border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.03em;padding:3px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all .15s;}
+  .chip:hover{border-color:var(--accent-2);}
+  .chip.on{background:var(--accent);color:#10131a;border-color:var(--accent);font-weight:600;}
+  .chip.con.on{background:var(--warn);border-color:var(--warn);color:#1a0d10;}
+  select{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:13px;padding:9px 11px;border-radius:8px;margin-bottom:10px;}
+  .switch.sm{width:40px;height:22px;}
+  .switch.sm .slider::before{width:16px;height:16px;}
+  .switch.sm input:checked + .slider::before{transform:translateX(18px);}
+  button{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;cursor:pointer;border-radius:9px;transition:transform .1s,filter .15s,background .15s;}
+  button:active{transform:translateY(1px);}
+  .btn-primary{width:100%;background:var(--accent);color:#1a1206;border:none;font-size:15px;padding:13px;letter-spacing:.02em;margin-top:4px;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink);font-size:12px;padding:9px 14px;}
+  .btn-ghost:hover{border-color:var(--accent-2);color:var(--accent-2);}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin-bottom:16px;}
+  .toggle-row label{margin:0;color:var(--ink);font-size:12px;letter-spacing:.04em;text-transform:none;}
+  .switch{position:relative;width:44px;height:24px;flex:none;}
+  .switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:2;}
+  .slider{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:background .15s;}
+  .slider::before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:var(--ink);border-radius:50%;transition:transform .15s;}
+  .switch input:checked + .slider{background:var(--accent);}
+  .switch input:checked + .slider::before{transform:translateX(20px);background:#1a1206;}
+  .light-box{display:none;border:1px dashed var(--line);border-radius:10px;padding:14px;margin-bottom:16px;background:rgba(255,210,63,.04);}
+  .light-box.show{display:block;}
+  .light-box .mini{color:var(--accent);}
+  select.dsel{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:10px 12px;border-radius:9px;cursor:pointer;}
+  select.dsel:focus{outline:none;border-color:var(--warn);}
+  
+  /* Sheet & Flashing UI Styles */
+  .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .check-item { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
+  .check-item input[type="checkbox"] { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+  .thick-box { margin-top: 6px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid var(--line); display: none; }
+  .thick-box.show { display: block; }
+  .flash-item-box { margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px dashed var(--line); display: none; }
+  .flash-item-box.show { display: block; }
+  
+  .area-note{font-size:11px;color:var(--muted);margin-top:8px;}
+  .area-note b{color:var(--accent);}
+  .preview{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;}
+  .stat{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .stat .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+  .stat .v{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:26px;margin-top:4px;line-height:1;}
+  .v.std{color:var(--good);} .v.non{color:var(--warn);}
+  .breakdown{font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.75;border-top:1px dashed var(--line);padding-top:12px;}
+  .breakdown b{color:var(--ink);}
+  .table-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .table-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;}
+  table{border-collapse:collapse;width:100%;font-size:12px;min-width:780px;}
+  th,td{padding:10px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);}
+  th:first-child,td:first-child{text-align:left;}
+  thead th{background:var(--panel-2);color:var(--muted);font-weight:500;font-size:10px;letter-spacing:.1em;text-transform:uppercase;position:sticky;top:0;}
+  tbody tr:hover{background:rgba(63,182,255,.04);}
+  tbody tr:last-child td{border-bottom:none;}
+  td .std{color:var(--good);font-weight:600;} td .non{color:var(--warn);font-weight:600;}
+  .empty{padding:40px;text-align:center;color:var(--muted);font-size:13px;}
+  .del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 4px;}
+  .del:hover{color:var(--warn);}
+  .totbar{font-size:11px;color:var(--muted);margin-top:12px;display:flex;gap:18px;flex-wrap:wrap;}
+  .totbar b{color:var(--ink);font-size:14px;}
+  .draw-card{margin-top:22px;}
+  .svg-hold{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:16px;overflow:auto;display:flex;justify-content:center;}
+  .svg-hold svg{max-width:100%;height:auto;}
+  #ceilHold svg{cursor:crosshair;}
+  .wallsgrid{display:grid;grid-template-columns:1fr;gap:16px;}
+  @media(min-width:680px){.wallsgrid{grid-template-columns:1fr 1fr;}}
+  .wallcell{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .wallcell .wt{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-2);margin-bottom:8px;}
+  .hint{font-size:11px;color:var(--muted);margin:0 0 12px;}
+  .hint b{color:var(--accent);}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:10.5px;color:var(--muted);}
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .legend .sw{width:13px;height:13px;border-radius:3px;display:inline-block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Wall &amp; Ceiling Panel Estimator + 2D Drawing</p>
+    <h1>Panel <span>Calculator</span></h1>
+    <p class="sub">Room layout 4 walls (Length 1/2, Width 1/2) par based. Wall elevations panel size (W&times;H) ke saath, aur ceiling drawing par click karke laminar position set karein.</p>
+  </header>
+  
+  <div class="layout">
+    <div class="card">
+      <h2>Room Details <span class="tag">INPUT</span></h2>
+      <div class="field"><label for="rname">Room Name / ID</label><input id="rname" type="text" placeholder="e.g. OT-Room"></div>
+
+      <div class="field">
+        <label>Wall Sizes &mdash; 4 Walls <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0">(Sheet / Door / Corner)</span></label>
+        <div class="walllist">
+          <div><div class="wf-head"><span class="mini">Length 1</span><span class="wf-chips">
+            <button type="button" class="chip" id="shchip_L1" onclick="toggleWallSheet('L1')">&#65291; Sheet</button>
+            <button type="button" class="chip" id="dchip_L1" onclick="toggleDoor('L1')">&#65291; Door</button>
+            <button type="button" class="chip con" id="cchip_L1" onclick="toggleCorner('L1')">&#65291; Corner</button>
+          </span></div><div class="unit"><input id="len1" type="number" value="5455"></div></div>
+          
+          <div><div class="wf-head"><span class="mini">Length 2</span><span class="wf-chips">
+            <button type="button" class="chip" id="shchip_L2" onclick="toggleWallSheet('L2')">&#65291; Sheet</button>
+            <button type="button" class="chip" id="dchip_L2" onclick="toggleDoor('L2')">&#65291; Door</button>
+            <button type="button" class="chip con" id="cchip_L2" onclick="toggleCorner('L2')">&#65291; Corner</button>
+          </span></div><div class="unit"><input id="len2" type="number" value="4605"></div></div>
+          
+          <div><div class="wf-head"><span class="mini">Width 1</span><span class="wf-chips">
+            <button type="button" class="chip" id="shchip_W1" onclick="toggleWallSheet('W1')">&#65291; Sheet</button>
+            <button type="button" class="chip" id="dchip_W1" onclick="toggleDoor('W1')">&#65291; Door</button>
+            <button type="button" class="chip con" id="cchip_W1" onclick="toggleCorner('W1')">&#65291; Corner</button>
+          </span></div><div class="unit"><input id="wid1" type="number" value="7840"></div></div>
+          
+          <div><div class="wf-head"><span class="mini">Width 2</span><span class="wf-chips">
+            <button type="button" class="chip" id="shchip_W2" onclick="toggleWallSheet('W2')">&#65291; Sheet</button>
+            <button type="button" class="chip" id="dchip_W2" onclick="toggleDoor('W2')">&#65291; Door</button>
+            <button type="button" class="chip con" id="cchip_W2" onclick="toggleCorner('W2')">&#65291; Corner</button>
+          </span></div><div class="unit"><input id="wid2" type="number" value="4915"></div></div>
+        </div>
+      </div>
+      <div id="wallExtras"></div>
+      
+      <div class="field"><label for="hgt">Wall Height</label><div class="unit"><input id="hgt" type="number" value="2600"></div></div>
+      <div class="wallgrid">
+        <div class="field"><label for="wallTh">Wall Thickness</label><div class="unit"><input id="wallTh" type="number" value="50"></div></div>
+        <div class="field"><label for="ceilTh">Ceiling Thickness</label><div class="unit"><input id="ceilTh" type="number" value="30"></div></div>
+      </div>
+  
+      <div class="field"><label for="std">Standard Panel Size</label><div class="unit"><input id="std" type="number" value="1150"></div></div>
+      <div class="field"><label for="maxlen">Max Panel Length (machine limit)</label><div class="unit"><input id="maxlen" type="number" value="3050"></div></div>
+  
+      <div class="toggle-row">
+        <label for="lightOn">Ceiling Laminar / Light?</label>
+        <span class="switch"><input id="lightOn" type="checkbox" checked onchange="toggleLight()"><span class="slider"></span></span>
+      </div>
+      <div class="light-box show" id="lightBox">
+        <div class="wallgrid">
+          <div><span class="mini">No. of Lights</span><input id="lnum" type="number" value="1" min="0"></div>
+          <div><span class="mini">Laminar Length</span><div class="unit"><input id="llen" type="number" value="1800"></div></div>
+          <div><span class="mini">Laminar Width</span><div class="unit"><input id="lwid" type="number" value="1800"></div></div>
+        </div>
+        <div class="area-note" id="areaNote">Cutout area: <b>&mdash;</b></div>
+        <div class="area-note" id="posNote" style="margin-top:6px;">Position: <b>center</b> &mdash; ceiling drawing par click karke badlein. <button class="btn-ghost" style="padding:3px 8px;font-size:10px;margin-left:6px" onclick="resetLamp()">Center</button></div>
+      </div>
+
+      <div class="toggle-row">
+        <label for="flashOn">Flashing Required?</label>
+        <span class="switch"><input id="flashOn" type="checkbox" onchange="toggleFlashing()"><span class="slider"></span></span>
+      </div>
+      <div class="light-box" id="flashBox">
+        <span class="mini" style="color:var(--accent)">Select Flashing Types</span>
+        <div id="flashingUI"></div>
+      </div>
+  
+      <button class="btn-primary" onclick="addRow()">+ Calculate &amp; Add to Sheet</button>
+      <div class="preview">
+        <div class="stat"><div class="k">Total Standard</div><div class="v std" id="pvStd">&mdash;</div></div>
+        <div class="stat"><div class="k">Total Non&#8209;Std</div><div class="v non" id="pvNon">&mdash;</div></div>
+      </div>
+      <div class="breakdown" id="bd">Live preview yahan dikhega&hellip;</div>
+    </div>
+  
+    <div class="card">
+      <div class="table-head">
+        <h2 style="margin:0;">BOQ &mdash; Data Sheet <span class="tag" id="count">0 ROWS</span></h2>
+        <div class="table-actions">
+          <button class="btn-ghost" onclick="exportCSV()">&#8595; Export CSV</button>
+          <button class="btn-ghost" onclick="clearAll()">Clear</button>
+        </div>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead><tr>
+            <th>Room</th><th>L1</th><th>L2</th><th>W1</th><th>W2</th><th>H</th><th>Panel</th><th>WallTh</th><th>CeilTh</th>
+            <th>Total Area (SqMtr)</th><th>Flashing (Mtr)</th>
+            <th>Wall Std</th><th>Wall Non</th>
+            <th>Ceil Std</th><th>Ceil Non</th><th>Tot Std</th><th>Tot Non</th>
+            <th>Laminar</th><th>Doors</th><th>Wall Sheets</th><th>Flashing Details</th>
+          </tr></thead>
+          <tbody id="tbody">
+            <tr><td colspan="21" class="empty">Abhi koi data nahi hai. Form bhar kar "Add to Sheet" dabaiye.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="totbar">
+        <span>Grand Total Standard: <b class="std" id="gStd">0</b></span>
+        <span>Grand Total Non&#8209;Standard: <b class="non" id="gNon">0</b></span>
+        <span style="margin-left:auto">Total Running SqMtr: <b class="accent" id="gSqMtr">0.00</b></span>
+        <span>Total Flashing Mtr: <b class="accent" id="gFlashMtr">0.00</b></span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="card draw-card">
+    <div class="table-head">
+      <h2 style="margin:0;">Wall Panel <span class="tag" id="wallSub"></span></h2>
+      <div class="table-actions"><button class="btn-ghost" onclick="downloadWallDXF()">&#8595; Walls DXF</button></div>
+    </div>
+    <p class="hint">Room ka plan (top view) &mdash; har wall par 1150 standard panel divisions + dimensions. Diagonal wall = cut at site.</p>
+    <div class="wallsgrid" id="wallsHold"></div>
+  </div>
+  
+  <div class="card draw-card">
+    <div class="table-head">
+      <h2 style="margin:0;">Ceiling Drawing &mdash; 2D <span class="tag" id="drawSub"></span></h2>
+      <div class="table-actions">
+        <button class="btn-ghost" onclick="downloadDXF()">&#8595; AutoCAD DXF</button>
+        <button class="btn-ghost" onclick="downloadSVG()">&#8595; SVG</button>
+      </div>
+    </div>
+    <p class="hint">&#128161; Drawing par <b>click</b> karke laminar ki position set karein.</p>
+    <div class="svg-hold"><div id="ceilHold"></div></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--ink)"></i>Panel lines</span>
+      <span><i class="sw" style="background:var(--accent)"></i>Laminar</span>
+      <span><i class="sw" style="background:var(--good)"></i>Dimensions</span>
+    </div>
+  </div>
+</div>
+  
+<script>
+  const $=id=>document.getElementById(id);
+  let rows=[];
+  let lamp={cx:null,cy:null}; 
+  
+  /* --- DATA FOR NEW UI --- */
+  const SHEET_DATA = {
+    'PPGI': [0.35, 0.4, 0.5, 0.6, 0.8],
+    'GI': [0.5, 0.6, 0.8, 1.2, 1.5],
+    'EGP': [0.5, 0.6, 0.8],
+    'SS': [0.5, 0.6, 0.8],
+    'PCGI': [0.5, 0.6, 0.8],
+    'HPCL': [4]
+  };
+
+  const FLASHING_DATA = {
+    'U Flashing': ['Length', 'Width'],
+    'L Inner Flashing': ['Length', 'Width', 'Height'],
+    'L Outer Flashing': ['Length', 'Width', 'Height'],
+    'T Angel Flashing': ['Length', 'Width'],
+    'Hanging Flashing': ['Length', 'Width'],
+    'Flat Strip Flashing': ['Length', 'Width'],
+    'Gutter Flashing': ['Length', 'Width']
+  };
+
+  /* --- GENERATE DYNAMIC UI --- */
+  function initDynamicUI() {
+    // Generate Flashing UI
+    let flashHTML = `<div class="check-grid" style="grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));">`;
+    Object.keys(FLASHING_DATA).forEach((fName, i) => {
+      flashHTML += `<label class="check-item"><input type="checkbox" id="flchk_${i}" onchange="toggleFlashUI(${i})"> ${fName}</label>`;
+    });
+    flashHTML += `</div>`;
+
+    Object.keys(FLASHING_DATA).forEach((fName, i) => {
+      flashHTML += `<div id="flbox_${i}" class="flash-item-box"><span class="mini" style="color:var(--warn)">${fName} Dimensions</span><div class="wallgrid">`;
+      FLASHING_DATA[fName].forEach(dim => {
+        flashHTML += `<div><span class="mini">${dim}</span><div class="unit"><input id="fldim_${i}_${dim}" type="number" value="1000" oninput="refreshPreview()"></div></div>`;
+      });
+      flashHTML += `</div></div>`;
+    });
+    $('flashingUI').innerHTML = flashHTML;
+  }
+
+  // Generate Checkbox UI for WALL Sheets
+  function generateWallSheetUI(k) {
+    let html = `<div class="check-grid" style="grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; margin-bottom: 8px;">`;
+    Object.keys(SHEET_DATA).forEach(type => {
+      html += `<label class="check-item" style="font-size:10.5px;"><input type="checkbox" id="wshchk_${k}_${type}" onchange="toggleWallSheetTypeUI('${k}', '${type}')"> ${type}</label>`;
+    });
+    html += `</div>`;
+    
+    Object.keys(SHEET_DATA).forEach(type => {
+      html += `<div id="wshbox_${k}_${type}" class="thick-box" style="padding:8px; margin-top:4px;"><span class="mini" style="font-size:9.5px;">${type} Thickness</span><div class="check-grid" style="grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap:6px;">`;
+      SHEET_DATA[type].forEach(th => {
+        html += `<label class="check-item" style="font-size:10px;"><input type="checkbox" class="wshthick_${k}_${type}" value="${th}" onchange="refreshPreview()"> ${th}mm</label>`;
+      });
+      html += `</div></div>`;
+    });
+    return html;
+  }
+
+  // Generate Checkbox UI for DOOR Sheets
+  function generateDoorSheetUI(k) {
+    let html = `<div class="check-grid" style="grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; margin-bottom: 8px;">`;
+    Object.keys(SHEET_DATA).forEach(type => {
+      html += `<label class="check-item" style="font-size:10.5px;"><input type="checkbox" id="dshchk_${k}_${type}" onchange="toggleDoorSheetUI('${k}', '${type}')"> ${type}</label>`;
+    });
+    html += `</div>`;
+    
+    Object.keys(SHEET_DATA).forEach(type => {
+      html += `<div id="dshbox_${k}_${type}" class="thick-box" style="padding:8px; margin-top:4px;"><span class="mini" style="font-size:9.5px;">${type} Thickness</span><div class="check-grid" style="grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap:6px;">`;
+      SHEET_DATA[type].forEach(th => {
+        html += `<label class="check-item" style="font-size:10px;"><input type="checkbox" class="dshthick_${k}_${type}" value="${th}" onchange="refreshPreview()"> ${th}mm</label>`;
+      });
+      html += `</div></div>`;
+    });
+    return html;
+  }
+
+  /* --- TOGGLE FUNCTIONS --- */
+  function toggleWallSheet(k) {
+    const ch = $('shchip_' + k);
+    ch.classList.toggle('on');
+    $('sheetbox_' + k).classList.toggle('show', ch.classList.contains('on'));
+    refreshPreview();
+  }
+  window.toggleWallSheetTypeUI = function(k, type) {
+    $(`wshbox_${k}_${type}`).classList.toggle('show', $(`wshchk_${k}_${type}`).checked);
+    refreshPreview();
+  };
+  function toggleFlashUI(idx) {
+    $(`flbox_${idx}`).classList.toggle('show', $(`flchk_${idx}`).checked);
+    refreshPreview();
+  }
+  function toggleFlashing() {
+    $('flashBox').classList.toggle('show', $('flashOn').checked);
+    refreshPreview();
+  }
+  window.toggleDoorSheetUI = function(k, type) {
+    $(`dshbox_${k}_${type}`).classList.toggle('show', $(`dshchk_${k}_${type}`).checked);
+    refreshPreview();
+  };
+
+  /* --- READERS --- */
+  function readWallSheets(k) {
+    const ch = $('shchip_' + k);
+    if (!ch || !ch.classList.contains('on')) return null;
+    let selected = [];
+    Object.keys(SHEET_DATA).forEach(type => {
+      let chk = $(`wshchk_${k}_${type}`);
+      if (chk && chk.checked) {
+        let th = Array.from(document.querySelectorAll(`.wshthick_${k}_${type}:checked`)).map(cb => cb.value);
+        if(th.length) selected.push(`${type}(${th.join(', ')})`);
+        else selected.push(`${type}(Any)`);
+      }
+    });
+    return selected.length ? selected.join(' + ') : null;
+  }
+
+  function allWallSheets() {
+    return {
+      L1: readWallSheets('L1'),
+      L2: readWallSheets('L2'),
+      W1: readWallSheets('W1'),
+      W2: readWallSheets('W2')
+    };
+  }
+
+  function readDoorSheets(k) {
+    let selected = [];
+    Object.keys(SHEET_DATA).forEach(type => {
+      let chk = $(`dshchk_${k}_${type}`);
+      if (chk && chk.checked) {
+        let th = Array.from(document.querySelectorAll(`.dshthick_${k}_${type}:checked`)).map(cb => cb.value);
+        if(th.length) selected.push(`${type}(${th.join(', ')})`);
+        else selected.push(`${type}(Any)`);
+      }
+    });
+    return selected.join(' + ');
+  }
+
+  function readFlashing() {
+    if (!$('flashOn').checked) return { items: [], totalRunMtr: 0 };
+    let items = [];
+    let totalRunMtr = 0;
+    Object.keys(FLASHING_DATA).forEach((fName, i) => {
+      if ($(`flchk_${i}`).checked) {
+        let dims = {};
+        FLASHING_DATA[fName].forEach(dim => {
+          let val = +$(`fldim_${i}_${dim}`).value || 0;
+          dims[dim] = val;
+          if (dim === 'Length') totalRunMtr += (val / 1000);
+        });
+        items.push({ name: fName, dims });
+      }
+    });
+    return { items, totalRunMtr };
+  }
+
+  function vals(){
+    return {L1:+$('len1').value,L2:+$('len2').value,W1:+$('wid1').value,W2:+$('wid2').value,
+      H:+$('hgt').value,P:+$('std').value,maxLen:+$('maxlen').value||0,
+      wallTh:+$('wallTh').value||50, ceilTh:+$('ceilTh').value||30,
+      corners:corners(),
+      lt:readLight(),
+      wallSheets: allWallSheets(),
+      flash: readFlashing()
+    };
+  }
+  function readLight(){
+    if(!$('lightOn').checked) return {on:false,n:0,ll:0,lw:0,area:0};
+    const n=+$('lnum').value||0,ll=+$('llen').value||0,lw=+$('lwid').value||0;
+    return {on:true,n,ll,lw,area:n*ll*lw};
+  }
+  function toggleLight(){ $('lightBox').classList.toggle('show',$('lightOn').checked); refreshPreview(); }
+  function resetLamp(){ lamp={cx:null,cy:null}; refreshPreview(); }
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  
+  function roomShape(v, ignoreCorners = false){
+    const topW=Math.max(v.W1,v.W2), botW=Math.min(v.W1,v.W2);
+    const rightH=Math.min(v.L1,v.L2), diag=Math.max(v.L1,v.L2);
+    const cutX=topW-botW; const isPent=cutX>1;
+    const xLeft=y=> isPent? (cutX/rightH)*y : 0;
+    const W=topW, L=rightH;
+    const C = ignoreCorners ? {} : (v.corners||{});
+    
+    const mk=c=>{
+      if(c && c.on && c.size>0 && !isPent){
+        const leg = c.size / Math.SQRT2; 
+        return {len: Math.min(leg, W*0.9), wid: Math.min(leg, L*0.9), size: c.size};
+      }
+      return null;
+    };
+
+    const nTL=mk(C.W1), nTR=mk(C.L2), nBR=mk(C.W2), nBL=mk(C.L1);
+    const anyCorner=!!(nTL||nTR||nBR||nBL);
+    let pts=[];
+    if(isPent){ pts=[[0,0],[W,0],[W,L],[cutX,L]]; }
+    else {
+      if(nTL) pts.push([0,nTL.wid],[nTL.len,0]); else pts.push([0,0]);
+      if(nTR) pts.push([W-nTR.len,0],[W,nTR.wid]); else pts.push([W,0]);
+      if(nBR) pts.push([W,L-nBR.wid],[W-nBR.len,L]); else pts.push([W,L]);
+      if(nBL) pts.push([nBL.len,L],[0,L-nBL.wid]); else pts.push([0,L]);
+    }
+    const topYAt=x=>{let y=0; if(nTL&&x<=nTL.len)y=Math.max(y,nTL.wid*(1-x/nTL.len)); if(nTR&&x>=W-nTR.len)y=Math.max(y,nTR.wid*(1-(W-x)/nTR.len)); return y;};
+    const botYAt=x=>{let y=L; if(nBL&&x<=nBL.len)y=Math.min(y,L-nBL.wid*(1-x/nBL.len)); if(nBR&&x>=W-nBR.len)y=Math.min(y,L-nBR.wid*(1-(W-x)/nBR.len)); return y;};
+    const leftXAt=y=>{ if(isPent) return xLeft(y); let x=0; if(nTL&&y<=nTL.wid)x=Math.max(x,nTL.len*(1-y/nTL.wid)); if(nBL&&y>=L-nBL.wid)x=Math.max(x,nBL.len*(1-(L-y)/nBL.wid)); return x;};
+    const rightXAt=y=>{let x=W; if(nTR&&y<=nTR.wid)x=Math.min(x,W-nTR.len*(1-y/nTR.wid)); if(nBR&&y>=L-nBR.wid)x=Math.min(x,W-nBR.len*(1-(L-y)/nBR.wid)); return x;};
+    return {topW,botW,rightH,diag,cutX,isPent,xLeft,W,L,nTL,nTR,nBR,nBL,anyCorner,pts,topYAt,botYAt,leftXAt,rightXAt};
+  }
+  
+  function lightRect(v){
+    const {lt}=v; if(!(lt.on&&lt.lw>0&&lt.ll>0)) return null;
+    const rs=roomShape(v, true); 
+    const {topW,botW,rightH,cutX,isPent,xLeft}=rs;
+    let cx=lamp.cx==null? (isPent? topW-botW/2 : topW/2) : lamp.cx;
+    let cy=lamp.cy==null? rightH/2 : lamp.cy;
+    cy=clamp(cy,lt.ll/2,rightH-lt.ll/2);
+    const minLeft=isPent? xLeft(cy+lt.ll/2) : 0; 
+    cx=clamp(cx,minLeft+lt.lw/2,topW-lt.lw/2);
+    return {x0:cx-lt.lw/2,y0:cy-lt.ll/2,x1:cx+lt.lw/2,y1:cy+lt.ll/2,cx,cy,rs};
+  }
+  
+  /* ---------- per-wall extras ---------- */
+  function buildWallExtras(){
+    const list=[['L1','Length 1'],['L2','Length 2'],['W1','Width 1'],['W2','Width 2']];
+
+    $('wallExtras').innerHTML = list.map(([k,nm])=>`
+      <div class="light-box" id="sheetbox_${k}" style="margin:0 0 10px">
+        <span class="mini" style="color:var(--accent)">${nm} &middot; Wall Sheet</span>
+        ${generateWallSheetUI(k)}
+      </div>
+
+      <div class="light-box" id="doorbox_${k}" style="margin:0 0 10px">
+        <span class="mini" style="color:var(--warn)">${nm} &middot; Door <i id="dthlbl_${k}" style="color:var(--accent-2);font-style:normal">&middot; 60mm</i></span>
+        <select id="dtype_${k}" class="dsel" onchange="refreshPreview()">
+          <option value="sliding">Sliding Door (60mm)</option>
+          <option value="hinges">Hinges Door (45mm)</option>
+        </select>
+        
+        <div style="margin-top:10px; padding:12px; border:1px solid var(--line); border-radius:8px; background:rgba(0,0,0,0.15);">
+          <div style="margin-bottom:12px;">
+            <span class="mini">Door Core Material</span>
+            <select id="dmat_${k}" class="dsel" onchange="refreshPreview()" style="font-size:12px;padding:7px;margin:0">
+              <option value="Puf">Puf</option>
+              <option value="Rockwool">Rockwool</option>
+              <option value="Honeycomb">Honeycomb</option>
+            </select>
+          </div>
+          <div>
+            <span class="mini" style="color:var(--accent)">Door Sheet & Thickness (Multiple Select)</span>
+            ${generateDoorSheetUI(k)}
+          </div>
+        </div>
+
+        <div class="wallgrid" style="margin-top:10px">
+          <div><span class="mini">Door Length</span><div class="unit"><input id="dlen_${k}" type="number" value="1500"></div></div>
+          <div><span class="mini">Door Height</span><div class="unit"><input id="dht_${k}" type="number" value="2100"></div></div>
+        </div>
+        <div class="wallgrid" style="margin-top:10px">
+          <div><span class="mini" style="color:var(--accent-2)">From Left</span><div class="unit"><input id="dleft_${k}" type="number" value="0"></div></div>
+          <div><span class="mini" style="color:var(--accent-2)">From Right</span><div class="unit"><input id="dright_${k}" type="number" value="0"></div></div>
+        </div>
+        <p class="hint" style="margin:8px 0 0;font-size:10px">Left & Right dono &rarr; opening = wall &minus; left &minus; right. Sirf ek &rarr; us taraf fix.</p>
+      </div>
+      
+      <div class="light-box" id="cornerbox_${k}" style="margin:0 0 10px">
+        <span class="mini" style="color:var(--warn)">${nm} &middot; Corner cut</span>
+        <div class="wallgrid" style="margin-top:8px">
+          <div><span class="mini">Corner Size</span><div class="unit"><input id="csize_${k}" type="number" value="800"></div></div>
+        </div>
+        <p class="hint" style="margin:8px 0 0;font-size:10px">Corner par lagne wale panel ka exact size mm me. Ye auto-adjust hoke dono walls se minus ho jayega.</p>
+      </div>`).join('');
+    
+    ['L1','L2','W1','W2'].forEach(k=>['dlen_','dht_','dleft_','dright_','csize_'].forEach(pre=>{const el=$(pre+k); if(el) el.addEventListener('input',refreshPreview);}));
+  }
+  
+  function toggleDoor(k){ const ch=$('dchip_'+k); ch.classList.toggle('on'); $('doorbox_'+k).classList.toggle('show',ch.classList.contains('on')); refreshPreview(); }
+  function toggleCorner(k){ const ch=$('cchip_'+k); ch.classList.toggle('on'); $('cornerbox_'+k).classList.toggle('show',ch.classList.contains('on')); refreshPreview(); }
+  
+  function readDoor(k){ 
+    const ch=$('dchip_'+k); 
+    if(!ch||!ch.classList.contains('on')) return {on:false}; 
+    const type=$('dtype_'+k).value; 
+    const mat=$('dmat_'+k).value;
+    let sheet=readDoorSheets(k);
+    if (!sheet) sheet = "Std";
+    const th=type==='sliding'?60:45; 
+    const l=$('dthlbl_'+k); 
+    if(l) l.textContent='&middot; '+th+'mm'; 
+    return {on:true,type,thick:th,mat,sheet,len:+$('dlen_'+k).value||0,ht:+$('dht_'+k).value||0,left:+$('dleft_'+k).value||0,right:+$('dright_'+k).value||0}; 
+  }
+  function doors(){ return {L1:readDoor('L1'),L2:readDoor('L2'),W1:readDoor('W1'),W2:readDoor('W2')}; }
+  function readCornerWall(k){ const ch=$('cchip_'+k); const sz=+$('csize_'+k).value||0; return {on:!!(ch&&ch.classList.contains('on')), size:sz}; }
+  function corners(){ return {L1:readCornerWall('L1'),L2:readCornerWall('L2'),W1:readCornerWall('W1'),W2:readCornerWall('W2')}; }
+  
+  function doorPlacement(len,dr){
+    if(!dr||!dr.on) return null;
+    const left=Math.max(0,dr.left||0), right=Math.max(0,dr.right||0);
+    let open,dA;
+    if(left>0&&right>0){ open=len-left-right; dA=left; }
+    else if(left>0){ open=Math.min(dr.len||0,len-left); dA=left; }
+    else if(right>0){ open=Math.min(dr.len||0,len-right); dA=len-right-open; }
+    else { open=Math.min(dr.len||0,len); dA=(len-open)/2; }
+    if(!(open>0)||open>=len){ open=Math.min(dr.len||0,len); dA=(len-open)/2; }
+    dA=Math.max(0,Math.min(dA,len-open));
+    return {dA,dB:dA+open,open};
+  }
+  
+  function wallCalc(v){
+    const P=v.P, D=doors(); const rs=roomShape(v, false);
+    const nl=n=>n?n.len:0, nw=n=>n?n.wid:0;
+    const wlen={
+      W1:Math.max(0,v.W1-nl(rs.nTL)-nl(rs.nTR)),
+      W2:Math.max(0,v.W2-nl(rs.nBL)-nl(rs.nBR)),
+      L2:Math.max(0,v.L2-nw(rs.nTR)-nw(rs.nBR)),
+      L1:Math.max(0,v.L1-nw(rs.nTL)-nw(rs.nBL))
+    };
+    const NM={L1:'Length 1',L2:'Length 2',W1:'Width 1',W2:'Width 2'};
+    const list=[['L1',wlen.L1],['L2',wlen.L2],['W1',wlen.W1],['W2',wlen.W2]];
+    let std=0,non=0; const rem={}; const dInfo=[]; const wallBreak=[];
+    let wallAreaMM2 = 0;
+
+    list.forEach(([k,len])=>{
+      const dr=D[k]; const pl=dr.on?doorPlacement(len,dr):null;
+      const segLens = pl ? [pl.dA, len-pl.dB] : [len];
+      
+      wallAreaMM2 += (len * v.H);
+      if(pl && dr.ht > 0) {
+        wallAreaMM2 -= (pl.open * Math.min(dr.ht, v.H)); 
+      }
+
+      let wStd=0; const nonWs=[];
+      segLens.forEach(sl=>{ if(sl>0.5){ const sc=Math.floor(sl/P); wStd+=sc; std+=sc; const r=Math.round(sl%P); if(r>0){ non++; nonWs.push(r); } } });
+      rem[k]= nonWs.length? nonWs[nonWs.length-1] : 0;
+      wallBreak.push({k,nm:NM[k],len:Math.round(len),std:wStd,nonWs});
+      if(pl){
+        let topStd=0, topNon=0, gapH=0, topNonW=0;
+        if(v.H > dr.ht && dr.ht > 0) {
+           gapH = v.H - dr.ht;
+           topStd = Math.floor(pl.open / P);
+           topNon = pl.open % P > 0.5 ? 1 : 0;
+           topNonW = Math.round(pl.open % P);
+           std += topStd;
+           non += topNon;
+        }
+        dInfo.push({k,nm:NM[k],type:dr.type,thick:dr.thick,mat:dr.mat,sheet:dr.sheet,len:dr.len,ht:dr.ht,left:Math.round(dr.left||0),right:Math.round(dr.right||0),open:Math.round(pl.open),wallLen:Math.round(len),eff:Math.round(len-pl.open), topStd, topNon, topNonW, gapH});
+      }
+    });
+    
+    const cInfo=[];
+    const cm={W1:rs.nTL,L2:rs.nTR,W2:rs.nBR,L1:rs.nBL};
+    for(const k in cm){
+      if(cm[k]){
+        const c=cm[k];
+        const diag=Math.hypot(c.len,c.wid); 
+        const cStd=Math.floor(diag/P), cNon=diag%P>0.5?1:0;
+        const cNonW=cNon?Math.round(diag%P):0;
+        std+=cStd; non+=cNon;
+        wallAreaMM2 -= (c.len * v.H);
+        wallAreaMM2 -= (c.wid * v.H);
+        wallAreaMM2 += (diag * v.H);
+        cInfo.push({k,nm:NM[k],size:Math.round(c.size),diag:Math.round(diag),std:cStd,non:cNon,nonW:cNonW});
+      }
+    }
+    return {std,non,rem,doors:dInfo,corners:cInfo,wallBreak,H:v.H,P:v.P, wallAreaSqMtr: wallAreaMM2 / 1000000};
+  }
+  function splitLen(len,maxLen){
+    if(!maxLen||maxLen<=0||len<=maxLen) return [len];
+    const out=[];let rem=len; while(rem>maxLen){out.push(maxLen);rem-=maxLen;} if(rem>0)out.push(rem); return out;
+  }
+  
+  function ceilingCells(v){
+    const rs=roomShape(v, true);
+    const W=rs.topW, L=rs.rightH, P=v.P, maxLen=v.maxLen, lt=v.lt, isPent=rs.isPent;
+    
+    let ceilAreaMM2 = W * L;
+    if(isPent) ceilAreaMM2 -= (rs.cutX * L) / 2; 
+    if(lt.on && lt.area > 0) ceilAreaMM2 -= (lt.area); 
+
+    const remW=Math.round(W%P);
+    const cols=[]; let x=0;
+    if(remW>0){ cols.push({x0:0,x1:remW,w:remW,std:false}); x=remW; }
+    while(x < W-0.5){ const w=Math.min(P, W-x); cols.push({x0:x,x1:x+w,w:Math.round(w),std:Math.abs(w-P)<1}); x+=w; }
+    const cells=[];
+    const lr=lightRect(v);
+
+    if(!lr){
+      const ysubs=splitLen(L,maxLen);
+      cols.forEach(c=>{ let y=0; ysubs.forEach(sh=>{ cells.push({region:'Full',x0:c.x0,y0:y,x1:c.x1,y1:y+sh,w:c.w,h:Math.round(sh),std:c.std}); y+=sh; }); });
+      return {cells,hasLight:false,W,L,remW,isPent, ceilAreaSqMtr: ceilAreaMM2 / 1000000};
+    }
+
+    const topY=lr.y0, botY=lr.y1, ll=Math.round(botY-topY);
+    const topM=Math.round(topY), botM=Math.round(L-botY);
+    const leftM=Math.round(lr.x0), rightM=Math.round(W-lr.x1);
+
+    if(topM>0){ const ys=splitLen(topM,maxLen); cols.forEach(c=>{ let y=0; ys.forEach(sh=>{ cells.push({region:'Top',x0:c.x0,y0:y,x1:c.x1,y1:y+sh,w:c.w,h:Math.round(sh),std:c.std}); y+=sh; }); }); }
+    if(botM>0){ const ys=splitLen(botM,maxLen); cols.forEach(c=>{ let y=botY; ys.forEach(sh=>{ cells.push({region:'Bottom',x0:c.x0,y0:y,x1:c.x1,y1:y+sh,w:c.w,h:Math.round(sh),std:c.std}); y+=sh; }); }); }
+    const rows = ll<=P ? [{h:ll,std:Math.abs(ll-P)<1}] : [{h:P,std:true},{h:ll-P,std:false}];
+    if(leftM>0){ const ws=splitLen(leftM,maxLen); let yy=topY; rows.forEach(r=>{ let xx=0; ws.forEach(ww=>{ cells.push({region:'Left',x0:xx,y0:yy,x1:xx+ww,y1:yy+r.h,w:Math.round(ww),h:Math.round(r.h),std:r.std}); xx+=ww; }); yy+=r.h; }); }
+    if(rightM>0){ const ws=splitLen(rightM,maxLen); let yy=topY; rows.forEach(r=>{ let xx=lr.x1; ws.forEach(ww=>{ cells.push({region:'Right',x0:xx,y0:yy,x1:xx+ww,y1:yy+r.h,w:Math.round(ww),h:Math.round(r.h),std:r.std}); xx+=ww; }); yy+=r.h; }); }
+
+    return {cells,hasLight:true,W,L,remW,topM,botM,leftM,rightM,ll,topY,botY,lr,isPent, ceilAreaSqMtr: ceilAreaMM2 / 1000000};
+  }
+
+  function groupCells(cells){
+    const order=['Full','Top','Bottom','Left','Right'];
+    const byReg={};
+    cells.forEach(c=>{ (byReg[c.region]=byReg[c.region]||[]).push(c); });
+    const out=[];
+    order.forEach(reg=>{ if(!byReg[reg]) return;
+      const map={};
+      byReg[reg].forEach(c=>{ const key=`${c.std?'std':'non'}|${c.w}x${c.h}`; map[key]=(map[key]||0)+1; });
+      const parts=Object.keys(map).map(key=>{ const [t,size]=key.split('|'); return {t,size,n:map[key]}; });
+      parts.sort((a,b)=> (a.t===b.t)?0:(a.t==='std'?-1:1));
+      out.push({region:reg, total:byReg[reg].length, parts});
+    });
+    return out;
+  }
+
+  function ceilingBOQ(v){
+    const cc=ceilingCells(v);
+    const std=cc.cells.filter(c=>c.std).length;
+    const non=cc.cells.filter(c=>!c.std).length;
+    const regTotal=reg=>cc.cells.filter(c=>c.region===reg).length;
+    return {lightOn:cc.hasLight, isPent:cc.isPent, ceilAreaSqMtr: cc.ceilAreaSqMtr,
+      topTotal:regTotal('Top'),botTotal:regTotal('Bottom'),leftTotal:regTotal('Left'),rightTotal:regTotal('Right'),
+      topM:cc.topM,botM:cc.botM,leftM:cc.leftM,rightM:cc.rightM,ll:cc.ll,remW:cc.remW,
+      stdTotal:std, nonTotal:non, grand:std+non,
+      groups:groupCells(cc.cells)};
+  }
+  
+  function buildGeom(v){
+    const P=v.P; const lines=[],dims=[],notes=[]; let light=null,label=null,cells=[];
+    if(!v.W1||!v.W2||!v.L1||!v.L2||!P) return {ok:false,lines,dims,W1:1,L1:1};
+    const rs=roomShape(v, true); 
+    const W=rs.topW, L=rs.rightH, cutX=rs.cutX, isPent=rs.isPent;
+    const fill=rs.pts;
+    
+    for(let i=0;i<rs.pts.length;i++){const a=rs.pts[i],b=rs.pts[(i+1)%rs.pts.length];lines.push({x1:a[0],y1:a[1],x2:b[0],y2:b[1]});}
+    
+    const lr=lightRect(v);
+    const cc=ceilingCells(v);
+    cells = isPent ? [] : cc.cells;
+
+    let xsu = [0];
+    for(let x=W-P; x>0.5; x-=P) xsu.push(x);
+    xsu.push(W);
+    xsu = [...new Set(xsu)].sort((a,b)=>a-b);
+
+    if(!isPent){
+      cells.forEach(c=>{
+        lines.push({x1:c.x0,y1:c.y0,x2:c.x1,y2:c.y0});
+        lines.push({x1:c.x1,y1:c.y0,x2:c.x1,y2:c.y1});
+        lines.push({x1:c.x0,y1:c.y1,x2:c.x1,y2:c.y1});
+        lines.push({x1:c.x0,y1:c.y0,x2:c.x0,y2:c.y1});
+      });
+    } else if(lr){
+      const topY = lr.y0, botY = lr.y1, ll=botY-topY;
+      lines.push({x1: rs.leftXAt(topY), y1: topY, x2: rs.rightXAt(topY), y2: topY, dash:true});
+      lines.push({x1: rs.leftXAt(botY), y1: botY, x2: rs.rightXAt(botY), y2: botY, dash:true});
+      for(let x=W-P; x>0.5; x-=P) lines.push({x1: x, y1: rs.topYAt(x), x2: x, y2: topY});
+      for(let x=W-P; x>0.5; x-=P) lines.push({x1: x, y1: botY, x2: x, y2: rs.botYAt(x)});
+      if(ll>P){ lines.push({x1: rs.leftXAt(topY+P), y1: topY+P, x2: lr.x0, y2: topY+P}); lines.push({x1: lr.x1, y1: topY+P, x2: rs.rightXAt(topY+P), y2: topY+P}); }
+    } else if(isPent){
+      for(let x=W-P; x>0.5; x-=P) lines.push({x1: x, y1: rs.topYAt(x), x2: x, y2: rs.botYAt(x)});
+    }
+
+    if(lr){
+      const topY=lr.y0, botY=lr.y1;
+      light={x0:lr.x0,y0:lr.y0,x1:lr.x1,y1:lr.y1};
+      lines.push({x1:lr.x0,y1:lr.y0,x2:lr.x1,y2:lr.y0,L:1},{x1:lr.x1,y1:lr.y0,x2:lr.x1,y2:lr.y1,L:1},{x1:lr.x1,y1:lr.y1,x2:lr.x0,y2:lr.y1,L:1},{x1:lr.x0,y1:lr.y1,x2:lr.x0,y2:lr.y0,L:1});
+      label={x:(lr.x0+lr.x1)/2,y:(lr.y0+lr.y1)/2,t:'LAF'};
+
+      const ysu = [0, topY, botY, L];
+      ysu.slice(0,-1).forEach((a,i)=>dims.push({dir:'v',a,b:ysu[i+1],base:W,off:Math.max(320,W*0.06),text:String(Math.round(ysu[i+1]-a))}));
+      dims.push({dir:'v',a:0,b:L,base:W,off:Math.max(820,W*0.15),text:String(L)});
+      
+      xsu.slice(0,-1).forEach((a,i)=>dims.push({dir:'h',a,b:xsu[i+1],base:0,off:-Math.max(320,L*0.06),text:String(Math.round(xsu[i+1]-a))}));
+      dims.push({dir:'h',a:0,b:W,base:0,off:-Math.max(820,L*0.15),text:String(W)});
+      
+      if(!isPent) {
+        ysu.slice(0,-1).forEach((a,i)=>dims.push({dir:'v',a,b:ysu[i+1],base:0,off:-Math.max(320,W*0.06),text:String(Math.round(ysu[i+1]-a))}));
+        dims.push({dir:'v',a:0,b:L,base:0,off:-Math.max(820,W*0.15),text:String(L)});
+        xsu.slice(0,-1).forEach((a,i)=>dims.push({dir:'h',a,b:xsu[i+1],base:L,off:Math.max(320,L*0.06),text:String(Math.round(xsu[i+1]-a))}));
+        dims.push({dir:'h',a:0,b:W,base:L,off:Math.max(820,L*0.15),text:String(W)});
+      }
+      
+      dims.push({dir:'h', a:0, b:lr.x0, base: topY, off: Math.max(150, L*0.03), text:String(Math.round(lr.x0))});
+      dims.push({dir:'h', a:lr.x1, b:W, base: topY, off: Math.max(150, L*0.03), text:String(Math.round(W - lr.x1))});
+      dims.push({dir:'h', a:lr.x0, b:lr.x1, base: lr.y0, off: Math.max(260, L*0.045), text:String(Math.round(lr.x1-lr.x0))});
+      dims.push({dir:'v', a:lr.y0, b:lr.y1, base: lr.x1, off: Math.max(260, W*0.045), text:String(Math.round(lr.y1-lr.y0))});
+      
+    } else {
+      dims.push({dir:'v', a:0, b:L, base:W, off:Math.max(320,W*0.06), text:String(L)});
+      xsu.slice(0,-1).forEach((a,i)=>dims.push({dir:'h',a,b:xsu[i+1],base:0,off:-Math.max(320,L*0.06),text:String(Math.round(xsu[i+1]-a))}));
+      dims.push({dir:'h',a:0,b:W,base:0,off:-Math.max(820,L*0.15),text:String(W)});
+      
+      if(!isPent) {
+        dims.push({dir:'v', a:0, b:L, base:0, off:-Math.max(320,W*0.06), text:String(L)});
+        xsu.slice(0,-1).forEach((a,i)=>dims.push({dir:'h',a,b:xsu[i+1],base:L,off:Math.max(320,L*0.06),text:String(Math.round(xsu[i+1]-a))}));
+        dims.push({dir:'h',a:0,b:W,base:L,off:Math.max(820,L*0.15),text:String(W)});
+      }
+    }
+    
+    if(isPent){
+      const botW=rs.botW, diag=rs.diag;
+      dims.push({dir:'h',a:cutX,b:W,base:L,off:Math.max(320,L*0.06),text:String(Math.round(botW))});
+      const ang=Math.atan2(L,cutX)*180/Math.PI, mx=cutX/2, my=L/2, FSn=Math.max(150,W*0.02);
+      notes.push({x:mx-FSn*0.6,y:my,text:'TO BE CUT AT SITE',rot:ang,color:'var(--warn)',size:FSn});
+      notes.push({x:mx-FSn*2.2,y:my+FSn*2.2,text:String(Math.round(diag)),rot:ang,color:'var(--good)',size:FSn});
+    }
+    
+    return {ok:true,lines,dims,notes,fill,light,label,cells,W1:W,L1:L};
+  }
+  
+  function svgFromGeom(g,opts){
+    if(!g.ok) return '';
+    opts=opts||{}; const {W1,L1}=g;
+    const FS=Math.max(150,W1*0.024),SW=Math.max(10,W1*0.0022),DSW=Math.max(6,W1*0.0014),TG=FS*0.55;
+    
+    const padL=Math.max(W1*0.28, FS*10), padR=Math.max(W1*0.28, FS*10),
+          padT=Math.max(L1*0.28, FS*10), padB=Math.max(L1*0.28, FS*10);
+
+    const minX=-padL,minY=-padT,w=W1+padL+padR,h=L1+padT+padB;
+    const p=[];
+    if(g.fill) p.push(`<polygon points="${g.fill.map(pt=>pt.join(',')).join(' ')}" fill="var(--panel)"/>`);
+    else p.push(`<rect x="0" y="0" width="${W1}" height="${L1}" fill="var(--panel)"/>`);
+    if(g.light) p.push(`<rect x="${g.light.x0}" y="${g.light.y0}" width="${g.light.x1-g.light.x0}" height="${g.light.y1-g.light.y0}" fill="var(--accent)" fill-opacity="0.92"/>`);
+    g.lines.forEach(l=>{
+      const col=l.door?'var(--warn)':(l.wall?'#d08b3c':(l.tick?'var(--accent-2)':(l.L?'#1a1206':'var(--ink)')));
+      const sw=l.door?SW*2.4:(l.tick?DSW:SW);
+      p.push(`<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="${col}" stroke-width="${sw}" ${l.dash?`stroke-dasharray="${SW*4} ${SW*4}"`:''}/>`);
+    });
+    (g.cells||[]).forEach(c=>{
+      const cx=(c.x0+c.x1)/2, cy=(c.y0+c.y1)/2;
+      const cw=Math.abs(c.x1-c.x0), ch=Math.abs(c.y1-c.y0);
+      const txt=`${c.w}\u00d7${c.h}`;
+      const horiz = cw>=ch;
+      const lengthAvail = horiz?cw:ch, thick = horiz?ch:cw;
+      let fs = Math.min(FS, thick*0.62, (lengthAvail*0.9)/(txt.length*0.58));
+      fs = Math.max(fs, FS*0.32);
+      const col = c.std?'var(--good)':'var(--warn)';
+      if(horiz){
+        p.push(`<text x="${cx}" y="${cy+fs*0.35}" font-size="${fs}" fill="${col}" font-family="IBM Plex Mono,monospace" text-anchor="middle">${txt}</text>`);
+      } else {
+        p.push(`<text x="${cx}" y="${cy+fs*0.35}" font-size="${fs}" fill="${col}" font-family="IBM Plex Mono,monospace" text-anchor="middle" transform="rotate(-90 ${cx} ${cy})">${txt}</text>`);
+      }
+    });
+    if(g.label) p.push(`<text x="${g.label.x}" y="${g.label.y+FS*0.35}" font-size="${FS*1.1}" fill="#1a1206" font-family="IBM Plex Mono,monospace" font-weight="600" text-anchor="middle">${g.label.t}</text>`);
+    g.dims.forEach(d=>{const c='var(--good)';
+      if(d.dir==='h'){const y=d.base,yo=y+d.off;
+        p.push(`<line x1="${d.a}" y1="${y}" x2="${d.a}" y2="${yo}" stroke="${c}" stroke-width="${DSW}"/>`);
+        p.push(`<line x1="${d.b}" y1="${y}" x2="${d.b}" y2="${yo}" stroke="${c}" stroke-width="${DSW}"/>`);
+        p.push(`<line x1="${d.a}" y1="${yo}" x2="${d.b}" y2="${yo}" stroke="${c}" stroke-width="${DSW}"/>`);
+        const ty=yo+(d.off<0?-TG:TG+FS*0.8);
+        p.push(`<text x="${(d.a+d.b)/2}" y="${ty}" font-size="${FS}" fill="${c}" font-family="IBM Plex Mono,monospace" text-anchor="middle">${d.text}</text>`);
+      } else {const x=d.base,xo=x+d.off;
+        p.push(`<line x1="${x}" y1="${d.a}" x2="${xo}" y2="${d.a}" stroke="${c}" stroke-width="${DSW}"/>`);
+        p.push(`<line x1="${x}" y1="${d.b}" x2="${xo}" y2="${d.b}" stroke="${c}" stroke-width="${DSW}"/>`);
+        p.push(`<line x1="${xo}" y1="${d.a}" x2="${xo}" y2="${d.b}" stroke="${c}" stroke-width="${DSW}"/>`);
+        const tx=xo+(d.off<0?-TG:TG);
+        p.push(`<text x="${tx}" y="${(d.a+d.b)/2}" font-size="${FS}" fill="${c}" font-family="IBM Plex Mono,monospace" text-anchor="middle" transform="rotate(-90 ${tx} ${(d.a+d.b)/2})">${d.text}</text>`);
+      }});
+    (g.notes||[]).forEach(nt=>{
+      p.push(`<text x="${nt.x}" y="${nt.y}" font-size="${nt.size||FS}" fill="${nt.color||'var(--ink)'}" font-family="IBM Plex Mono,monospace" text-anchor="middle" transform="rotate(${nt.rot||0} ${nt.x} ${nt.y})">${nt.text}</text>`);
+    });
+    const style=`<style>svg{--ink:#e6edf3;--panel:#141b24;--accent:#ffd23f;--good:#4ade80;--warn:#fb7185;--bg:#0d1117;}</style>`;
+    return `<svg id="${opts.id||''}" xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${w} ${h}" width="${Math.min(opts.maxw||760,w/2)}" style="background:#0d1117">${style}${p.join('')}</svg>`;
+  }
+  
+  function dxfFromGeom(g){
+    const Y=y=>(g.L1-y); let s="0\nSECTION\n2\nENTITIES\n";
+    const L=(x1,y1,x2,y2,layer)=>{s+=`0\nLINE\n8\n${layer}\n10\n${x1}\n20\n${Y(y1)}\n30\n0\n11\n${x2}\n21\n${Y(y2)}\n31\n0\n`;};
+    const T=(x,y,hgt,txt,layer,rot)=>{s+=`0\nTEXT\n8\n${layer}\n10\n${x}\n20\n${Y(y)}\n30\n0\n40\n${hgt}\n1\n${txt}\n50\n${rot||0}\n72\n1\n11\n${x}\n21\n${Y(y)}\n31\n0\n`;};
+    g.lines.forEach(l=>L(l.x1,l.y1,l.x2,l.y2,l.door?'DOOR':(l.wall?'WALL':(l.tick?'DIM':(l.L?'LIGHT':'PANEL')))));
+    (g.cells||[]).forEach(c=>T((c.x0+c.x1)/2,(c.y0+c.y1)/2,130,`${c.w}x${c.h}`,'TEXT',0));
+    if(g.label) T(g.label.x,g.label.y,170,g.label.t,'TEXT',0);
+    (g.notes||[]).forEach(nt=>T(nt.x,nt.y,nt.size||150,nt.text,'CUT',Math.round(nt.rot||0)));
+    const TH=150;
+    g.dims.forEach(d=>{ if(d.dir==='h'){const y=d.base,yo=y+d.off;
+        L(d.a,y,d.a,yo,'DIM');L(d.b,y,d.b,yo,'DIM');L(d.a,yo,d.b,yo,'DIM');
+        T((d.a+d.b)/2,yo+(d.off<0?-TH*1.1:TH*1.1),TH,d.text,'DIM',0);
+      } else {const x=d.base,xo=x+d.off;
+        L(x,d.a,xo,d.a,'DIM');L(x,d.b,xo,d.b,'DIM');L(xo,d.a,xo,d.b,'DIM');
+        T(xo+(d.off<0?-TH*1.1:TH*0.4),(d.a+d.b)/2,TH,d.text,'DIM',90);}});
+    s+="0\nENDSEC\n0\nEOF\n"; return s;
+  }
+  
+  function buildWallPlan(v){
+    const P=v.P; const lines=[],dims=[],notes=[];
+    if(!v.W1||!v.W2||!v.L1||!v.L2||!P) return {ok:false,lines,dims,W1:1,L1:1};
+    const rs=roomShape(v, false); 
+    const W=rs.topW,L=rs.rightH,cutX=rs.cutX,isPent=rs.isPent,botW=rs.botW,diag=rs.diag;
+    const nl=n=>n?n.len:0, nw=n=>n?n.wid:0;
+    const D=doors();
+    const pts=rs.pts;
+    const fill=pts;
+    const th=Math.max(10,v.wallTh||50), tickLen=Math.max(120,W*0.022);
+    const seg=(a,b)=>lines.push({x1:a[0],y1:a[1],x2:b[0],y2:b[1],wall:true});
+    for(let i=0;i<pts.length;i++) seg(pts[i],pts[(i+1)%pts.length]);
+    const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length,cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
+    const ins=pts.map(p=>{const dx=cx-p[0],dy=cy-p[1],d=Math.hypot(dx,dy);return [p[0]+dx/d*th,p[1]+dy/d*th];});
+    for(let i=0;i<ins.length;i++) seg(ins[i],ins[(i+1)%ins.length]);
+    const tickLine=(px,py,nx,ny)=>lines.push({x1:px,y1:py,x2:px+nx*tickLen,y2:py+ny*tickLen,tick:true});
+    const doorLine=(p,q)=>lines.push({x1:p[0],y1:p[1],x2:q[0],y2:q[1],door:true});
+    function panelSegs(a,b,remFirst){const len=b-a;if(len<=0.5)return [];const std=Math.floor(len/P),rem=Math.round(len-std*P);const out=[];let x=a;if(rem>0&&remFirst){out.push({a:x,b:x+rem});x+=rem;}for(let k=0;k<std;k++){out.push({a:x,b:x+P});x+=P;}if(rem>0&&!remFirst){out.push({a:x,b:b});}return out;}
+    function wallSegs(len,dr){const pl=doorPlacement(len,dr);if(!pl)return panelSegs(0,len,true);return [...panelSegs(0,pl.dA,false),{a:pl.dA,b:pl.dB,door:true},...panelSegs(pl.dB,len,true)];}
+    
+    function axisWall(S,u,n,len,dr,dimDir,dimBase,dimOff,mapDim){
+      const segs=wallSegs(len,dr);
+      segs.forEach(sg=>{
+        if(sg.a>1){const px=S[0]+u[0]*sg.a,py=S[1]+u[1]*sg.a;tickLine(px,py,n[0],n[1]);}
+        const m=mapDim(sg.a,sg.b);
+        dims.push({dir:dimDir,a:Math.min(m[0],m[1]),b:Math.max(m[0],m[1]),base:dimBase,off:dimOff,text:sg.door?('DOOR '+Math.round(sg.b-sg.a)):String(Math.round(sg.b-sg.a))});
+        if(sg.door){
+          const pa=[S[0]+u[0]*sg.a,S[1]+u[1]*sg.a],pb=[S[0]+u[0]*sg.b,S[1]+u[1]*sg.b];
+          doorLine(pa,pb);
+          const midx=(pa[0]+pb[0])/2, midy=(pa[1]+pb[1])/2, nrot=(dimDir==='v'?90:0), nsz=Math.max(120,W*0.013);
+          notes.push({x:midx+n[0]*tickLen*1.6,y:midy+n[1]*tickLen*1.6,text:(dr.type==='sliding'?'SLIDING':'HINGES')+' '+dr.thick+'mm',rot:nrot,color:'var(--warn)',size:nsz});
+          const gapH = (v.H>dr.ht && dr.ht>0) ? (v.H-dr.ht) : 0;
+          notes.push({x:midx+n[0]*tickLen*3.0,y:midy+n[1]*tickLen*3.0,text:'H:'+dr.ht+(gapH>0?' Top:'+gapH:''),rot:nrot,color:'var(--accent-2)',size:nsz*0.92});
+          if(gapH>0){ notes.push({x:midx+n[0]*tickLen*4.4,y:midy+n[1]*tickLen*4.4,text:'TOP '+P+'\u00d7'+gapH,rot:nrot,color:'var(--good)',size:nsz*0.85}); }
+        }
+      });
+    }
+
+    function drawChamfer(pA, pB, cData) {
+      const dx = pB[0]-pA[0], dy = pB[1]-pA[1];
+      const cLen = Math.hypot(dx, dy); 
+      const ux = dx/cLen, uy = dy/cLen;
+      const nx = -uy, ny = ux;
+      let ang = Math.atan2(dy, dx)*180/Math.PI;
+      if (ang > 90 || ang < -90) { ang += 180; }
+
+      const segs = panelSegs(0, cLen, true);
+      segs.forEach(sg => {
+        if(sg.a > 1) tickLine(pA[0]+ux*sg.a, pA[1]+uy*sg.a, nx, ny);
+      });
+      notes.push({
+        x: pA[0] + dx*0.5 - nx*Math.max(260, W*0.04),
+        y: pA[1] + dy*0.5 - ny*Math.max(260, W*0.04),
+        text: String(Math.round(cData.size)),
+        rot: ang,
+        color: 'var(--accent-2)',
+        size: Math.max(140, W*0.018)
+      });
+    }
+
+    { const x0=nl(rs.nTL), x1=W-nl(rs.nTR);
+      axisWall([x0,0],[1,0],[0,1],x1-x0,D.W1,'h',0,-Math.max(300,L*0.06),(a,b)=>[x0+a,x0+b]); }
+    dims.push({dir:'h',a:0,b:W,base:0,off:-Math.max(860,L*0.15),text:String(W)});
+    
+    { const y0=nw(rs.nTR), y1=L-nw(rs.nBR);
+      axisWall([W,y0],[0,1],[-1,0],y1-y0,D.L2,'v',W,Math.max(300,W*0.05),(a,b)=>[y0+a,y0+b]); }
+    dims.push({dir:'v',a:0,b:L,base:W,off:Math.max(860,W*0.15),text:String(L)});
+    
+    { const xR=W-(isPent?0:nl(rs.nBR)), xL=isPent?cutX:nl(rs.nBL);
+      axisWall([xR,L],[-1,0],[0,-1],xR-xL,D.W2,'h',L,Math.max(300,L*0.06),(a,b)=>[xR-a,xR-b]); }
+      
+    if(isPent){
+      const ux=cutX/diag,uy=L/diag,nx=L/diag,ny=-cutX/diag,ang=Math.atan2(L,cutX)*180/Math.PI,lo=Math.max(170,W*0.03);
+      const segs=wallSegs(diag,D.L1);
+      segs.forEach(sg=>{
+        if(sg.a>1) tickLine(ux*sg.a,uy*sg.a,nx,ny);
+        const md=(sg.a+sg.b)/2;
+        notes.push({x:ux*md-nx*lo,y:uy*md-ny*lo,text:sg.door?'DOOR':String(Math.round(sg.b-sg.a)),rot:ang,color:sg.door?'var(--warn)':'var(--accent-2)',size:Math.max(140,W*0.017)});
+        if(sg.door) doorLine([ux*sg.a,uy*sg.a],[ux*sg.b,uy*sg.b]);
+      });
+      notes.push({x:ux*diag*0.5-nx*Math.max(440,W*0.07),y:uy*diag*0.5-ny*Math.max(440,W*0.07),text:String(Math.round(diag)),rot:ang,color:'var(--good)',size:Math.max(150,W*0.02)});
+    } else {
+      const yB=L-nw(rs.nBL), yT=nw(rs.nTL);
+      axisWall([0,yB],[0,-1],[1,0],yB-yT,D.L1,'v',0,-Math.max(300,W*0.05),(a,b)=>[yB-a,yB-b]);
+      
+      dims.push({dir:'v',a:0,b:L,base:0,off:-Math.max(860,W*0.15),text:String(L)});
+      dims.push({dir:'h',a:0,b:W,base:L,off:Math.max(860,L*0.15),text:String(W)});
+    }
+    
+    if(rs.nTL) drawChamfer([0, rs.nTL.wid], [rs.nTL.len, 0], rs.nTL);
+    if(rs.nTR) drawChamfer([W-rs.nTR.len, 0], [W, rs.nTR.wid], rs.nTR);
+    if(rs.nBR) drawChamfer([W, L-rs.nBR.wid], [W-rs.nBR.len, L], rs.nBR);
+    if(rs.nBL) drawChamfer([rs.nBL.len, L], [0, L-rs.nBL.wid], rs.nBL);
+
+    return {ok:true,lines,dims,notes,fill,W1:W,L1:L};
+  }
+  
+  function drawCeiling(){
+    const g=buildGeom(vals());
+    $('ceilHold').innerHTML = g.ok ? svgFromGeom(g,{id:'ceilSVG',maxw:760}) : '<div style="color:var(--muted);padding:30px">Valid dimensions daaliye&hellip;</div>';
+    const v=vals(); const lr=lightRect(v); const rs=roomShape(v, true);
+    $('drawSub').textContent = g.ok ? `${v.ceilTh}MM \u00b7 ${rs.topW}\u00d7${rs.rightH}${rs.isPent?` \u00b7 diag ${Math.round(rs.diag)} (cut)`:''}${v.lt.on?` \u00b7 LAF ${v.lt.lw}\u00d7${v.lt.ll}`:''}` : '';
+    if(v.lt.on) $('posNote').innerHTML = `Position: <b>${lr?(lamp.cx==null?'auto':Math.round(lr.cx)+','+Math.round(lr.cy)+' mm'):'auto'}</b> &mdash; ceiling drawing par click karke badlein. <button class="btn-ghost" style="padding:3px 8px;font-size:10px;margin-left:6px" onclick="resetLamp()">Center</button>`;
+    const svg=$('ceilSVG');
+    if(svg) svg.addEventListener('click',e=>{
+      const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY;
+      const m=svg.getScreenCTM(); if(!m) return;
+      const pp=pt.matrixTransform(m.inverse());
+      const vv=vals(); if(!vv.lt.on) return;
+      lamp.cx=pp.x; lamp.cy=pp.y; 
+      refreshPreview();
+    });
+  }
+  function drawWalls(){
+    const v=vals(); const hold=$('wallsHold'); hold.innerHTML='';
+    const g=buildWallPlan(v); const rs=roomShape(v, false);
+    $('wallSub').textContent = `${v.wallTh}MM \u00b7 H ${v.H||'?'}mm${rs.isPent?' \u00b7 angled':''}`;
+    hold.innerHTML = g.ok ? svgFromGeom(g,{maxw:820}) : '<div style="color:var(--muted);padding:30px">Valid dimensions daaliye&hellip;</div>';
+  }
+  function downloadWallDXF(){
+    const g=buildWallPlan(vals()); if(!g.ok){alert('Valid dimensions daaliye.');return;}
+    download('wall_panel_plan.dxf',dxfFromGeom(g),'image/vnd.dxf');
+  }
+  function download(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
+  function downloadDXF(){const g=buildGeom(vals());if(!g.ok){alert('Valid dimensions daaliye.');return;}download('ceiling_layout.dxf',dxfFromGeom(g),'image/vnd.dxf');}
+  function downloadSVG(){const g=buildGeom(vals());if(!g.ok){alert('Valid dimensions daaliye.');return;}download('ceiling_layout.svg',svgFromGeom(g),'image/svg+xml');}
+  
+  function regLine(label,parts,total){
+    const sz=parts.map(pp=>`${pp.n} ${pp.t} <b>${pp.size}</b>`).join(', ');
+    return `&nbsp;&nbsp;<b>${label}:</b> ${total} panel${total===1?'':'s'}${sz?' &mdash; '+sz+' mm':''}<br>`;
+  }
+  
+  function refreshPreview(){
+    const v=vals();
+    if(!v.L1||!v.L2||!v.W1||!v.W2||!v.H||!v.P){ $('pvStd').textContent='\u2014'; $('pvNon').textContent='\u2014'; $('bd').textContent='Live preview yahan dikhega\u2026'; drawCeiling(); drawWalls(); return; }
+    
+    const wc=wallCalc(v);
+    const cb=ceilingBOQ(v);
+    const totalSqMtr = (wc.wallAreaSqMtr + cb.ceilAreaSqMtr).toFixed(2);
+
+    $('pvStd').textContent=wc.std+cb.stdTotal; $('pvNon').textContent=wc.non+cb.nonTotal;
+
+    let s=`<b style="color:var(--accent-2)">TOTAL RUNNING AREA: ${totalSqMtr} SqMtr</b> (Wall: ${wc.wallAreaSqMtr.toFixed(2)} + Ceiling: ${cb.ceilAreaSqMtr.toFixed(2)})<br><br>`;
+
+    if(v.flash.items.length) {
+      s+=`<b style="color:var(--warn)">Flashing (Total RM: ${v.flash.totalRunMtr.toFixed(2)} Mtr):</b><br>`;
+      v.flash.items.forEach(f => {
+        let dimsTxt = Object.keys(f.dims).map(d => `${d}:${f.dims[d]}`).join(', ');
+        s+= `&nbsp;&nbsp;${f.name} &mdash; ${dimsTxt}<br>`;
+      });
+      s+=`<br>`;
+    }
+
+    s+=`<b>Walls:</b> ${wc.std} standard + ${wc.non} non&#8209;standard<br>`;
+    s+=`&nbsp;&nbsp;Standard panel size: <b>${v.P}\u00d7${v.H}</b> mm<br>`;
+    wc.wallBreak.forEach(wb=>{
+      const parts=[`${wb.std} std <b>${v.P}\u00d7${v.H}</b>`];
+      wb.nonWs.forEach(nw=>parts.push(`1 non <b>${nw}\u00d7${v.H}</b>`));
+      
+      let shStr = v.wallSheets[wb.k] ? ` <br>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--good)">&#8627; Wall Sheets: ${v.wallSheets[wb.k]}</span>` : '';
+      
+      s+=`&nbsp;&nbsp;${wb.nm} (${wb.len}mm): ${parts.join(', ')}${shStr}<br>`;
+    });
+
+    if(wc.doors.length){
+      s+=`<br><b style="color:var(--warn)">Doors (wall se minus):</b><br>`;
+      s+=wc.doors.map(dr=>{
+        let text = `&nbsp;&nbsp;${dr.nm} &mdash; ${dr.type==='sliding'?'Sliding':'Hinges'} (${dr.thick}mm), L${dr.left}/R${dr.right} &rarr; opening <b>${dr.open}</b>, door H ${dr.ht}`;
+        text += `<br>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--accent)">&#8627; Core: ${dr.mat} | Sheets: ${dr.sheet}</span>`;
+        if(dr.gapH > 0) {
+          const tp=[`${dr.topStd} std <b>${v.P}\u00d7${dr.gapH}</b>`];
+          if(dr.topNon>0) tp.push(`${dr.topNon} non <b>${dr.topNonW}\u00d7${dr.gapH}</b>`);
+          text += `<br>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--good)">&#8627; Door Top Panel (gap ${dr.gapH}mm): ${tp.join(', ')} mm</span>`;
+        } else {
+          text += `<br>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--muted)">&#8627; Door full height (no top panel)</span>`;
+        }
+        return text;
+      }).join('<br>');
+    }
+    if(wc.corners&&wc.corners.length){
+      s+=`<br><b style="color:var(--warn)">Corners (diagonal chamfer):</b><br>`;
+      s+=wc.corners.map(c=>{
+        const parts=[];
+        if(c.std>0) parts.push(`${c.std} std <b>${v.P}\u00d7${v.H}</b>`);
+        if(c.non>0) parts.push(`${c.non} non <b>${c.nonW}\u00d7${v.H}</b>`);
+        return `&nbsp;&nbsp;${c.nm} &mdash; size ${c.size} (diag ${c.diag}mm): ${parts.join(', ')} mm`;
+      }).join('<br>');
+    }
+
+    if(cb.lightOn){
+      s+=`<br><br><b style="color:var(--good)">Ceiling &mdash; band layout (max ${v.maxLen}mm), laminar position&#8209;based:</b><br>`;
+      const nm={Top:'Top band',Bottom:'Bottom band',Left:'Left',Right:'Right',Full:'Ceiling'};
+      if(cb.isPent){
+        s+=`&nbsp;&nbsp;<span style="color:var(--warn)">Pentagon/angled room &mdash; per-panel size sirf rectangular regions me.</span><br>`;
+      }
+      cb.groups.forEach(g=>{ s+=regLine(nm[g.region]||g.region, g.parts, g.total); });
+      s+=`&nbsp;&nbsp;<b style="color:var(--good)">Ceiling total: ${cb.grand} panels</b> (Standard ${cb.stdTotal} + Non&#8209;standard ${cb.nonTotal})`;
+    } else {
+      s+=`<br><br><b style="color:var(--good)">Ceiling (max ${v.maxLen}mm, no laminar):</b><br>`;
+      const nm={Full:'Ceiling'};
+      cb.groups.forEach(g=>{ s+=regLine(nm[g.region]||g.region, g.parts, g.total); });
+      s+=`&nbsp;&nbsp;<b style="color:var(--good)">Ceiling total: ${cb.grand} panels</b> (Standard ${cb.stdTotal} + Non&#8209;standard ${cb.nonTotal})`;
+    }
+    $('bd').innerHTML=s;
+    if(v.lt.on){ $('areaNote').innerHTML=v.lt.area>0?`Cutout area: <b>${v.lt.n} \u00d7 (${v.lt.ll}\u00d7${v.lt.lw}) = ${v.lt.area.toLocaleString()} mm\u00b2</b> (${(v.lt.area/1e6).toFixed(2)} m\u00b2)`:`Cutout area: <b>\u2014</b>`; }
+    drawCeiling(); drawWalls();
+  }
+  
+  async function save(){try{if(window.storage)await window.storage.set('panelRows3',JSON.stringify(rows),false);}catch(e){}}
+  async function load(){try{if(window.storage){const r=await window.storage.get('panelRows3',false);if(r&&r.value)rows=JSON.parse(r.value);}}catch(e){rows=[];}render();}
+  
+  function addRow(){
+    const v=vals();
+    if(!v.L1||!v.L2||!v.W1||!v.W2||!v.H||!v.P){alert('Saari dimensions aur panel size theek se bhariye.');return;}
+    const wc=wallCalc(v); const cb=ceilingBOQ(v); const lr=lightRect(v);
+    
+    let wsArr = [];
+    ['L1','L2','W1','W2'].forEach(k => {
+      if(v.wallSheets[k]) wsArr.push(`${k}:${v.wallSheets[k]}`);
+    });
+    let wallSheetsStr = wsArr.length > 0 ? wsArr.join(' | ') : '-';
+
+    rows.push({name:$('rname').value.trim()||('Room-'+(rows.length+1)),
+      L1:v.L1,L2:v.L2,W1:v.W1,W2:v.W2,H:v.H,P:v.P,maxLen:v.maxLen,wallTh:v.wallTh,ceilTh:v.ceilTh,
+      wStd:wc.std,wNon:wc.non,
+      cStd:cb.stdTotal,cNon:cb.nonTotal,tStd:wc.std+cb.stdTotal,tNon:wc.non+cb.nonTotal,
+      lightOn:v.lt.on,lnum:v.lt.n,llen:v.lt.ll,lwid:v.lt.lw,larea:v.lt.area,
+      lpx:lr?Math.round(lr.cx):0,lpy:lr?Math.round(lr.cy):0,
+      doorsStr: wc.doors.map(dr=>`${dr.k}:${dr.type} [${dr.mat}, ${dr.sheet||'Std'}] L${dr.left}/R${dr.right} open${dr.open}`).join(' | ')||'-',
+      wallSheetsStr: wallSheetsStr,
+      flashStr: v.flash.items.length ? v.flash.items.map(f => `${f.name}(${Object.keys(f.dims).map(d => f.dims[d]).join('x')})`).join(' | ') : '-',
+      totalSqMtr: (wc.wallAreaSqMtr + cb.ceilAreaSqMtr).toFixed(2),
+      flashMtr: v.flash.totalRunMtr.toFixed(2)
+    });
+    $('rname').value=''; save(); render();
+  }
+  function delRow(i){rows.splice(i,1);save();render();}
+  function clearAll(){if(rows.length&&confirm('Saari rows delete kar dein?')){rows=[];save();render();}}
+  
+  function render(){
+    const tb=$('tbody'); $('count').textContent=rows.length+(rows.length===1?' ROW':' ROWS');
+    if(!rows.length){tb.innerHTML='<tr><td colspan="21" class="empty">Abhi koi data nahi hai. Form bhar kar "Add to Sheet" dabaiye.</td></tr>';$('gStd').textContent='0';$('gNon').textContent='0';$('gSqMtr').textContent='0.00';$('gFlashMtr').textContent='0.00';refreshPreview();return;}
+    let gS=0,gN=0,gSq=0,gFl=0;
+    tb.innerHTML=rows.map((r,i)=>{
+      gS+=r.tStd; gN+=r.tNon; gSq+=Number(r.totalSqMtr); gFl+=Number(r.flashMtr);
+      const light=r.lightOn&&r.larea>0?`${r.lnum}\u00d7(${r.llen}\u00d7${r.lwid})@${r.lpx},${r.lpy}`:'\u2014';
+      return `<tr><td>${r.name}</td><td>${r.L1}</td><td>${r.L2}</td><td>${r.W1}</td><td>${r.W2}</td><td>${r.H}</td><td>${r.P}</td><td>${r.wallTh??'-'}</td><td>${r.ceilTh??'-'}</td>
+        <td style="color:var(--accent-2);font-weight:700">${r.totalSqMtr}</td>
+        <td style="color:var(--warn);font-weight:700">${r.flashMtr}</td>
+        <td class="std">${r.wStd}</td><td class="non">${r.wNon}</td>
+        <td class="std">${r.cStd}</td><td class="non">${r.cNon}</td><td class="std">${r.tStd}</td><td class="non">${r.tNon}</td><td>${light}</td>
+        <td><div style="max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.doorsStr}</div></td>
+        <td><div style="max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.wallSheetsStr}</div></td>
+        <td><div style="max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.flashStr}</div></td>
+        <td><button class="del" onclick="delRow(${i})">\u2715</button></td></tr>`;}).join('');
+    $('gStd').textContent=gS; $('gNon').textContent=gN; 
+    $('gSqMtr').textContent=gSq.toFixed(2); $('gFlashMtr').textContent=gFl.toFixed(2);
+    refreshPreview();
+  }
+  function exportCSV(){
+    if(!rows.length){alert('Pehle kuch data add kijiye.');return;}
+    const head=['Room','L1','L2','W1','W2','H','Panel','WallTh','CeilTh','Total SqMtr','Total Flashing Mtr','WallStd','WallNon','CeilStd','CeilNon','TotStd','TotNon','Lights','Doors','Wall Sheets','Flashing Details'];
+    const lines=[head.join(',')];
+    rows.forEach(r=>lines.push([r.name,r.L1,r.L2,r.W1,r.W2,r.H,r.P,r.wallTh,r.ceilTh,r.totalSqMtr,r.flashMtr,r.wStd,r.wNon,r.cStd,r.cNon,r.tStd,r.tNon,(r.lightOn?`${r.lnum}x(${r.llen}x${r.lwid})`:0),`"${r.doorsStr}"`,`"${r.wallSheetsStr}"`,`"${r.flashStr}"`].join(',')));
+    download('panel-boq.csv',lines.join('\n'),'text/csv');
+  }
+  
+  initDynamicUI();
+  buildWallExtras();
+  load();
+</script>
+</body>
+</html>
