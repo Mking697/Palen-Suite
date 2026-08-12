@@ -31,7 +31,12 @@ import { HI_15279 } from '../core/jobs/hi-15279.ts';
 const ROOT = resolve(import.meta.dirname, '..');
 const WEB = join(ROOT, 'web');
 const PORT = Number(process.env.PORT ?? 5173);
-const HOST = '127.0.0.1';
+/**
+ * Localhost by default: the sheets are job data and this is a desk tool. A
+ * host that runs the app behind its own proxy has to be told explicitly —
+ * `HOST=0.0.0.0` — so that going public is a decision, never an accident.
+ */
+const HOST = process.env.HOST ?? '127.0.0.1';
 
 /** Same registry the verifier uses — add a job here when you add it to CASES. */
 const JOBS: JobSpec[] = [HI_15191, HI_15223, HI_15279];

@@ -95,7 +95,41 @@ Routes:
 A new job needs adding to `JOBS` in `server/serve.ts` as well as to `CASES` in
 `core/verify/run.ts`.
 
-## Hosting (not yet applicable)
+## Hosting it on a Node.js host (Hostinger Business, and similar)
+
+The app needs nothing but Node — no dependencies, no build, no database — so a
+shared "Node.js application" slot is enough. Four things decide whether it
+works.
+
+**1. The Node version is the deal-breaker.** There is no build step because
+Node runs the TypeScript directly, which needs **Node >= 22.6**. On 22.6–22.17
+it also needs `--experimental-strip-types`; from 22.18 and on 23/24 it is on by
+default. Check the version dropdown in the host's Node app settings *first*. If
+it only offers 18 or 20, the choice is to compile to JavaScript before
+uploading — which means adding TypeScript as a build dependency and giving up
+the no-dependency rule — or not to use that host.
+
+**2. Entry point and binding.** `app.js` at the repo root is there for hosts
+that want a `.js` file to start; it just loads `server/serve.ts`. The host
+supplies `PORT`, and **`HOST=0.0.0.0` must be set** or the app stays on
+localhost and the proxy cannot reach it. That default is deliberate — going
+public should be a decision, not an accident.
+
+```
+Entry point   app.js
+Environment   HOST=0.0.0.0
+```
+
+**3. It will be public.** Anyone with the URL gets the calculator, the job
+examples and the engine. There is no login. On a shared host, put HTTP basic
+auth in front of it, or keep it on a URL that is not published.
+
+**4. `/api/verify` will probably not work.** It shells out to run the verifier,
+and shared hosting usually blocks spawning processes. Nothing in the calculator
+calls it, so the tool is unaffected — but do not rely on it in production. Run
+`npm run check` locally instead.
+
+## Hosting as a static site (not applicable)
 
 Nothing is deployed yet — the engine is a library with a CLI verifier and a
 local viewer.
