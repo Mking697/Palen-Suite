@@ -37,7 +37,7 @@ rediscovered later.
 | **Machine max panel length** splits long panels | `splitLen`, `maxLen` | ✗ no limit at all |
 | Ceiling light / laminar cutout, click-positioned | `lightRect`, `ceilingCells` | ✗ |
 | Ceiling split into Top/Bottom/Left/Right regions round the cutout | `ceilingCells` | ✗ |
-| 7 flashing types with manual dims, total running metre | `FLASHING_DATA`, `readFlashing` | ✗ — open item says no formula |
+| 7 flashing types with manual dims, total running metre | `FLASHING_DATA`, `readFlashing` | ✅ — `core/flashing.ts` computes inner, outer and U from the shop's formula, and all seven types can be typed in on top |
 | **Corner cut**: a 45° chamfer across the corner, `leg = size/√2` | `roomShape`, `drawChamfer` | ✗ — and not the same thing as a corner panel |
 | Angled wall from unequal widths, "TO BE CUT AT SITE" + true diagonal | `roomShape` isPent | ✗ compiler throws |
 | Wall thickness drawn as an inner offset polygon | `buildWallPlan` | n/a — drawing |
@@ -65,7 +65,11 @@ questions at the bottom now cover:
 
 Flashing is the one place legacy answers an open question rather than raising
 one: the estimator types the dimensions in and the tool totals the running
-metre. No formula is attempted, which matches what `README.md` concluded.
+metre. No formula is attempted, which matched what `README.md` concluded — until
+the shop gave one on 14 August 2026. `core/flashing.ts` now computes inner,
+outer and U from the room's perimeter rather than asking. It is the only rule in
+the engine with no printed sheet behind it, and HI-15191's flashing rows will
+either confirm it or become the deviation that records the difference.
 
 ## The one decision
 
@@ -84,6 +88,13 @@ feature the shop cares about is a property of the outline:
 | partition | edge segment shared with another room's edge |
 | ceiling notch | `own` end = edge with no neighbour; `shared` = partition |
 | door position | interval along an edge, at an offset |
+
+**Partition is still a whole edge, not a segment.** `EdgeOverride.shared` is a
+boolean: the edge is the neighbour's or it is not. Two rooms of different
+depths therefore have to put the whole wall on the deeper one, which is what
+HI-15279's drawing does anyway. `core/checks.ts` catches the case where they
+do not — it reports the millimetres nobody builds — but a genuinely partial
+partition, half wall and half open, is not modelled. No sheet has needed one.
 
 Note the outline is the **external envelope**, which is what the existing job
 files already record: HI-15191's freezer is `ext 3050 × 4575` and its walls are
@@ -290,6 +301,8 @@ Each phase ends with the repo green and something usable.
 | 4 | What legacy has and the engine lacks: machine max panel length, door top panel, door placement, per-wall skins, flashing as manual input, ceiling light cutout | each one reproduces the legacy figure on the same input, and `npm run check` stays green |
 | 5 ✅ | The calculator: form in, drawings and BOQ out, on one screen | a job entered from a drawing with no code edit |
 | 6 | Angled, chamfered and triangle rooms | needs the corner and blanking answers below first |
+| 7 ✅ | One drawing sheet, and a 3D view of the same panels behind a toggle | every 3D face is a width the BOQ priced, asserted per wall |
+| 8 | A guide book in the app — how to use it, on the home page rather than in a file | an estimator who has never seen the tool enters a job from a drawing without being told how |
 
 Phase 4 is bigger than it looks because per-wall skins change the shape of the
 printed sheet — today the BOQ has one "PPGI 0.4MM" column because all four
@@ -297,10 +310,48 @@ source sheets use exactly that. Adding materials must not disturb those four,
 so the default stays PPGI 0.4 and the column only splits when a job asks for
 something else.
 
+The **floor build-up** is the first place this bites. A panelised floor now
+names all four of its layers and their thicknesses, and the ply is not fixed —
+the shop also builds inner ply + chequered sheet, or outer ply + SS. The
+description prints every layer. The **counting** does not follow yet: the BOQ
+has one PPGI column and one PLY column, and HI-15279's top AL. chequered sheet
+is counted in neither. That is what the sheet does, so it is what the engine
+does, and it stays that way until a printed sheet showing a non-ply floor is
+transcribed. Inventing a column here would put a number in front of a factory
+that no sheet has ever printed.
+
 **The BOQ is the SHEET FABRICATION sheet and nothing else.** Legacy's own
 summary — standard / non-standard panel counts and running square metres — is
 not carried over; it is replaced, not joined. Flashing running metre survives
 as its own figure because it is a separate purchase, not a panel count.
+
+### Phase 7 result
+
+Done, and both halves lean on the same discipline as the flat drawings.
+
+`core/draw/sheet.ts` composes every view of a job onto one canvas by
+**translation only** — nothing scaled, nothing redrawn — so the sheet stays 1:1
+and exports as one DXF on the usual layers. The one thing that could not ride
+along was text, because a renderer sizes labels from the whole drawing's span:
+`DrawDim`, `DrawCell` and `DrawNote` gained an optional `fs`, set only by the
+composer, so each view keeps the size it has alone and a single view exports
+exactly as it always did.
+
+`core/draw/model3d.ts` stands the job up as flat faces — one per wall panel,
+ceiling stripe, floor panel and door — each carrying the figures to show when it
+is picked. It is faces only: no camera, no colour, no projection, the same
+separation `svg.ts` and `dxf.ts` have from `Drawing`. The browser owns the
+camera, because an orbit must not cost a round trip.
+
+**No library.** Three.js would be the obvious reach, and it is a dependency the
+repo does not have. It is not needed: every room is a set of right-angled boxes
+that do not interpenetrate, so an orthographic projection with a painter's sort
+is both correct and short. What that buys is what the estimator asked for —
+turn it, zoom it, click a panel and read its own size.
+
+What 3D deliberately does not do: export. No DXF, no sheet, no BOQ. It is for
+reading a job, and 2D remains the drawing of record. Adding a 3D DXF (`3DFACE`)
+would be a separate decision, because the drawing office has never asked for one.
 
 ### Phase 2 result
 
@@ -346,16 +397,22 @@ The whole page is one call. `POST /api/render` takes a job and returns its BOQ
 and every drawing together, so the two halves of the screen can never be a step
 out of sync with each other.
 
-Two things the form deliberately does not ask for. **Ceiling ends and floor
-spans** are derived from which walls are marked as the neighbour's, because
-they always were the same fact stated twice. And **wall lengths** are derived
-from the room's width and length, because a wall list that disagrees with the
-envelope is the bug that HI-15223 turned out to have.
+One thing the form deliberately does not ask for: **ceiling ends and floor
+spans** are derived from which walls are marked as the neighbour's, because they
+always were the same fact stated twice.
 
-What the form cannot yet express — `equalPieces`, an explicit `panels` list, a
-butt joint — is carried through untouched from a loaded example and shown on
-the wall as a read-only chip, so opening a verified job in the tool cannot
-quietly change it.
+**Wall lengths come from the outline, and the outline is a wall chain** — a
+length per wall and the turn taken at its end, which is how a WALL PANEL LAYOUT
+dimensions one. Rectangle and notch only seed that chain; any right-angled
+shape can be walked out wall by wall, so a drawing unlike the four verified ones
+needs no code. A wall list that disagrees with the envelope is the bug HI-15223
+turned out to have, so there is only ever one source. When the chain does not
+close, the miss is printed in millimetres and nothing is adjusted to hide it.
+
+The two draftsman escapes sit on the wall card itself — a butt joint toggle, and
+a split override of either equal pieces or an exact width list. They are taken
+off the drawing and are never a way to make a total fit; a loaded example round
+trips through them unchanged.
 
 Phase 3 is where the verification work pays for itself: both jobs listed as
 pending in `README.md` are blocked on precisely this.
@@ -364,8 +421,9 @@ pending in `README.md` are blocked on precisely this.
 
 Done. `core/plan.ts` compiles an outline to the wall list, and
 `core/verify/plan.test.ts` holds it to the hand-written walls per wall, per
-room. `npm run check` still prints `ALL ROWS MATCH across 3 jobs` with the same
-6 deviations — not one BOQ figure moved.
+room. `npm run check` still printed `ALL ROWS MATCH across 3 jobs` with the same
+6 deviations it had then — not one BOQ figure moved. (The set has since grown
+to 9; see "Sheet deviations found" in `README.md` for the current list.)
 
 Four of the five verified rooms are on outlines. The fifth, HI-15223, is not,
 and the reason is the first thing the geometry model found: **its transcribed
@@ -416,6 +474,6 @@ Per `CLAUDE.md` these get answered, not guessed.
    drawing? If yes, that offset is transcribable input and `equalPieces` may
    stop being needed.
 
-Still open from `README.md` and unchanged by this design: flashing RMTR has no
-formula, floor blank at 1260 vs a 1250 coil, butt joint inner delta from a
-single sample, density 40 vs 42.
+Still open from `README.md` and unchanged by this design: flashing RMTR now has
+the shop's formula but no sheet to check it against, floor blank at 1260 vs a
+1250 coil, butt joint inner delta from a single sample, density 40 vs 42.

@@ -26,10 +26,16 @@ wrong or the sheet is wrong. Fixing it by nudging the input until the numbers
 line up destroys the only thing that makes this engine trustworthy.
 
 When a sheet contradicts the rule the other sheets follow, keep the rule and
-record the disagreement as a deviation in the expected fixture
-(`ppgiExpected` + `note`). The diff prints it as `!` and it is not a failure.
-This has already happened once: HI-15223 prints one PPGI skin per roof panel
-where the other three jobs print two.
+record the disagreement as a deviation in the expected fixture (`rule` + `note`
+on the row, `ruleTotals` on the block). The diff prints it as `!` and it is not
+a failure. There are nine of them. The largest: all three puf slab floors are
+printed to the room's external envelope, and the shop says the floor sits
+between the walls — so the engine takes the internal clear span and those rows
+carry the sheet's figures beside the rule's.
+
+**This works the same way when the shop contradicts a sheet.** Never re-transcribe
+an expected file to match the engine — the expected file is what the sheet says,
+and that stays true even when the sheet is wrong.
 
 ## Running
 
@@ -59,16 +65,43 @@ plain HTML/CSS/JS loaded straight from disk.
   `chemWeightText` / `areaSqmtText` already rounded half-up, and `web/app.js`
   prints them as-is — JS `toFixed` in the client would reintroduce the exact
   bug `core/format.ts` exists to avoid.
+- **A cross-room check reports, it does not throw.** `core/checks.ts` compares
+  rooms against each other — the one thing `compileWalls` cannot see, because
+  it is handed one outline at a time. A bad input there is printed beside the
+  BOQ with the millimetres it costs, not raised: the calculator passes through
+  invalid states on every keystroke, and a job that refuses to build is a job
+  nobody can edit. Silence is the thing being fixed, not the build.
+- **A rule that came from the shop says so in its comment.** Most of the engine
+  is read off the four printed sheets and can be checked against them. Some
+  rules arrive by conversation instead — the L cut threshold, the floor core
+  giving way, the flashing formula. Those are just as binding, and just as
+  worth building, but the comment must state where the rule came from and the
+  date, so a later session can tell a verified figure from a stated one.
+  `core/flashing.ts` is the current example.
+- **A typed figure is never dressed up as a derived one.** Draftsman overrides,
+  extra flashing rows — anything the estimator enters by hand — is printed as
+  entered and **marked** beside the computed rows. Two numbers that mean
+  different things must never look the same on a sheet.
 - **A drawing never counts anything.** `core/draw/` places what `layoutRoom`
   already worked out; it must not compute a panel width, a quantity or an area
-  of its own. `core/verify/draw.test.ts` asserts the drawn widths equal the
+  of its own. This covers the 3D model and the composed sheet as well: a face in
+  `core/draw/model3d.ts` is one of `layoutRoom`'s panels, and `sheet.ts` only
+  translates views it was handed. `core/verify/draw.test.ts` asserts the drawn widths equal the
   laid-out widths per room. A drawing that disagrees with the sheet is worse
   than no drawing, because the factory would cut to one and buy to the other.
 - DXF layer names (`WALL`, `PANEL`, `DOOR`, `DIM`, `LIGHT`, `TEXT`, `CUT`) come
   from the legacy calculator and the drawing office expects them. Do not rename.
 - Every shop constant lives in `core/rules.ts` as a named export with a comment
-  saying which sheet it came from. Nothing magic inline.
+  saying which sheet it came from. Nothing magic inline. The browser gets them
+  from `/api/rules` rather than repeating them — `web/app.js` holds fallbacks
+  only for when that call cannot be made, and they say so.
 - A rule derived from a single sample must say so in its comment.
+- **`web/app.js` has no test in the repo.** It is a plain script with no
+  imports, so it runs in a `node:vm` context with a stub DOM — that is how the
+  form and the 3D maths have been checked so far, from a throwaway harness. An
+  identifier that was never defined once survived a whole session this way. If
+  you touch the form, run it that way at least; better, land the harness as
+  `core/verify/form.test.ts`.
 
 ## Adding a job
 

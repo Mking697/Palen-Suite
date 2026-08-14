@@ -1,31 +1,29 @@
 # Deploy
 
-## First push (repo is not yet on a remote)
+## Where the repo is
 
-The repo is initialised on branch `main` with everything staged but **not
-committed** — the commit author is fixed at commit time, and this project is
-going to a different GitHub account than `Hikom8428`.
+On GitHub at **`Mking697/Palen-Suite`**, public, branch `main` tracking
+`origin/main`. The identity is set per-repo, not globally, so the other project
+on this machine keeps its own:
 
-1. Create an **empty** repo on GitHub under the new account. No README, no
-   `.gitignore`, no licence — anything pre-created will make the first push
-   reject.
+```bash
+git -C /f/hikom-panel-suite config user.name   # Mking697
+git remote -v                                  # https://Mking697@github.com/...
+```
 
-2. Set the identity for this repo only (no `--global`, so the other project
-   keeps its own):
+Ordinary work is `git push`. The rest of this section only matters if the remote
+has to be set up again on another machine.
 
-   ```bash
-   cd /f/hikom-panel-suite
-   git config user.name  "NEW_USERNAME"
-   git config user.email "new@email.com"
-   ```
+<details>
+<summary>Setting the remote up from scratch</summary>
 
-3. Commit and push:
+1. Create an **empty** repo on GitHub. No README, no `.gitignore`, no licence —
+   anything pre-created makes the first push reject.
+2. Set the identity for this repo only, without `--global`.
+3. `git remote add origin https://USER@github.com/USER/REPO.git` then
+   `git push -u origin main`.
 
-   ```bash
-   git commit -m "Panel BOQ engine: HI-15191 and HI-15223 verified exact"
-   git remote add origin https://NEW_USERNAME@github.com/NEW_USERNAME/REPO.git
-   git push -u origin main
-   ```
+</details>
 
 ### Windows credential clash
 
@@ -81,8 +79,9 @@ Routes:
 | Route | What it does |
 |---|---|
 | `/` | the Panel Calculator |
-| `POST /api/render` | **the calculator's one call** — a job in, its BOQ and every drawing out |
-| `POST /api/dxf` | one drawing of an unsaved job, as DXF |
+| `POST /api/render` | **the calculator's one call** — a job in; its BOQ, the flashing table, the one-canvas drawing sheet with its clickable cells, every individual drawing, and the 3D model out |
+| `POST /api/dxf` | one drawing of an unsaved job as DXF; `{ sheet: true }` for the whole sheet |
+| `/api/rules` | the shop's pick lists — sheet materials, door types and cores, floor build-up, flashing types, the L cut threshold |
 | `/api/jobs` | registered jobs and their rooms, for "Load example" |
 | `/api/boq?job=HI-15191` | generated BOQ blocks + totals |
 | `/api/spec?job=HI-15191` | the JobSpec the BOQ was generated from |

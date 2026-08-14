@@ -17,7 +17,7 @@ weight and area — with no BOQ figures fed in as input.
 | HI-15279 | Ambient + Milk 60mm merged block | ⬜ needs BOQ-group merging, partition panels, Door TOP |
 | HI-15252 | Freezer 120 + Chiller 60 + F&V 60, module 1030 | ⬜ not yet |
 
-69 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
+100 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
 (`npm run dev`) renders the generated sheet and its drawings, runs the verifier
 in the browser, and lets you rebuild from an edited input.
 
@@ -46,6 +46,22 @@ go and nothing else to press.
 
 - **Rooms** — one or many. `+ Room` adds another; each gets its own tab in the
   form and its own drawings and BOQ block in the output.
+- **Any right-angled shape** — a room is a **wall chain** underneath: a length
+  per wall and the turn taken at its end, which is exactly how a WALL PANEL
+  LAYOUT dimensions one. Four walls or twelve; an L, a U, a run of steps.
+  *Rectangle* and *Notch out of a corner* are not different kinds of room, only
+  quicker ways in — both fill the same chain, and *Custom — wall by wall* opens
+  it for editing seeded from whatever was already on screen, so switching mode
+  loses nothing. Width and length stay the whole bounding box, because the
+  ceiling and the floor are built to it — HI-15223's sheet prints one full
+  2530 x 3800 ceiling straight over its notch. Where the outline turns back into
+  the room it is a re-entrant corner: never a corner panel, one wall running
+  through and the other butting into its face and losing a wall thickness. Which
+  is which comes off the drawing and is asked for rather than guessed.
+- **A chain that does not close says so, in millimetres.** The walk that misses
+  its own start is reported and never corrected — HI-15223's printed chain
+  misses by exactly one wall thickness, and that is a finding to take back to
+  the drawing, not something to absorb.
 - **Connected rooms** — *+ Room on this side* builds the next room against a
   wall. The wall stays with the room it was drawn on and the new room marks its
   facing side as *neighbour's wall*, which removes that wall, suppresses the
@@ -61,23 +77,90 @@ go and nothing else to press.
   lift, the ceiling panel over and the puf slab under. Frame and leaf are held
   to `frame + leaf + frame = module`, so the drawing and the blank size can
   never describe two different doors.
-- **Corners** — a corner panel at each outside corner by default, and each one
-  can be turned off per junction, because the shop does not always fit one. The
-  plan dimensions every corner leg, so the chain along a wall adds up to the
-  wall.
+- **Corners and butt joints** — a corner panel at each outside corner by
+  default, and each one can be turned off per junction, because the shop does
+  not always fit one. **Where a butt joint lands there is no corner panel**: at
+  a corner-less junction one wall runs straight through and the other butts into
+  its face, losing a wall thickness where a corner would have taken a leg. The
+  two can never share an end — `compileWalls` takes one branch or the other, and
+  `core/verify/plan.test.ts` holds it across every verified room. The wall card
+  states which one an end has and what it costs that wall. The plan dimensions
+  every corner leg, so the chain along a wall adds up to the wall.
+- **Flashing** — inner, outer and U on every job, totalled in running metres and
+  kept out of the panel counts because it is a separate purchase. The sheet it
+  is folded from is picked per room. See "Open items": this is the one rule in
+  the engine with no printed sheet behind it yet.
+- **Extra flashing** — anything the three computed types do not cover is typed
+  in: a gutter, a hanging flashing, a second U. Type, sheet, thickness, width
+  and length per row, as many rows as the job needs, from the same seven types
+  the legacy calculator offered. Nothing about them is derived — they print as
+  entered and are **marked `typed in`** beside the computed rows, so the two are
+  never confused. A row with no length yet is one still being filled in and does
+  not reach the sheet.
+- **The L cut** — the rebate that shortens a wall's inner skin, lets the ceiling
+  notch into the wall and narrows a corner panel's inner skin. It is cut **as
+  deep as the ceiling is thick**, so the ceiling drops in from above and
+  finishes flush. Fitted by default above `L_CUT_MIN_WALL_TH` (50mm) and turned
+  off per room, because some customers do not want it. Without it the inner skins run the full height, the
+  corner inner matches its outer, and the ceiling runs the full external size.
+  All four source sheets are 60, 100 or 120mm and every one carries the cut, so
+  the default never moves a verified figure.
+- **Floor** — a one-piece puf slab at the external size, or panelised on its own
+  module. A panelised floor also picks **which way its panels run**, width or
+  length, the same choice the ceiling has; the slab has no direction because it
+  is not split. Turning a floor round moves the cuts and nothing else — the area
+  it covers is identical, which `core/verify/split.test.ts` asserts.
+- **Floor build-up** — a panelised floor states its four layers bottom up: the
+  bottom sheet, the puf core, the sheet above it and the top sheet, each with
+  its own material and thickness. The ply is not fixed; the shop also builds
+  inner ply + chequered sheet, or outer ply + SS. **The panel never grows**: the
+  floor thickness is the whole build-up, so a 12mm ply and a 2mm chequered plate
+  on a 100mm floor leave an 85.6mm core, not a 114mm panel. The core is
+  therefore derived and never typed in, and when the sheets come to more than
+  the panel the form says so instead of building something else. A job that
+  states `desc` instead prints it exactly as transcribed, which is how the
+  verified jobs stay untouched.
+- **2D / 3D** — a toggle above the sheet, 2D by default and 2D is the drawing of
+  record. 3D stands the same panels up: `core/draw/model3d.ts` turns each one of
+  `layoutRoom`'s wall widths, ceiling stripes and floor panels into a face in
+  space, and the browser orbits it on a canvas. Standard views — **Iso, N, E,
+  S, W, Top** — sit beside the drag, the way a CAD viewer offers them; a compass
+  letter is the elevation you are looking at. **Clicking a panel prints its
+  own size** — panel, blank, whether it is a full module — read off the model,
+  not measured on screen. It obeys the same rule as the flat drawings: the 3D
+  view counts nothing of its own, and `core/verify/draw.test.ts` holds every
+  face to the width the BOQ priced. Nothing exports from 3D; it is for reading
+  the job, not issuing it. No library — the geometry is right-angled boxes, so
+  it is an orthographic projection with a painter's sort, which keeps the
+  no-dependency rule intact.
 - **Sheets** — outer and inner skin per wall, and separately for a door leaf,
   from the six materials the shop stocks with their own thickness ranges. Two
   walls in different sheets print as two BOQ rows. Everything defaults to
   PPGI 0.4, which is what all four source sheets use throughout.
-- **Output** — one WALL PANEL LAYOUT for the whole job at the top, with the
-  rooms drawn where they actually sit: rooms that share a wall are touching
-  along it, rooms that share none stand clear. Then, per room, one elevation
-  per wall, the ceiling, the floor and the SHEET FABRICATION table. Every
-  drawing downloads as DXF on the layers the drawing office expects (`WALL`,
-  `PANEL`, `DOOR`, `DIM`, `LIGHT`, `TEXT`, `CUT`). Print gives the lot as a job
+- **Output** — every view of the job on **one drawing sheet**, the way a drawing
+  office issues them: the WALL PANEL LAYOUT first, with the rooms where they
+  actually sit — sharing a wall means touching along it — then each room's plan,
+  one elevation per wall, the ceiling, the floor and the door, each in its own
+  framed cell with its title under it. `core/draw/sheet.ts` composes it by
+  **translation only**: nothing is scaled or redrawn, so the sheet is 1:1 in
+  millimetres and exports as one DXF. A cell is sized from what a view really
+  occupies — dimension chains and labels included, not just the room — so no
+  view leans into its neighbour's frame, and `core/verify/draw.test.ts` holds
+  that. **Clicking a view opens it on its own, full size**, and the sheet says
+  where each one sits so the click finds it. Any single view still exports on its own,
+  because that is what goes to the machine. The SHEET FABRICATION tables follow
+  below, one per room, unchanged. DXF comes out on the layers the drawing office
+  expects (`WALL`, `PANEL`, `DOOR`, `DIM`, `LIGHT`, `TEXT`, `CUT`). Print gives the lot as a job
   pack.
 - **Load example** — pulls a verified job into the form, so the numbers the
   engine was proved against can be inspected in the tool itself.
+
+- **Walls in nobody's BOQ** — connected rooms need not be the same size, and
+  when they are not, the whole wall between them belongs to the deeper room.
+  Ticked the other way round, the difference is built by nobody: 290mm of wall
+  vanishes out of every total. `core/checks.ts` walks the job's rooms against
+  each other and prints what is missing, in millimetres, under the totals it is
+  missing from.
 
 An input the engine cannot honour — a non-right-angled room, a `panels` list
 that does not sum to its run — stops with the reason. Nothing is guessed to
@@ -90,12 +173,18 @@ The old single-file calculator stays reachable at `/legacy` for reference.
 ```
 core/types.ts               domain model
 core/rules.ts               shop constants and presets
-core/plan.ts                room outline -> wall list (compileWalls)
+core/plan.ts                room outline -> wall list (compileWalls; rect,
+                            notched and chain build the outline)
+core/flashing.ts            inner / outer / U flashing, by the running metre
+core/checks.ts              cross-room checks — a wall handed to a neighbour
+                            that is not there to take it
 core/split.ts               splitRun — the panel splitting rule
 core/layout.ts              room -> wall / ceiling / floor panels
 core/boq.ts                 SHEET FABRICATION generator
 core/format.ts              Excel-compatible half-up rounding
 core/draw/                  plan, elevation, ceiling, floor -> SVG and DXF
+core/draw/sheet.ts          many drawings -> one 1:1 sheet, by translation only
+core/draw/model3d.ts        the job as flat faces in space, for the 3D toggle
 core/jobs/                  job inputs, transcribed from drawings only
 core/verify/                expected sheets + diff runner + tests
 server/serve.ts             local dev server (node:http, no dependencies)
@@ -113,9 +202,13 @@ All derived from and checked against HI-15191, HI-15223, HI-15252, HI-15279.
 ```
 blankWidth        = panelWidth + 40            (butt joint outer used +100)
 blankLength       = panelLength
-wallInnerHeight   = wallHeight - wallThickness       <- the L cut
+wallInnerHeight   = wallHeight - ceilingThickness    <- the L cut, cut as deep
+                    as the ceiling is thick so the ceiling drops in from above
 ceilingSpan       = ext - wallThickness/2 per own wall end (0 at a partition)
-floorSpan         = internal clear
+                    both of the above only while the L cut is fitted
+floorCore         = floor thickness - every sheet in the build-up
+floorSpan         = internal clear, slab and panelised alike — a wall never
+                    stands on the floor
 cornerOuterWidth  = 2 x cornerLeg
 cornerInnerWidth  = cornerOuter - 2 x wallThickness + 5
 buttJointOuter    = blank +100 (not +40); inner skin is 50 narrower than outer
@@ -123,6 +216,9 @@ buttEndRun        = wall length - one wall thickness at that end
 areaSqmt          = panelW/1000 * panelL/1000 * qty  (panel size, not blank)
 chemWeight        = areaSqmt * thickness/1000 * density
 uFlashingProfile  = 10x40x(thickness + 2)x40x10
+flashingWidth     = wallThickness + 2                <- from the shop, not a sheet
+flashingRmtr      = 2 x (extW + extL) per type; a butt joint adds one wall
+                    height of inner and one of outer
 wallframeVertical = 1220 x (wallHeight + 15)
 ```
 
@@ -149,6 +245,14 @@ than two pieces; a three-or-more way split is a deliberate override
 Where a sheet contradicts the rule the other three follow, the engine keeps the
 rule and the diff prints the disagreement as `!`. Nothing is fitted to a sheet.
 
+- **All three puf slab floors are sized to the room's external envelope**, as if
+  the slab ran on under the walls — HI-15191's two rooms and HI-15223's one. The
+  shop says the floor sits *between* the walls and no wall ever stands on it, so
+  the engine takes the internal clear span and these three rows are recorded
+  rather than followed. It is the largest deviation in the set: HI-15191's
+  freezer drops from 13.95375 m² to 12.18135 m². HI-15279's panelised floors
+  were already internal and still match line for line, which is the reason to
+  believe the rule over the slab rows.
 - **HI-15223 PPGI totals 32, the rule gives 38.** That sheet prints one skin per
   roof panel where HI-15191, HI-15252 and HI-15279 all print two (+4), and
   leaves two door-assembly PPGI cells blank that the others fill (+2). Panel
@@ -181,6 +285,39 @@ engine worthless — see `CLAUDE.md`.
 
 ## Open items
 
+- **HI-15191's ante room hands over the wrong side.** The new cross-room check
+  reports it: the ante marks edge 0 — its far, outside wall — as the freezer's,
+  and nothing stands behind it. Two other statements in the same job file say
+  the freezer is on the *near* side instead: `at: [0, -1525]` puts the ante
+  above a freezer that spans y 0..4575, and the ceiling's
+  `lEnds: ['own', 'shared']` is commented "near end is the freezer's wall". So
+  `shared` looks like it belongs on edge 2, and the ante's own door — which has
+  to be on a 3050 wall for the BOQ to split the way the sheet does — on edge 0.
+  The BOQ cannot tell the difference, because both are 3050 walls with one
+  door; the job plan can, and today it draws the partition twice and leaves the
+  ante open on its outside face. **Not changed without the drawing** — the job
+  file is transcribed from it, and guessing which way round it goes is exactly
+  what this repo does not do.
+
+- **How a floor sheet that is not PPGI or ply gets counted.** The BOQ has one
+  PPGI column and one PLY column. A panelised floor counts 1 PPGI and 1 PLY per
+  panel, and the top AL. chequered sheet — which HI-15279 prints in its
+  description — is counted in **neither**. That is what the sheet does, so it is
+  what the engine does. Now that the build-up can name SS or a chequered sheet
+  in place of the ply, those columns no longer describe the panel. **Waiting on
+  a printed sheet** showing one of these floors; the shop has one. Until it
+  arrives the counting is unchanged, so no invented column can reach a factory.
+
+- **A partition on one of two walls that face the same way.** A room of any
+  shape can now carry a partition — the shape controls are no longer hidden once
+  it does, only warned about, because moving the shape moves the shared wall.
+  What is still unanswered is narrower: an L-shaped or stepped room can have two
+  walls facing the same side, and the ceiling is built to the bounding box, so
+  that side has one end spec for both of them. The calculator counts a side as
+  the neighbour's only when *every* wall facing that way is. One of two being a
+  partition would need a ceiling spec no verified sheet shows, so it is left
+  alone rather than guessed at.
+
 - **HI-15223's wall lengths do not close a polygon.** Walking its six walls
   round, the horizontal chain closes exactly (`2590 - 1600 - 990 = 0`) but the
   vertical chain is out by exactly one wall thickness
@@ -189,7 +326,25 @@ engine worthless — see `CLAUDE.md`.
   but which wall is measured to the other face cannot be decided from the
   numbers. The BOQ is unaffected — the engine subtracts per wall and never
   closes the loop, which is why this only surfaced once the plan geometry was
-  modelled. Needs the drawing before the room can be drawn.
+  modelled.
+
+  Working the R3 drawing through narrows it to **one question with two
+  answers**. The left wall is settled at 3860 by its own printed chain
+  (`300 + 1140 + 1180 + door 1180 = 3800`, i.e. 3860 less one butt); 3920 would
+  print 1200 where the drawing prints 1140. That leaves the right wall's 3555
+  and the notch's 365 as the pair that cannot both be right, and both are
+  printed panel figures:
+
+  | | right wall edge | notch edge | then the sheet's |
+  |---|---|---|---|
+  | A | 3495 | 365 | 895 panel should read 835 |
+  | B | 3555 | 305 | 365 panel should read 305 |
+
+  So: **is the right wall dimensioned to the outer face of the bottom wall or
+  its inner face?** One answer closes the polygon and the room is drawn the
+  same day — `notched(2590, 3860, { corner: 'SE', w: 1600, d: … })` is in
+  `core/plan.ts` waiting for the number, and the calculator can enter the shape
+  today. Neither is being picked here.
 
 - `minPanelWidth` is now pinned to **150** from both sides: HI-15279's ambient
   ceiling rejects a 130 balance, and HI-15252's F&V keeps a 150 wall panel.
@@ -197,10 +352,16 @@ engine worthless — see `CLAUDE.md`.
   the floor of the stated 42±2 spec. Default is 40 so past jobs reproduce
   exactly; if production really runs at 42 the sheets under-estimate chemical
   by ~5% (~41 kg on HI-15252).
-- Flashing RMTR has no formula that reproduces the sheets — perimeter based
-  estimates land both above and below the printed figures. The legacy
-  calculator does not try: the estimator types each flashing type's dimensions
-  and it totals the running metre. That is probably the answer.
+- **Flashing is built to the shop's formula but not yet checked against a
+  sheet.** The rule now in `core/flashing.ts` came from the shop on 14 August
+  2026: three types on every job, running metre `2 x (extW + extL)` each, width
+  `wallTh + 2`, and a butt joint adding one wall height of inner and one of
+  outer. This file previously recorded that **perimeter-based estimates land
+  both above and below HI-15191's printed figures**, which is a live
+  disagreement — either that comparison was wrong, or the sheet carries
+  something the formula does not, and the butt joint extra is a candidate.
+  HI-15191's printed flashing rows are coming; transcribing them settles it.
+  Until then this is the only rule in the engine with no sheet behind it.
 - **No machine maximum panel length is modelled.** The legacy calculator splits
   any panel longer than a configurable limit; this engine has no limit and will
   happily generate a panel the line cannot make. The legacy default of 3050 is

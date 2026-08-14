@@ -3,6 +3,23 @@
 Ye guide draftsman / estimator ke liye hai. Engine ko drawing ke dimensions
 chahiye, BOQ ka koi number nahi — BOQ khud generate hoti hai.
 
+**Sirf calculator chalana hai?** Pehla hissa hi kaafi hai — "Sabse aasan raasta"
+se "Jo tool mana kar de" tak. Uske baad ka hissa (`Code me job add karna`) sirf
+tab chahiye jab kisi purane job ko verify karna ho.
+
+| Chahiye | Kahan |
+|---|---|
+| Screen kaise chalti hai | [Sabse aasan raasta](#sabse-aasan-raasta--panel-calculator) |
+| Saari drawings ek canvas par | [Drawing sheet](#drawing-sheet--sab-kuch-ek-canvas-par) |
+| 3D me dekhna | [2D / 3D](#2d--3d) |
+| Do room jodna | [Jude hue room](#jude-hue-room-kaise-banayein) |
+| L, U, stepped room | [Room ka shape](#room-ka-shape--teen-raste) |
+| L cut | [L cut](#l-cut) |
+| Floor ki layers | [Floor ki build-up](#floor-ki-build-up) |
+| Corner ya butt joint | [Corner ya butt joint](#corner-ya-butt-joint--dono-ek-jagah-nahi) |
+| Flashing, aur apni flashing jodna | [Flashing](#flashing) |
+| Error aa gaya | [Jo tool mana kar de](#jo-tool-mana-kar-de) |
+
 ## Sabse aasan raasta — Panel Calculator
 
 ```
@@ -16,15 +33,73 @@ ki zaroorat nahi.
 | Form me | Kya karta hai |
 |---|---|
 | Width / Length / Height | Room ka external envelope. Walls isi se nikalti hain. |
+| **Room shape** | Rectangle, Notch (L), ya Custom — wall by wall (koi bhi 90° shape) |
 | Wall / Ceiling thickness | Panel ki motai |
 | Panel module | Standard panel width (1180, 1030 …) |
 | Corner leg | Corner panel ka ek leg (300 default) |
 | Min panel | Isse chhota balance allowed nahi |
 | Ceiling panels run along | Ceiling kis direction me kate |
-| Floor type | Puf slab (ek tukda) ya panelised + ply |
+| **L cut** | Rebate lagega ya nahi — 50mm se moti wall par by default on |
+| Floor type | Puf slab (ek tukda) ya panelised + ply — dono walls ke andar |
+| Floor panels run along | Floor kis direction me kate — sirf panelised floor par |
+| Floor build-up | Floor panel ki chaaron layers, har ek ka material + thickness |
 | **Neighbour's wall** | Us side padosi room ki wall hai |
 | **Door** | Us wall par door, clear opening ke saath |
 | **+ Room** | Ek aur room jodo |
+
+### Drawing sheet — sab kuch ek canvas par
+
+Dayein taraf **saari drawings ek hi sheet par** aati hain, jaise drawing office
+issue karta hai: pehle poore job ka WALL PANEL LAYOUT, phir har room ka plan,
+har wall ki elevation, ceiling, floor aur door — har view apne frame ke andar,
+neeche uska naam. Alag-alag tasveerein nahi, ek canvas. **SHEET FABRICATION
+table neeche alag hi rehti hai**, room-dar-room, jaise thi.
+
+Sheet **1:1** hai — koi view chhota-bada nahi kiya gaya, sirf jagah par rakha
+gaya hai. Isliye:
+
+- **DXF — whole sheet** se poori sheet ek hi DXF me aa jaati hai, usi layers par
+  (`WALL`, `PANEL`, `DOOR`, `DIM`, `LIGHT`, `TEXT`, `CUT`).
+- Sheet ke neeche **har view ka apna DXF** bhi ek click par hai — machine ko
+  aksar ek hi view chahiye hota hai, isliye wo hataya nahi gaya.
+
+Sheet chaudi ho to uske andar hi scroll ho jaati hai; page apne aap nahi
+khinchta.
+
+**Kisi bhi view par click kijiye** — wo akela, poore size par khul jayega, saari
+dimensions saaf. Wapas jaane ke liye **← All views**.
+
+Har view apne frame ke **andar hi** rehti hai. Cell ka size sirf room se nahi,
+uski dimension chain aur labels ko **milaakar** naapa jaata hai — warna ek room
+ki dimension line bagal wale view par chadh jaati thi.
+
+### 2D / 3D
+
+Sheet ke upar **2D / 3D** ka toggle hai. **2D default hai aur wahi asli drawing
+hai** — jo issue hoti hai, jo DXF banti hai.
+
+**3D** wahi panels khada kar deta hai jo sheet mein price hote hain:
+
+- **Standard views** ke buttons hain, CAD jaise — **Iso · N · E · S · W · Top**.
+  Compass letter wahi elevation hai jo aap dekh rahe ho: **N** dabane par north
+  wali face saamne aati hai, **Top** poora plan. Jo view chalu hai wo highlight
+  rehta hai; drag karte hi highlight hat jaata hai, kyunki tab camera aapka hai.
+  **Fit** zoom aur pan ko wapas set kar deta hai, angle ko chheday bina.
+- **Drag** karke ghumaiye, **scroll** se zoom, **shift + drag** se khisakaiye.
+- **Kisi bhi panel par click** kijiye — neeche uska apna size aa jayega: panel
+  size, blank size, aur full module hai ya balance panel. Door par click karo to
+  clear opening aur lift dikhega.
+- **Show ceiling** by default off hai, taaki room ke andar dikh sake. On karne
+  par roof panels bhi aa jaate hain.
+- Balance panel (jo poora module nahi hai) ka border **peela** hota hai, wahi
+  rang jo baaki jagah non-standard ke liye use hota hai.
+
+3D se kuchh **export nahi hota** — na DXF, na sheet. Wo samajhne ke liye hai,
+bhejne ke liye 2D hi hai.
+
+> 3D bhi kuchh **count nahi karta**. Har face wahi width hai jo BOQ ne price ki;
+> `core/verify/draw.test.ts` isko har panel par jaanchta hai. Agar 3D aur sheet
+> kabhi alag dikhein to wo bug hai, choice nahi.
 
 ### Jude hue room kaise banayein
 
@@ -46,6 +121,203 @@ hat jayega), ya `open Room 2 →` se doosre room me jaakar wahan laga dijiye.
 Upar wale **+ Room** button se jo room banta hai wo kisi se juda nahi hota, toh
 layout me **alag khada** dikhta hai.
 
+### Room ka shape — teen raste
+
+**Shape** group ke **Room shape** dropdown me teen option hain. Teeno andar se
+ek hi cheez banate hain — ek **wall chain**, yaani har wall ki length aur uske
+end par kis taraf mudna hai, bilkul jaise drawing par dimension chalti hai.
+Isliye mode badalne par kuchh khota nahi: jo screen par tha, agla mode wahi se
+shuru hota hai.
+
+| Room shape | Kab |
+|---|---|
+| Rectangle | Aam chaar-wall room — sirf Width × Length |
+| Rectangle with a notch (L) | Ek corner kata hua (jaise HI-15223) |
+| Custom — wall by wall | Baaki sab — U, T, stepped, kitni bhi walls |
+
+#### Notch — L-shape ka shortcut
+
+Room ka ek corner kata hua ho (jaise HI-15223), toh **Rectangle with a notch
+(L)** chunein. Teen cheezein poochi jayengi:
+
+| Field | Matlab |
+|---|---|
+| Corner cut away | Kaunsa corner kata hai — Top right / Bottom right / Bottom left / Top left |
+| Notch width | Wall ke saath-saath kitna kata |
+| Notch depth | Andar kitna kata |
+
+Chunte hi room ki **4 walls 6 ho jaati hain** aur har nayi wall ka apna card
+aa jaata hai. HI-15223 ke liye: 2590 × 3860, corner **Bottom right**, notch
+1600 × 305.
+
+**Width aur Length poora rectangle hi rehta hai** — notch usme se katta hai.
+Aisa isliye ki ceiling aur floor poore rectangle par bante hain: HI-15223 ki
+sheet notch ke upar se ek hi 2530 × 3800 ceiling chhapti hai.
+
+Notch wala corner **andar ki taraf** mudta hai (270°), wahan corner panel nahi
+lagta. Ek wall seedhi nikalti hai aur doosri uske face me ja kar rukti hai —
+aur usme se **ek wall thickness minus** ho jaati hai. Kaun si seedhi jaati hai
+ye drawing dekh kar batana padega, isliye **At that corner, the wall that runs
+through is** wala dropdown dono walls ke naam se poochta hai. Engine khud guess
+nahi karega.
+
+#### Custom — wall by wall
+
+Jitni bhi walls ho — U-shape, T, seedhiyon jaisa stepped room — ye mode sab
+banata hai. Drawing jis tarah dimension karti hai, us hi tarah chalein: **ek
+wall ki length, phir wo kis taraf mudti hai**. **+ Wall** se aur walls jodein,
+**×** se hataayein (teen se kam nahi ho sakti — teen walls kuchh gherti nahi).
+
+Neeche hamesha likha rehta hai ki chain **band hui ya nahi**:
+
+- `Closes exactly · 4000 × 3000 mm` — outline poora ban gaya, room ban gaya.
+- Band nahi hui toh saaf batega **kitne mm right/left aur up/down se chook
+  gayi**. Yahan koi number apne aap adjust nahi hota. HI-15223 ki printed chain
+  exactly ek wall thickness se chookti hai — wo drawing par wapas poochne wali
+  baat hai, chupa kar theek karne wali nahi.
+
+Har nayi wall ka apna card aa jaata hai — door, butt joint, sheets, neighbour's
+wall, sab wahi. Andar ki taraf mudne wale har corner par wahi *runs through*
+wala sawaal poocha jayega jo notch me poocha jaata hai.
+
+> L-shape ya stepped room par ab **+ Room on this side** bhi laga sakte hain.
+> Bas dhyan rahe ki shape badalne se shared wall khud hilti hai, isliye baad me
+> partition ek baar dekh lein — form yahi hint dikhata hai.
+>
+> Ek cheez abhi bhi nahi hoti: agar **ek hi side par do walls** ho (L ya stepped
+> room me aisa hota hai) aur unme se **sirf ek** partition ho, toh ceiling ka us
+> side ka end tay nahi hai — ceiling poore bounding box par banti hai, uska ek
+> hi jawaab hota hai. Aisi koi verified sheet aayi nahi, isliye guess nahi kiya
+> gaya.
+
+### L cut
+
+**Build-up** group me **L cut** ka checkbox hai. Ye wahi rebate hai jo wall ke
+andar wali skin ko chhota karta hai, ceiling ko wall me baithne deta hai, aur
+corner panel ki andar wali skin ko patla karta hai.
+
+Cut **utna hi gehra** hota hai jitni ceiling moti hai — tabhi ceiling upar se
+usme baith kar wall ke top ke barabar aati hai. Isliye andar wali skin
+`height − ceiling thickness` hoti hai, `height − wall thickness` nahi. Chaaron
+verified sheets me wall aur ceiling ki thickness barabar hai (60/60, 100/100,
+120/120), isliye sheet in dono me farq bata hi nahi sakti — ye baat shop se aayi
+hai, sheet se padhi nahi gayi.
+
+- **50mm se moti wall par by default on.** Chaaron verified sheet 60, 100 ya
+  120mm ki hain aur sabme cut lagta hai, isliye default kabhi kisi verified
+  figure ko nahi hilata.
+- Wall thickness badalte hi tick apne aap sahi ho jata hai — jab tak aap khud
+  usse chhu na lein. Ek baar chhu diya, aapka faisla chalega.
+- **Customer ko cut nahi chahiye** toh untick kar dijiye. Phir: andar wali skin
+  poori height ki, corner ki andar wali skin apni outer ke barabar, aur ceiling
+  poore external size par.
+
+### Floor hamesha walls ke andar
+
+Floor walls ke **beech** me banta hai — koi wall floor panel par khadi nahi
+hoti. Isliye floor ka size aur uska sqmt **andar ka clear area** hota hai, room
+ke external size ka nahi. 3050 × 4575 ka room, 120mm wall → floor 2810 × 4335.
+
+Ye dono floor types par lagta hai — puf slab par bhi, panelised par bhi.
+
+> Teen printed sheets isse ulat chhapti hain: HI-15191 ke dono room aur HI-15223
+> apna puf slab poore external size par dikhate hain. Engine unhe **follow nahi
+> karta** — rule wahi rehta hai, aur un teen rows ko `npm run verify` `!` ke
+> saath dikhata hai, sheet ka number aur rule ka number dono. HI-15279 ke
+> panelised floor pehle se andar wale the aur ab bhi line-by-line match karte
+> hain.
+
+### Floor ki build-up
+
+Panelised floor chunte hi **Floor build-up** aa jaata hai — panel ki chaaron
+layers, neeche se upar:
+
+| Layer | Default | Badal sakte hain |
+|---|---|---|
+| Bottom sheet | PPGI 0.4 mm | material + thickness |
+| Core | Puf | nahi — ye khud nikalta hai, neeche dekho |
+| Above the core | Ply 12 mm | material + thickness |
+| Top sheet | AL. CHQ 2 mm | material + thickness |
+
+Ply fixed nahi hai — shop inner Ply + chequered sheet, ya outer Ply + SS bhi
+banati hai. Jo bhi chunenge wo BOQ ki description me poora chhapega, thickness
+ke saath.
+
+**Panel kabhi mota nahi hota.** Floor thickness 100 hai to panel 100 hi rahega —
+12mm ply aur 2mm CHQ jodne se 114 nahi ho jayega. Jo bhi sheet lagegi, **core
+utna patla ho jayega**. 100 − 0.4 − 12 − 2 = **85.6mm core**. Isiliye core ki
+thickness poochi nahi jaati, wo khud dikh jaati hai.
+
+Sheets panel se moti ho gayin (jaise 10mm floor par 12mm ply) to core zero se
+neeche chala jayega — form wahin peela box dikha kar bata dega, chupchap kuchh
+aur nahi bana dega.
+
+> Abhi ek cheez adhoori hai: BOQ me **PPGI aur PLY ke hi column** hain. Aaj bhi
+> AL. CHQ wali top sheet description me chhapti hai par kisi column me ginag
+> nahi hoti — sheet khud aisa hi karti hai. Ply ki jagah SS ya chequered aane
+> par ye ginti kaisi honi chahiye, ye **aapki printed sheet dekh kar** hi tay
+> hoga. Tab tak ginti waisi hi hai jaisi thi — koi column apne aap se nahi
+> banaya gaya.
+
+### Corner ya butt joint — dono ek jagah nahi
+
+Wall ke har end par **ya corner panel hoga, ya butt joint** — dono kabhi nahi.
+Engine mein ye structurally pakka hai: agar corner panel laga hai to butt ka
+sawaal hi nahi aata; corner hataoge tabhi ek wall seedhi jaati hai aur doosri
+uske face me butt karti hai.
+
+Aapke room me chaar corner hain aur kisi wall par (jaise bottom wall) ek side ya
+dono side butt joint chahiye — to bas us end ka **Corner** untick kar dijiye.
+Form turant poochh lega ki us junction se **kaun si wall through jaati hai**.
+
+Har end ke neeche ab saaf likha rehta hai ki wahan kya hai aur us wall ko kya
+chhodna pad raha hai:
+
+> Corner panel at the start — S gives up 300 mm here.
+> **Butt joint at the end, no corner panel — S gives up 100 mm here.**
+
+Corner 300 (corner leg) khaata hai, butt sirf ek **wall thickness** — isliye
+butt karne par us wall ka clear run **badh** jaata hai.
+
+### Flashing
+
+Har job me **teen flashing** by default aati hain — **Inner, Outer, U**. BOQ ke
+neeche apni alag table me, kyunki ye panel nahi hai, alag kharid hai. Panel ke
+totals me ye kabhi nahi judti.
+
+| | |
+|---|---|
+| Running MTR | Both width + both length = **2 × (W + L)**, har type ka apna |
+| Width | Wall thickness **+ 2** — 100mm wall par 102mm |
+| Butt joint ho to | Wahan **extra**: ek wall height Inner ka, ek Outer ka. U par kuch nahi |
+
+Flashing ki sheet **Flashing** group se chunte hain — default PPGI 0.4.
+
+#### Apni flashing jodna
+
+**Add extra flashing** tick kijiye. Har row me:
+
+| Field | |
+|---|---|
+| Type of flashing | Saat types — U, L Inner, L Outer, T Angel, Hanging, Flat Strip, Gutter |
+| Sheet + thickness | Us flashing ka apna, room wale se alag ho sakta hai |
+| Width | Strip ki chaudai, mm |
+| Length | **Yahi running metre banti hai** |
+
+**+ Flashing** se jitni chahein utni rows jodiye, **×** se hataiye. Length khali
+chhod di to wo row sheet par nahi jaayegi — abhi bhari ja rahi hai, aisa maana
+jayega.
+
+Ye rows table me **`typed in`** tag ke saath aati hain, peele border ke saath —
+taaki hamesha pata rahe ki kaun si flashing rule se nikli aur kaun si aapne
+haath se daali. Inme kuch derive nahi hota, jo aap likhenge wahi chhapega.
+
+> **Ye abhi kisi printed sheet se verify nahi hui.** README purana finding
+> rakhta hai ki perimeter wala hisaab HI-15191 ki chhapi figures se upar-neeche
+> dono taraf jaata tha. HI-15191 ki flashing rows aate hi main unhe transcribe
+> karke ye milaa dunga — tab ye bhi baaki BOQ ki tarah line-by-line verified ho
+> jayegi.
+
 ### Do zaroori tick
 
 **Neighbour's wall** — jis side doosra room juda hua hai. Ek tick se teen kaam
@@ -57,6 +329,25 @@ walls aur 2 corner par aata hai, 4 aur 4 par nahi.
 toh drawing door ko **center** me rakh degi aur plan par `DOOR CENTRED
 (ASSUMED)` likh degi. BOQ dono soorat me same rehta hai — door ka module run se
 minus hota hai chahe wo kahin bhi ho.
+
+### Jab do room alag-alag size ke hon
+
+Jude hue room ka size alag ho sakta hai — HI-15279 me ambient 3690 gehra hai
+aur uske saath wala chiller sirf 3400. Aisi soorat me **beech ki poori wall
+gehre wale room ki honi chahiye**, kyunki wall ki lambai 3690 hai, 3400 nahi.
+
+Ulta kar diya — chhote room ko malik bana diya — toh 290mm wall **kisi ke BOQ
+me nahi aati**. Pehle ye chupchap ho jata tha. Ab totals ke theek neeche peela
+box aata hai:
+
+> **1 wall is in nobody's BOQ**
+> Ambient · wall E is ticked as the neighbour's, but 290 mm of it has no room
+> behind it …
+
+Box aaye toh us wall ki ownership palat dijiye (`open Room 2 →` se doosre room
+me jaakar tick hata dijiye), ya room ki position/size theek kar dijiye. Numbers
+upar utne hi panels se kam hain — engine gap ko bharne ke liye kuch guess nahi
+karta.
 
 ### Jo tool mana kar de
 
@@ -135,14 +426,34 @@ const ANTE = rect(3050, 1525, {
 
 Isi ek line se ante room ko 3 walls aur 2 corner milte hain, 4 aur 4 nahi.
 
-### L-shape room
+### L-shape room — `notched`
 
-Notch wali jagah polygon me 6 points hote hain. Jo corner **andar ki taraf**
-mudta hai (re-entrant, 270°), wahan corner panel nahi — ek wall seedhi nikalti
-hai aur doosri uske face me ja kar rukti hai (ek wall thickness minus).
+Rectangle ke ek corner se tukda kata ho toh `notched` use karein. Ye 6 points
+ka outline banata hai aur re-entrant vertex par `through` khud rakh deta hai:
 
-Engine ye **khud decide nahi karega** — batana padega ki kaun si wall seedhi
-ja rahi hai:
+```ts
+const CHILLER = notched(
+  2590, 3860,                                        // poora bounding box
+  { corner: 'SE', w: 1600, d: 305, through: 'next' }, // kata hua corner
+  {
+    0: { id: 'top' },
+    1: { id: 'right' },
+    2: { id: 'bottom' },
+    3: { id: 'notch' },
+    4: { id: 'buttWall', buttJoint: true },
+    5: { id: 'left', door: DOOR },
+  },
+);
+```
+
+`w` × `l` **bounding box hi rehta hai**, L nahi — ceiling aur floor usi par
+bante hain (HI-15223 ki sheet notch ke upar se poora 2530 × 3800 ceiling
+chhapti hai). `RoomSpec.ext` bhi wahi box rahega.
+
+Jo corner **andar ki taraf** mudta hai (re-entrant, 270°) wahan corner panel
+nahi lagta — ek wall seedhi nikalti hai aur doosri uske face me ja kar rukti
+hai (ek wall thickness minus). Kaun si seedhi jaati hai ye engine **khud
+decide nahi karega**, `through` me batana padta hai:
 
 ```ts
 vertices: { 3: { through: 'prev' } },   // vertex 3 par pichhli wall continuous
