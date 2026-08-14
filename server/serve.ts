@@ -18,10 +18,30 @@ import { spawn } from 'node:child_process';
 import { extname, join, normalize, resolve } from 'node:path';
 
 import { buildJob } from '../core/boq.ts';
+import { checkJob } from '../core/checks.ts';
+import { jobFlashing } from '../core/flashing.ts';
 import { fmt2, round } from '../core/format.ts';
-import { canDraw, jobPlan, roomDrawings, toDxf, toSvg } from '../core/draw/index.ts';
+import {
+  canDraw,
+  composeSheet,
+  type Drawing,
+  jobPlan,
+  model3d,
+  roomDrawings,
+  toDxf,
+  toSvg,
+} from '../core/draw/index.ts';
 import { compileWalls } from '../core/plan.ts';
-import { DEFAULT_SKIN, DOOR_CORES, DOOR_TYPES, SHEET_MATERIALS } from '../core/rules.ts';
+import {
+  DEFAULT_FLOOR_LAYERS,
+  DEFAULT_SKIN,
+  DOOR_CORES,
+  DOOR_TYPES,
+  FLASHING_TYPES,
+  FLOOR_LAYER_MATERIALS,
+  L_CUT_MIN_WALL_TH,
+  SHEET_MATERIALS,
+} from '../core/rules.ts';
 import type { BoqBlock, JobSpec, RoomSpec } from '../core/types.ts';
 
 import { HI_15191 } from '../core/jobs/hi-15191.ts';
@@ -100,6 +120,13 @@ function buildPayload(input: JobSpec) {
     jobNo: job.jobNo,
     density: job.density,
     rooms: job.rooms.map((r) => r.name),
+    // walls handed to a neighbour that is not there to take them. Reported
+    // beside the BOQ rather than thrown, because the form passes through that
+    // state on the way to a valid job — see core/checks.ts.
+    problems: checkJob(job),
+    // bought by the running metre, so it is totalled on its own and never
+    // joins the panel counts — see core/flashing.ts
+    flashing: jobFlashing(job),
     blocks: serialise(blocks),
     grand: {
       ...grand,
@@ -145,6 +172,43 @@ function drawingsFor(room: RoomSpec, index: number) {
       drawings: [],
     };
   }
+}
+
+/**
+ * Every drawing in the job on one canvas: the WALL PANEL LAYOUT first, then
+ * each room's views in the order `roomDrawings` gives them. A room that cannot
+ * be drawn is left off the sheet and still reports itself beside the BOQ.
+ */
+function sheetViews(job: JobSpec): Drawing[] {
+  const views: Drawing[] = [];
+  try {
+    views.push(jobPlan(job));
+  } catch {
+    /* the layout reports its own reason through renderLayout */
+  }
+  for (const room of job.rooms) {
+    if (!canDraw(room)) continue;
+    try {
+      views.push(...roomDrawings(room));
+    } catch {
+      /* drawingsFor reports why, room by room */
+    }
+  }
+  return views;
+}
+
+function renderSheet(job: JobSpec) {
+  const views = sheetViews(job);
+  if (!views.length) return { drawable: false, reason: 'Nothing in this job can be drawn yet.' };
+  const { drawing, cells } = composeSheet(views, { title: `${job.jobNo} — DRAWING SHEET` });
+  return {
+    drawable: true,
+    title: drawing.title,
+    subtitle: `${views.length} views · every dimension in mm at 1:1 · click a view to open it`,
+    svg: toSvg(drawing, { maxWidth: 1400 }),
+    // where each view sits on the sheet, so a click can find the one under it
+    cells,
+  };
 }
 
 /** The job's single WALL PANEL LAYOUT, or why it cannot be drawn. */
@@ -212,6 +276,11 @@ const server = createServer(async (req, res) => {
         defaultSkin: DEFAULT_SKIN,
         doorTypes: Object.entries(DOOR_TYPES).map(([k, v]) => ({ key: k, ...v })),
         doorCores: DOOR_CORES,
+        // so the form can show the L cut default without knowing the threshold
+        lCutMinWallTh: L_CUT_MIN_WALL_TH,
+        floorMaterials: FLOOR_LAYER_MATERIALS,
+        floorLayers: DEFAULT_FLOOR_LAYERS,
+        flashingTypes: FLASHING_TYPES,
       });
     }
 
@@ -246,6 +315,11 @@ const server = createServer(async (req, res) => {
           ...buildPayload(spec),
           // one layout for the whole job, so connected rooms are drawn together
           layout: renderLayout(job),
+          // and every view of that job on one canvas, the way it is issued
+          sheet: renderSheet(job),
+          // the same job stood up, for the 3D toggle. Faces only — the browser
+          // owns the camera, because dragging must not need a round trip.
+          model3d: model3d(job),
           drawings: job.rooms.map((room, i) => drawingsFor(room, i)),
         });
       } catch (err) {
@@ -260,11 +334,17 @@ const server = createServer(async (req, res) => {
           room?: RoomSpec;
           index?: number;
           job?: JobSpec;
+          sheet?: boolean;
         };
-        // the whole-job layout, or one of a room's own drawings
-        const drawing = body.job
-          ? jobPlan(normalise(body.job))
-          : roomDrawings(withWalls(body.room!))[body.index ?? 0];
+        // the whole sheet, the whole-job layout, or one of a room's drawings
+        const drawing =
+          body.sheet && body.job
+            ? composeSheet(sheetViews(normalise(body.job)), {
+                title: `${body.job.jobNo} — DRAWING SHEET`,
+              }).drawing
+            : body.job
+              ? jobPlan(normalise(body.job))
+              : roomDrawings(withWalls(body.room!))[body.index ?? 0];
         if (!drawing) return json(res, 404, { error: 'no such drawing' });
         return send(res, 200, toDxf(drawing), 'image/vnd.dxf');
       } catch (err) {
