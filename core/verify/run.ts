@@ -8,6 +8,7 @@
  */
 
 import { buildJob } from '../boq.ts';
+import { checkJob } from '../checks.ts';
 import { fmt2, round2 } from '../format.ts';
 import type { BoqBlock, BoqRow, JobSpec } from '../types.ts';
 import type { ExpectedBlock, ExpectedRow } from './expected.ts';
@@ -53,20 +54,23 @@ function compareRow(got: BoqRow | undefined, want: ExpectedRow) {
   };
 
   // on a field the sheet contradicts, compare against the rule instead
-  type F = 'ppgiQty' | 'panelQty' | 'blankW' | 'blankL';
+  type F = 'ppgiQty' | 'panelQty' | 'blankW' | 'blankL' | 'panelW' | 'panelL';
   const target = (f: F) => (want.rule && f in want.rule ? want.rule[f]! : want[f]);
+  // chemWeight and areaSqmt are never blank, so they get their own accessor
+  type N = 'chemWeight' | 'areaSqmt';
+  const num = (f: N) => (want.rule && f in want.rule ? want.rule[f]! : want[f]);
   const deviated = !!want.rule && Object.keys(want.rule).length > 0;
 
   push(got.desc === want.desc, `desc "${got.desc}" != "${want.desc}"`);
-  push(sameNum(got.panelW, want.panelW), `panelW ${got.panelW} != ${want.panelW}`);
-  push(sameNum(got.panelL, want.panelL), `panelL ${got.panelL} != ${want.panelL}`);
+  push(sameNum(got.panelW, target('panelW')), `panelW ${got.panelW} != ${target('panelW')}`);
+  push(sameNum(got.panelL, target('panelL')), `panelL ${got.panelL} != ${target('panelL')}`);
   push(sameNum(got.blankW, target('blankW')), `blankW ${got.blankW} != ${target('blankW')}`);
   push(sameNum(got.blankL, target('blankL')), `blankL ${got.blankL} != ${target('blankL')}`);
   push(sameNum(got.panelQty, target('panelQty')), `panel ${got.panelQty} != ${target('panelQty')}`);
   push(sameNum(got.ppgiQty, target('ppgiQty')), `ppgi ${got.ppgiQty} != ${target('ppgiQty')}`);
   push(got.thk === want.thk, `thk ${got.thk} != ${want.thk}`);
-  push(sameWeight(got.chemWeight, want.chemWeight), `wt ${fmt2(got.chemWeight)} != ${want.chemWeight}`);
-  push(sameArea(got.areaSqmt, want.areaSqmt), `area ${got.areaSqmt} != ${want.areaSqmt}`);
+  push(sameWeight(got.chemWeight, num('chemWeight')), `wt ${fmt2(got.chemWeight)} != ${num('chemWeight')}`);
+  push(sameArea(got.areaSqmt, num('areaSqmt')), `area ${got.areaSqmt} != ${num('areaSqmt')}`);
 
   return { pass: fails.length === 0, deviated, fails };
 }
@@ -128,8 +132,8 @@ function printBlock(got: BoqBlock, want: ExpectedBlock) {
   const tp = got.totals.panelQty === panelTarget;
   const tg = got.totals.ppgiQty === ppgiTarget;
   const tl = got.totals.plyQty === (rt.plyQty ?? want.totals.plyQty ?? 0);
-  const tw = sameWeight(got.totals.chemWeight, want.totals.chemWeight);
-  const ta = round2(got.totals.areaSqmt) === round2(want.totals.areaSqmt);
+  const tw = sameWeight(got.totals.chemWeight, rt.chemWeight ?? want.totals.chemWeight);
+  const ta = round2(got.totals.areaSqmt) === round2(rt.areaSqmt ?? want.totals.areaSqmt);
   const allOk = tp && tg && tl && tw && ta;
   if (!allOk) failures++;
   if (!tl) {
@@ -157,6 +161,7 @@ function printBlock(got: BoqBlock, want: ExpectedBlock) {
 
 let allFailures = 0;
 let allDeviations = 0;
+let allPlanProblems = 0;
 
 for (const { job, expected } of CASES) {
   console.log(`\n${RULE}`);
@@ -172,6 +177,14 @@ for (const { job, expected } of CASES) {
     allFailures += res.failures;
     allDeviations += res.deviations;
   }
+
+  // geometry findings, not sheet ones: a wall handed to a neighbour that is
+  // not there to take it. These do not move a BOQ figure — the wall counts
+  // are unaffected — so they are reported, like the sheet deviations are.
+  for (const p of checkJob(job)) {
+    console.log(`\n  ${DEV} ${p.message}`);
+    allPlanProblems++;
+  }
 }
 
 console.log(`\n${RULE}`);
@@ -180,6 +193,11 @@ if (allFailures === 0) {
   if (allDeviations) {
     console.log(
       `  ${DEV} ${allDeviations} row(s) where a printed sheet contradicts its own rule — listed above`,
+    );
+  }
+  if (allPlanProblems) {
+    console.log(
+      `  ${DEV} ${allPlanProblems} plan finding(s) — a wall is ticked as a neighbour's with nothing behind it`,
     );
   }
 } else {

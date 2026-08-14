@@ -95,8 +95,9 @@ export function toSvg(d: Drawing, opts: SvgOptions = {}): string {
     const along = horiz ? cw : ch;
     const across = horiz ? ch : cw;
     // shrink to fit the panel it labels, but never below readable
-    let fs = Math.min(FS, across * 0.6, (along * 0.85) / (c.text.length * 0.58));
-    fs = Math.max(fs, FS * 0.34);
+    const base = c.fs ?? FS;
+    let fs = Math.min(base, across * 0.6, (along * 0.85) / (c.text.length * 0.58));
+    fs = Math.max(fs, base * 0.34);
     const col = c.std ? C.dim : C.nonStd;
     const rot = horiz ? '' : ` transform="rotate(-90 ${cx} ${cy})"`;
     p.push(
@@ -105,10 +106,13 @@ export function toSvg(d: Drawing, opts: SvgOptions = {}): string {
     );
   }
 
-  for (const dim of d.dims) p.push(...dimSvg(dim, C.dim, DSW, FS, TG));
+  for (const dim of d.dims) {
+    const fs = dim.fs ?? FS;
+    p.push(...dimSvg(dim, C.dim, DSW, fs, fs * 0.55));
+  }
 
   for (const n of d.notes) {
-    const size = FS * (n.scale ?? 1);
+    const size = (n.fs ?? FS) * (n.scale ?? 1);
     const col = layerColour[n.layer ?? 'TEXT'];
     const rot = n.rot ? ` transform="rotate(${n.rot} ${n.x} ${n.y})"` : '';
     p.push(

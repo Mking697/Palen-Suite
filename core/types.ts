@@ -174,6 +174,25 @@ export interface RoomLabels {
   roof: string;
 }
 
+/** One layer of a panelised floor panel. */
+export interface FloorLayer {
+  /** 'PPGI', 'SS', 'Ply', 'AL. CHQ' … — the core layer is always 'Puf' */
+  material: string;
+  th: Mm;
+}
+
+/** One flashing the estimator added by hand. */
+export interface ExtraFlashing {
+  /** one of FLASHING_TYPES */
+  type: string;
+  material: string;
+  thickness: number;
+  /** flat width of the strip */
+  width: Mm;
+  /** how much of it, which is what the running metre counts */
+  length: Mm;
+}
+
 export interface FloorSpec {
   /** pufSlab = one slab item at external size; panelised = split into modules */
   kind: 'pufSlab' | 'panelised';
@@ -181,6 +200,26 @@ export interface FloorSpec {
   desc: string;
   /** panelised only, e.g. 1220 */
   module?: Mm;
+  /**
+   * Which axis the floor panels are split along; the other axis is the panel
+   * length, exactly as `CeilingSpec.splitAxis` works. Defaults to 'w', which is
+   * what every verified sheet prints — HI-15279 is the only panelised floor and
+   * its panels run along the width.
+   */
+  splitAxis?: 'w' | 'l';
+  /**
+   * The build-up of a panelised floor panel, bottom up: the bottom sheet, the
+   * puf core, the sheet above it and the top sheet. Every verified sheet prints
+   * `Bottom PPGI + Puf + 12 mm Ply + 2mm AL. CHQ`, but the ply is not fixed —
+   * the shop also builds inner Ply + chequered sheet, or outer Ply + SS.
+   *
+   * `th` is the whole panel and drives the chemical weight. The core's own
+   * thickness is never authored — it is whatever is left after the sheets, so
+   * adding a 12mm ply to a 100mm floor thins the core and leaves the panel at
+   * 100. See `floorCoreTh`. Omitted, `desc` is printed as transcribed, which is
+   * how the verified jobs stay untouched.
+   */
+  layers?: FloorLayer[];
 }
 
 export interface CeilingSpec {
@@ -197,6 +236,26 @@ export interface RoomSpec {
   ext: { w: Mm; l: Mm; h: Mm };
   wallTh: Mm;
   ceilTh: Mm;
+  /**
+   * The L cut — the rebate that shortens a wall's inner skin, lets the ceiling
+   * notch into the wall and narrows a corner panel's inner skin. Omitted, it
+   * follows `lCutDefault(wallTh)`: fitted above 50mm. Stated, the job wins,
+   * because some customers do not want the cut at any thickness.
+   */
+  lCut?: boolean;
+  /**
+   * The sheet the flashing is folded from. Omitted, it follows `DEFAULT_SKIN`,
+   * which is what every verified sheet uses throughout. Flashing is bought by
+   * the running metre and never joins the panel counts — see core/flashing.ts.
+   */
+  flashingSkin?: SkinSpec;
+  /**
+   * Flashing the estimator types in on top of the three the engine works out —
+   * a gutter, a hanging flashing, a second U somewhere. Off the drawing, never
+   * derived, and printed as typed. The same escape legacy gave for all seven
+   * types.
+   */
+  extraFlashing?: ExtraFlashing[];
   floor: FloorSpec;
   ceiling: CeilingSpec;
   walls: WallSpec[];

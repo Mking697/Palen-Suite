@@ -6,8 +6,12 @@
  *   chemWeight  = areaSqmt * thk/1000 * density          (density = 40 kg/m3)
  *   blankW      = panelW + 40
  *   blankL      = panelL
- *   wall inner skin length = wall height - wallTh        (the L cut)
+ *   wall inner skin length = wall height - ceilTh        (the L cut)
  *   corner outer = 2 * cornerLeg ; corner inner = outer - 2*wallTh + 5
+ *   both of those hold only while the L cut is fitted — without it the inner
+ *   skins run the full height and the full corner width. See rules.ts.
+ *   Every source sheet has wallTh === ceilTh, so none of them distinguishes
+ *   the two; the ceiling thickness is the shop's answer, not a reading.
  *   PPGI: roof 2/panel, wall 2/panel, corner 2/panel, floor 1/panel, door 4
  *   PLY : panelised floor only, 1/panel
  */
@@ -22,6 +26,8 @@ import {
   DEFAULT_LABELS,
   DEFAULT_SKIN,
   DOOR_BLANK_OFFSETS,
+  floorDesc,
+  lCutDefault,
   skinLabel,
   WALLFRAME_BLANK_WIDTH,
   WALLFRAME_TOP_BOTTOM_LENGTH,
@@ -91,6 +97,7 @@ export function buildRoomBlock(
   const blank = (w: Mm) => w + blankAllowance;
   const lbl = { ...DEFAULT_LABELS, ...room.labels };
   const roomSkin = skinOf(undefined, room);
+  const lCut = room.lCut ?? lCutDefault(room.wallTh);
 
   // ---- floor -------------------------------------------------------------
   if (room.floor.kind === 'pufSlab') {
@@ -105,14 +112,19 @@ export function buildRoomBlock(
       chemWeight: weight(a, room.floor.th, density),
     });
   } else {
+    // a job that states its build-up prints it; one that states a description
+    // prints that, exactly as it was transcribed off the sheet
+    const desc = room.floor.layers?.length
+      ? floorDesc(room.floor.layers, room.floor.th)
+      : room.floor.desc;
     for (const { w, qty } of tally(L.floor.widths ?? [])) {
-      const a = area(w, L.floor.l, qty);
+      const a = area(w, L.floor.panelLength, qty);
       rows.push({
-        desc: room.floor.desc,
+        desc,
         panelW: w,
-        panelL: L.floor.l,
+        panelL: L.floor.panelLength,
         blankW: blank(w),
-        blankL: L.floor.l,
+        blankL: L.floor.panelLength,
         panelQty: qty,
         ppgiQty: qty,
         plyQty: qty,
@@ -143,7 +155,17 @@ export function buildRoomBlock(
   }
 
   // ---- wall panels (outer + inner pair per width) ------------------------
-  const innerH = H - room.wallTh;
+  /*
+   * The inner skin stops short by the depth of the L cut, and that depth is the
+   * ceiling thickness: the ceiling drops into the rebate from above and its top
+   * finishes flush with the wall.
+   *
+   * All four source sheets have wallTh === ceilTh — 60/60, 100/100, 120/120 —
+   * so none of them can tell `H - wallTh` from `H - ceilTh`. The shop settled
+   * it (14 August 2026): it is the ceiling. Without the cut there is no
+   * set-back and the inner skin runs the full height.
+   */
+  const innerH = lCut ? H - room.ceilTh : H;
   for (const { w, qty, skin } of tallyWalls(room, L, false)) {
     const a = area(w, H, qty);
     rows.push({
@@ -208,7 +230,8 @@ export function buildRoomBlock(
   // ---- corner panels -----------------------------------------------------
   if (L.cornerCount > 0) {
     const outerW = room.cornerLeg * 2;
-    const innerW = outerW - 2 * room.wallTh + CORNER_INNER_BEND;
+    // no L cut, no set-back: the inner skin wraps the same width as the outer
+    const innerW = lCut ? outerW - 2 * room.wallTh + CORNER_INNER_BEND : outerW;
     const a = area(outerW, H, L.cornerCount);
     rows.push({
       desc: lbl.cornerOuter,

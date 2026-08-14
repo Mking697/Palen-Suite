@@ -75,7 +75,7 @@ export function ceilingPlan(room: RoomSpec): Drawing {
 
 export function floorPlan(room: RoomSpec): Drawing {
   const L = layoutRoom(room);
-  const { w, l, widths } = L.floor;
+  const { w, l, widths, panelLength } = L.floor;
 
   const d = emptyDrawing(`${room.name} — Floor Layout`, w, l);
   d.fill = [
@@ -93,8 +93,10 @@ export function floorPlan(room: RoomSpec): Drawing {
   }
 
   const module = room.floor.module ?? 1220;
+  const axis = room.floor.splitAxis ?? 'w';
   d.subtitle =
-    `${Math.round(w)} x ${Math.round(l)} mm · ${widths.length} panels on ${module} · ${room.floor.th}mm`;
-  stripes(d, widths, 'x', w, l, module, l);
+    `${Math.round(w)} x ${Math.round(l)} mm · ${widths.length} panels on ${module} · ` +
+    `split along ${axis === 'w' ? 'width' : 'length'} · ${room.floor.th}mm`;
+  stripes(d, widths, axis === 'w' ? 'x' : 'y', w, l, module, panelLength);
   return d;
 }

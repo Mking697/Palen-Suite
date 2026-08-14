@@ -14,6 +14,8 @@ import { HI_15191 } from '../jobs/hi-15191.ts';
 import { HI_15223 } from '../jobs/hi-15223.ts';
 import { HI_15279 } from '../jobs/hi-15279.ts';
 import { round2 } from '../format.ts';
+import { floorCoreTh, lCutDefault } from '../rules.ts';
+import { roomFlashing } from '../flashing.ts';
 
 let passed = 0;
 function t(name: string, fn: () => void) {
@@ -229,6 +231,167 @@ t('panelised floor splits on its own module and carries ply', () => {
   assert.equal(floors[0].panelL, 3200, 'floor uses the internal clear span');
 });
 
+t('the core gives way so the panel stays the floor thickness', () => {
+  const layers = [
+    { material: 'PPGI', th: 0.4 },
+    { material: 'Puf', th: 0 },
+    { material: 'Ply', th: 12 },
+    { material: 'AL. CHQ', th: 2 },
+  ];
+  // 100 - 0.4 - 12 - 2: the panel does not become 114
+  assert.equal(floorCoreTh(layers, 100), 85.6);
+  // thicker sheets eat further into the core, never into the panel
+  assert.equal(floorCoreTh([...layers.slice(0, 3), { material: 'AL. CHQ', th: 5 }], 100), 82.6);
+  // and it is reported as it falls, so an impossible build-up is visible
+  assert.ok(floorCoreTh(layers, 10) < 0);
+});
+
+t('a floor that states its build-up prints every layer of it', () => {
+  const layered = structuredClone(freezer79);
+  layered.floor.layers = [
+    { material: 'PPGI', th: 0.4 },
+    { material: 'Puf', th: 0 },
+    { material: 'Ply', th: 12 },
+    { material: 'SS', th: 2 },
+  ];
+  const row = buildRoomBlock(layered, 40).rows.find((r) => r.desc.startsWith('Bottom'))!;
+  assert.equal(row.desc, 'Bottom PPGI 0.4 mm + Puf 85.6 mm + Ply 12 mm + SS 2 mm = 100 mm');
+
+  // a job that states a description instead keeps it exactly as transcribed —
+  // HI-15279's two rooms print the same build-up spaced differently
+  const printed = buildRoomBlock(freezer79, 40).rows.find((r) => r.desc.startsWith('Bottom'))!;
+  assert.equal(printed.desc, 'Bottom PPGI +Puf + 12 mm Ply + 2mm AL. CHQ ON Top = 100mm');
+});
+
+console.log('\n  flashing — the shop\'s rule, not yet a sheet\'s\n');
+
+t('three flashings on every room, each running the whole perimeter', () => {
+  const f = roomFlashing(freezer79); // 4570 x 3400 x 2745, 100mm walls
+  assert.deepEqual(f.rows.map((r) => r.kind), ['inner', 'outer', 'u']);
+
+  // 2 x (4570 + 3400) = 15940 mm
+  assert.equal(f.rows.find((r) => r.kind === 'u')!.rmtr, 15.94);
+  assert.equal(f.rows.find((r) => r.kind === 'u')!.rmtrText, '15.94');
+  // width is the wall thickness plus 2, on all three
+  assert.deepEqual(f.rows.map((r) => r.width), [102, 102, 102]);
+  // and the U profile carries that same figure in its middle leg
+  assert.equal(f.rows.find((r) => r.kind === 'u')!.profile, '10x40x102x40x10');
+});
+
+t('a butt joint adds one wall height of inner and one of outer, and no U', () => {
+  const plain = structuredClone(freezer79);
+  plain.outline = { ...plain.outline!, vertices: {} };
+  const before = roomFlashing(plain);
+
+  const butted = structuredClone(freezer79);
+  butted.outline = {
+    ...butted.outline!,
+    vertices: { 0: { corner: false, through: 'prev' } },
+  };
+  const after = roomFlashing(butted);
+
+  // compared in millimetres: differencing two figures already rounded to the
+  // printed hundredth loses the last one
+  const rm = (f: typeof before, kind: string) => f.rows.find((r) => r.kind === kind)!.rmtr;
+  const gained = (kind: string) => Math.round((rm(after, kind) - rm(before, kind)) * 1000);
+  assert.equal(gained('inner'), butted.ext.h, 'inner gains a wall height');
+  assert.equal(gained('outer'), butted.ext.h, 'outer gains a wall height');
+  assert.equal(gained('u'), 0, 'the U flashing is unchanged');
+});
+
+t('extra flashing is printed as typed, and marked apart from the rule rows', () => {
+  const room = structuredClone(freezer79);
+  room.extraFlashing = [
+    { type: 'Gutter Flashing', material: 'GI', thickness: 0.6, width: 300, length: 7400 },
+    { type: 'Hanging Flashing', material: 'PPGI', thickness: 0.5, width: 120, length: 2500 },
+    // a row still being filled in never reaches the sheet
+    { type: 'Flat Strip Flashing', material: 'PPGI', thickness: 0.4, width: 80, length: 0 },
+  ];
+  const f = roomFlashing(room);
+
+  const typed = f.rows.filter((r) => r.source === 'typed');
+  assert.equal(typed.length, 2, 'a zero length is not a flashing');
+  assert.deepEqual(typed.map((r) => r.label), ['Gutter Flashing', 'Hanging Flashing']);
+  // nothing is derived: the sheet, the width and the length go through as given
+  assert.deepEqual(typed.map((r) => [r.material, r.thickness, r.width]), [
+    ['GI', 0.6, 300],
+    ['PPGI', 0.5, 120],
+  ]);
+  assert.equal(typed[0].rmtrText, '7.40');
+
+  // the three the engine works out are untouched, and the total carries both
+  const rule = f.rows.filter((r) => r.source === 'rule');
+  assert.equal(rule.length, 3);
+  assert.equal(
+    Math.round(f.totalRmtr * 1000),
+    Math.round(roomFlashing(freezer79).totalRmtr * 1000) + 7400 + 2500,
+  );
+});
+
+t('the flashing total never reaches the panel totals', () => {
+  const block = buildRoomBlock(freezer79, 40);
+  const f = roomFlashing(freezer79);
+  assert.ok(f.totalRmtr > 0);
+  // flashing is a separate purchase — nothing about it is a panel or a skin
+  assert.equal(
+    block.rows.some((r) => r.desc.toLowerCase().includes('flashing')),
+    false,
+    'flashing must not appear as a BOQ row',
+  );
+});
+
+t('the L cut default follows the wall thickness', () => {
+  assert.equal(lCutDefault(120), true);
+  assert.equal(lCutDefault(60), true);
+  assert.equal(lCutDefault(50), false, '50 is not "more than 50"');
+  assert.equal(lCutDefault(40), false);
+});
+
+t('turning the L cut off un-sets-back every inner skin and the ceiling', () => {
+  const H = freezer79.ext.h;
+  const inner = (rows: ReturnType<typeof buildRoomBlock>['rows'], kind: string) =>
+    rows.find((r) => r.desc.includes(kind) && r.desc.includes('(Inner)'))!;
+
+  // 100mm walls, so the cut is fitted unless the room says otherwise
+  const on = buildRoomBlock(freezer79, 40).rows;
+  assert.equal(inner(on, 'Wall Panel').blankL, H - freezer79.wallTh);
+
+  const cutless = structuredClone(freezer79);
+  cutless.lCut = false;
+  const off = buildRoomBlock(cutless, 40).rows;
+
+  assert.equal(inner(off, 'Wall Panel').blankL, H, 'inner skin runs the full height');
+  assert.equal(
+    inner(off, 'Corner Panel').panelW,
+    off.find((r) => r.desc === 'Corner Panel (Outer)')!.panelW,
+    'the corner inner matches its outer',
+  );
+  // no rebate for the ceiling to sit in, so it runs the full external size
+  assert.equal(layoutRoom(cutless).ceiling.w, cutless.ext.w);
+  assert.equal(layoutRoom(cutless).ceiling.l, cutless.ext.l);
+});
+
+t('a panelised floor can run the other way, and still covers the same area', () => {
+  const turnedSpec = structuredClone(freezer79);
+  turnedSpec.floor.splitAxis = 'l';
+
+  const floorsOf = (room: typeof freezer79) =>
+    buildRoomBlock(room, 40).rows.filter((r) => r.desc.startsWith('Bottom PPGI'));
+  const across = floorsOf(freezer79);
+  const turned = floorsOf(turnedSpec);
+
+  // the floor is 4370 x 3200 internal. Across the width it splits 1220 x 3 +
+  // 710 on a 3200 long panel; along the length, 1220 x 2 + 760 on a 4370 one.
+  assert.deepEqual(across.map((r) => [r.panelW, r.panelQty]), [[1220, 3], [710, 1]]);
+  assert.deepEqual(turned.map((r) => [r.panelW, r.panelQty]), [[1220, 2], [760, 1]]);
+  assert.equal(turned[0].panelL, 4370, 'the panel length is now the width');
+
+  // the same slab of floor either way round — only the cuts move
+  const areaOf = (rows: typeof across) =>
+    round2(rows.reduce((n, r) => n + (r.areaSqmt ?? 0), 0));
+  assert.equal(areaOf(turned), areaOf(across));
+});
+
 t('two walls in different sheets become two BOQ rows, same totals', () => {
   const room = structuredClone(HI_15191.rooms[0]);
   const before = buildRoomBlock(room, 40);
@@ -261,7 +424,19 @@ t('a puf slab floor carries no ply and no blank size', () => {
   const slab = b.rows[0];
   assert.equal(b.totals.plyQty, 0);
   assert.equal(slab.blankW, undefined);
-  assert.equal(slab.panelW, 3050, 'puf slab uses the external footprint');
+});
+
+t('every floor is the clear area inside the walls, slab or panelised', () => {
+  // A wall never stands on the floor, so 120mm comes off each own end. The
+  // sheet prints this slab 3050 x 4575 — its own envelope — and that
+  // disagreement is recorded in hi-15191.expected.ts rather than followed.
+  const freezer = HI_15191.rooms[0];
+  const slab = buildRoomBlock(freezer, 40).rows[0];
+  assert.equal(slab.panelW, freezer.ext.w - 2 * freezer.wallTh);
+  assert.equal(slab.panelL, freezer.ext.l - 2 * freezer.wallTh);
+
+  // the panelised floors were already internal and are unchanged
+  assert.equal(layoutRoom(freezer79).floor.panelLength, 3200);
 });
 
 console.log('\n  engine sensitivity — inputs must actually move the output\n');

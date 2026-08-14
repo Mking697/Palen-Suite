@@ -23,8 +23,18 @@ export interface DrawLine {
   dash?: boolean;
 }
 
+/**
+ * Text height in mm, when the element has to carry its own.
+ *
+ * A renderer normally sizes text from the whole drawing's span, which is right
+ * for one view on its own. On a composed sheet the span is the whole sheet, so
+ * every view states the size it was drawn at and keeps the look it has alone.
+ * Undefined everywhere except on a sheet.
+ */
+type TextHeight = { fs?: Mm };
+
 /** A dimension chain entry. `base` is the line it hangs off, `off` how far. */
-export interface DrawDim {
+export interface DrawDim extends TextHeight {
   dir: 'h' | 'v';
   a: Mm;
   b: Mm;
@@ -33,7 +43,7 @@ export interface DrawDim {
   text: string;
 }
 
-export interface DrawNote {
+export interface DrawNote extends TextHeight {
   x: Mm;
   y: Mm;
   text: string;
@@ -45,7 +55,7 @@ export interface DrawNote {
 }
 
 /** A panel, labelled with the size that will be printed on it. */
-export interface DrawCell {
+export interface DrawCell extends TextHeight {
   x0: Mm;
   y0: Mm;
   x1: Mm;

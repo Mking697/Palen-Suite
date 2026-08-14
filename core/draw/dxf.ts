@@ -9,9 +9,13 @@
 
 import type { Drawing, Layer } from './types.ts';
 
-/** Text height in mm for each kind of label. Legacy used these figures. */
+/**
+ * Text height in mm for each kind of label. Legacy used these figures. An
+ * element that carries its own `fs` overrides them — only a composed sheet
+ * does, so a single drawing exports exactly as it always has.
+ */
 const H_CELL = 130;
-const H_DIM = 150;
+const DXF_DIM_HEIGHT = 150;
 const H_NOTE = 150;
 
 export function toDxf(d: Drawing): string {
@@ -44,15 +48,17 @@ export function toDxf(d: Drawing): string {
   for (const l of d.lines) line(l.x1, l.y1, l.x2, l.y2, l.layer);
 
   for (const c of d.cells) {
-    text((c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2, H_CELL, c.text, 'TEXT');
+    text((c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2, c.fs ?? H_CELL, c.text, 'TEXT');
   }
 
   for (const n of d.notes) {
     // DXF rotation is anticlockwise, the drawing's is clockwise
-    text(n.x, n.y, H_NOTE * (n.scale ?? 1), n.text, n.layer ?? 'TEXT', -(n.rot ?? 0));
+    const h = (n.fs ?? H_NOTE) * (n.scale ?? 1);
+    text(n.x, n.y, h, n.text, n.layer ?? 'TEXT', -(n.rot ?? 0));
   }
 
   for (const dim of d.dims) {
+    const H_DIM = dim.fs ?? DXF_DIM_HEIGHT;
     if (dim.dir === 'h') {
       const y = dim.base;
       const yo = y + dim.off;

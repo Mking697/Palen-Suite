@@ -5,6 +5,7 @@
 
 import type { Mm, RoomSpec, EndKind, WallSpec } from './types.ts';
 import { splitRun, type SplitOptions } from './split.ts';
+import { lCutDefault } from './rules.ts';
 
 export interface WallPanelRun {
   wallId: string;
@@ -26,7 +27,7 @@ export interface RoomLayout {
   /** number of corner panels (each one eats a leg off two walls) */
   cornerCount: number;
   ceiling: { panelLength: Mm; widths: Mm[]; w: Mm; l: Mm };
-  floor: { w: Mm; l: Mm; widths: Mm[] | null };
+  floor: { w: Mm; l: Mm; panelLength: Mm; widths: Mm[] | null };
 }
 
 /**
@@ -52,8 +53,13 @@ function wallPanels(wall: WallSpec, run: Mm, split: SplitOptions): Mm[] {
   return splitRun(run, split);
 }
 
-/** Half the wall thickness is notched out at every own-wall end (the L cut). */
-function ceilingSpan(ext: Mm, wallTh: Mm, ends: [EndKind, EndKind]): Mm {
+/**
+ * Half the wall thickness is notched out at every own-wall end — the L cut.
+ * Without the cut there is no rebate for the ceiling to sit into, so it runs
+ * the full external size.
+ */
+function ceilingSpan(ext: Mm, wallTh: Mm, ends: [EndKind, EndKind], lCut: boolean): Mm {
+  if (!lCut) return ext;
   let span = ext;
   for (const end of ends) if (end === 'own') span -= wallTh / 2;
   return Math.round(span);
@@ -99,19 +105,31 @@ export function layoutRoom(room: RoomSpec): RoomLayout {
   // each corner panel is shared by the two walls meeting there
   const cornerCount = cornerEnds / 2;
 
-  const cw = ceilingSpan(room.ext.w, room.wallTh, room.ceiling.wEnds);
-  const cl = ceilingSpan(room.ext.l, room.wallTh, room.ceiling.lEnds);
+  const lCut = room.lCut ?? lCutDefault(room.wallTh);
+  const cw = ceilingSpan(room.ext.w, room.wallTh, room.ceiling.wEnds, lCut);
+  const cl = ceilingSpan(room.ext.l, room.wallTh, room.ceiling.lEnds, lCut);
   const splitAlong = room.ceiling.splitAxis === 'w' ? cw : cl;
   const panelLength = room.ceiling.splitAxis === 'w' ? cl : cw;
 
-  const floorW =
-    room.floor.kind === 'pufSlab'
-      ? room.ext.w
-      : internalSpan(room.ext.w, room.wallTh, room.ceiling.wEnds);
-  const floorL =
-    room.floor.kind === 'pufSlab'
-      ? room.ext.l
-      : internalSpan(room.ext.l, room.wallTh, room.ceiling.lEnds);
+  /*
+   * The floor sits between the walls whichever kind it is — a wall never stands
+   * on it, so its area is the clear area inside them.
+   *
+   * HI-15191 and HI-15223 print their puf slabs at the full external size, as
+   * if the slab ran on under the walls. The shop says that is wrong (14 August
+   * 2026), so the rule is kept and those rows are recorded as deviations in the
+   * expected fixtures rather than followed. The panelised floors were already
+   * internal, and HI-15279 still matches line for line.
+   */
+  const floorW = internalSpan(room.ext.w, room.wallTh, room.ceiling.wEnds);
+  const floorL = internalSpan(room.ext.l, room.wallTh, room.ceiling.lEnds);
+
+  // the floor splits along its own axis, the same way the ceiling does. 'w' is
+  // the default because that is what the one verified panelised floor prints,
+  // so a job that does not state an axis comes out exactly as it does today.
+  const floorAxis = room.floor.splitAxis ?? 'w';
+  const floorSplitAlong = floorAxis === 'w' ? floorW : floorL;
+  const floorPanelLength = floorAxis === 'w' ? floorL : floorW;
 
   return {
     wallRuns,
@@ -131,9 +149,10 @@ export function layoutRoom(room: RoomSpec): RoomLayout {
     floor: {
       w: floorW,
       l: floorL,
+      panelLength: floorPanelLength,
       widths:
         room.floor.kind === 'panelised'
-          ? splitRun(floorW, { ...split, module: room.floor.module ?? 1220 })
+          ? splitRun(floorSplitAlong, { ...split, module: room.floor.module ?? 1220 })
           : null,
     },
   };

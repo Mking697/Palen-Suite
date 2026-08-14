@@ -217,3 +217,160 @@ export function rect(w: Mm, l: Mm, edges?: RoomOutline['edges']): RoomOutline {
     edges,
   };
 }
+
+/**
+ * Headings, in the order a right turn advances them. Screen coordinates, y
+ * down, so this cycle is clockwise as the drawing is read.
+ */
+const HEADINGS: Pt[] = [
+  [1, 0], // E
+  [0, 1], // S
+  [-1, 0], // W
+  [0, -1], // N
+];
+
+/** One wall of a chain: how long it runs, and which way it turns at its end. */
+export interface ChainWall {
+  length: Mm;
+  /** the turn taken at the *end* of this wall, to reach the next one */
+  turn: 'L' | 'R';
+}
+
+/**
+ * How far a chain of walls misses its own starting point. `[0, 0]` means the
+ * room closes.
+ *
+ * This is the check a draftsman does by eye and the reason HI-15223 is still
+ * open: walking its six printed wall lengths round lands 60mm — exactly one
+ * wall thickness — away from where it started. A room that does not close
+ * cannot be drawn, and the gap is the useful thing to say about it, so it is
+ * returned rather than thrown.
+ */
+export function chainGap(walls: ChainWall[]): Pt {
+  let x = 0;
+  let y = 0;
+  let h = 0;
+  for (const wall of walls) {
+    x += HEADINGS[h][0] * wall.length;
+    y += HEADINGS[h][1] * wall.length;
+    h = (h + (wall.turn === 'L' ? 3 : 1)) % 4;
+  }
+  return [Math.round(x), Math.round(y)];
+}
+
+/**
+ * A room outline from the wall chain the drawing dimensions: a length per
+ * wall and the turn at its end. Any number of walls, any right-angled shape —
+ * an L, a U, a room with three steps in it.
+ *
+ * The first wall runs east, which is how the layouts are drawn: start at the
+ * top left corner and read clockwise. Points are the *start* of each wall, so
+ * edge i is wall i, and the last edge closes back to the first point — which
+ * is only the length the drawing says if the chain closes. Check `chainGap`
+ * before trusting it.
+ *
+ * The result is shifted so the bounding box starts at the origin. A room's
+ * position on the job plan is `RoomSpec.at` and nothing else, so an outline
+ * that carried its own offset would move the room twice.
+ */
+export function chain(
+  walls: ChainWall[],
+  edges?: RoomOutline['edges'],
+  vertices?: RoomOutline['vertices'],
+): RoomOutline {
+  const walked: Pt[] = [];
+  let x = 0;
+  let y = 0;
+  let h = 0;
+  for (const wall of walls) {
+    walked.push([x, y]);
+    x += HEADINGS[h][0] * wall.length;
+    y += HEADINGS[h][1] * wall.length;
+    h = (h + (wall.turn === 'L' ? 3 : 1)) % 4;
+  }
+
+  const ox = Math.min(...walked.map((p) => p[0]));
+  const oy = Math.min(...walked.map((p) => p[1]));
+  const points: Pt[] = walked.map((p) => [p[0] - ox, p[1] - oy]);
+
+  return { points, edges, vertices };
+}
+
+/**
+ * The chain that walks an outline: a length and a turn per edge. The inverse
+ * of `chain`, so a shape built any other way — `rect`, `notched`, a job file's
+ * own point list — can be handed to an editor that works in wall lengths.
+ */
+export function toChain(points: Pt[]): ChainWall[] {
+  const n = points.length;
+  return points.map((a, i) => {
+    const b = points[(i + 1) % n];
+    const c = points[(i + 2) % n];
+    const u = sub(b, a);
+    const v = sub(c, b);
+    return {
+      length: Math.round(len(u)),
+      // the polygon is walked clockwise, so a positive turn is a right one
+      turn: cross(u, v) > 0 ? 'R' : 'L',
+    };
+  });
+}
+
+/** Which corner of the bounding box a notch is cut out of. */
+export type NotchCorner = 'NE' | 'SE' | 'SW' | 'NW';
+
+export interface Notch {
+  corner: NotchCorner;
+  /** how far the bite reaches along the wall */
+  w: Mm;
+  /** how deep it cuts in */
+  d: Mm;
+  /**
+   * The two notch walls meet at a re-entrant corner, so one of them runs
+   * through it and the other butts into that one's face and loses a wall
+   * thickness. Which is which is off the drawing, not derivable — the same
+   * decision `VertexOverride.through` states everywhere else.
+   */
+  through: 'prev' | 'next';
+}
+
+/**
+ * The vertex where the two notch walls meet — always the re-entrant one, so
+ * never a corner panel.
+ */
+export const reentrantVertex = (corner: NotchCorner): number =>
+  ({ NE: 2, SE: 3, SW: 4, NW: 5 })[corner];
+
+/**
+ * A rectangle with a rectangular bite out of one corner: an L-shaped room, the
+ * way the drawings show one. HI-15223 is 2590 x 3860 with 1600 taken out of
+ * the bottom right, which is why it has six walls and two of them meet at a
+ * re-entrant corner.
+ *
+ * `w` x `l` stays the *bounding box*, not the L. That is deliberate and it is
+ * what the sheets do: HI-15223 prints one full 2530 x 3800 ceiling straight
+ * over its notch, so `RoomSpec.ext` — which the ceiling and floor are built
+ * from — has to stay the box.
+ */
+export function notched(
+  w: Mm,
+  l: Mm,
+  notch: Notch,
+  edges?: RoomOutline['edges'],
+): RoomOutline {
+  const { corner, w: nw, d: nd } = notch;
+  const points: Pt[] =
+    corner === 'NE'
+      ? [[0, 0], [w - nw, 0], [w - nw, nd], [w, nd], [w, l], [0, l]]
+      : corner === 'SE'
+        ? [[0, 0], [w, 0], [w, l - nd], [w - nw, l - nd], [w - nw, l], [0, l]]
+        : corner === 'SW'
+          ? [[0, 0], [w, 0], [w, l], [nw, l], [nw, l - nd], [0, l - nd]]
+          : [[nw, 0], [w, 0], [w, l], [0, l], [0, nd], [nw, nd]];
+
+  return {
+    points,
+    edges,
+    vertices: { [reentrantVertex(corner)]: { through: notch.through } },
+  };
+}

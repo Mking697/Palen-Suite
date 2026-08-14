@@ -14,11 +14,13 @@ import { compileWalls } from '../plan.ts';
 import { offsetPolygon, wallSegments } from '../draw/geom.ts';
 import {
   ceilingPlan,
+  composeSheet,
   defaultFrame,
   doorElevation,
   doorElevations,
   floorPlan,
   jobPlan,
+  model3d,
   roomDrawings,
   roomPlan,
   wallElevations,
@@ -105,6 +107,135 @@ for (const [name, room] of DRAWABLE) {
     assert.equal(floor.cells.length, want, 'floor panel count');
   });
 }
+
+console.log('\n  the drawing sheet\n');
+
+t('a view stays inside its own frame, dimensions and labels included', () => {
+  const eps = 0.001;
+  for (const room of [...HI_15191.rooms, ...HI_15279.rooms]) {
+    for (const view of roomDrawings(room)) {
+      const { drawing, cells } = composeSheet([view], { title: 'SHEET' });
+      assert.equal(cells.length, 1, 'one view, one cell');
+      const c = cells[0];
+      const has = (x: number, y: number) =>
+        x >= c.x0 - eps && x <= c.x1 + eps && y >= c.y0 - eps && y <= c.y1 + eps;
+      const where = `${view.title}`;
+
+      // the sheet border is four lines and the title block rule is a fifth;
+      // everything else belongs to the view and must sit in its frame
+      const stray = drawing.lines.filter((l) => !has(l.x1, l.y1) || !has(l.x2, l.y2));
+      assert.equal(stray.length, 5, `${where}: ${stray.length} lines outside the frame`);
+
+      for (const n of drawing.notes) {
+        if (n.text === 'SHEET') continue; // the title block
+        assert.ok(has(n.x, n.y), `${where}: label "${n.text}" outside the frame`);
+      }
+      for (const panel of drawing.cells) {
+        assert.ok(
+          has(panel.x0, panel.y0) && has(panel.x1, panel.y1),
+          `${where}: panel label outside the frame`,
+        );
+      }
+      for (const dm of drawing.dims) {
+        const [x, y] = dm.dir === 'h' ? [dm.a, dm.base + dm.off] : [dm.base + dm.off, dm.a];
+        assert.ok(has(x, y), `${where}: dimension "${dm.text}" outside the frame`);
+      }
+    }
+  }
+});
+
+t('the sheet gives every view a cell of its own, and they do not overlap', () => {
+  const views = HI_15191.rooms.flatMap((r) => roomDrawings(r));
+  const { cells } = composeSheet(views, { title: 'SHEET' });
+  assert.equal(cells.length, views.length);
+  assert.deepEqual(
+    cells.map((c) => c.title),
+    views.map((v) => v.title),
+    'cells come back in the order the views went in',
+  );
+  for (let i = 0; i < cells.length; i++) {
+    for (let j = i + 1; j < cells.length; j++) {
+      const a = cells[i];
+      const b = cells[j];
+      const apart = a.x1 <= b.x0 + 0.001 || b.x1 <= a.x0 + 0.001 || a.y1 <= b.y0 + 0.001 || b.y1 <= a.y0 + 0.001;
+      assert.ok(apart, `cells ${i} and ${j} overlap`);
+    }
+  }
+});
+
+console.log('\n  the 3D model — the same panels, stood up\n');
+
+/** Every face's width, taken off its own points rather than its label. */
+const faceSpan = (f: { pts: [number, number, number][] }) => {
+  const a = f.pts[0];
+  const b = f.pts[1];
+  return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+};
+
+for (const job of [HI_15191, HI_15279]) {
+  t(`${job.jobNo} — every 3D wall panel is a panel the BOQ priced`, () => {
+    const m = model3d(job);
+    assert.equal(m.skipped.length, 0, `rooms left out: ${JSON.stringify(m.skipped)}`);
+
+    for (const room of job.rooms) {
+      const L = layoutRoom(room);
+      const walls = compileWalls(room.outline!);
+      const edges = room.outline!.edges ?? {};
+
+      for (const wall of walls) {
+        const run = L.wallRuns.find((r) => r.wallId === wall.id);
+        if (!run) continue;
+        // a wall the neighbour builds is not this room's to stand up
+        const idx = Object.keys(edges).find((k) => edges[+k]?.id === wall.id);
+        if (idx !== undefined && edges[+idx]?.shared) continue;
+
+        const want = wallSegments(run, wall, room.module)
+          .filter((s) => !s.door)
+          .map((s) => Math.round(s.width))
+          .sort((a, b) => a - b);
+        const got = m.faces
+          .filter((f) => f.room === room.name && f.wallId === wall.id && f.kind === 'wall')
+          .map((f) => Math.round(faceSpan(f)))
+          .sort((a, b) => a - b);
+        // the door module is a wall face too, so compare the set without it
+        const doors = wallSegments(run, wall, room.module).filter((s) => s.door).length;
+        assert.equal(
+          got.length,
+          want.length + doors,
+          `${room.name} wall ${wall.id}: ${got.length} faces, ${want.length + doors} panels`,
+        );
+      }
+    }
+  });
+
+  t(`${job.jobNo} — every 3D ceiling and floor panel is one the BOQ priced`, () => {
+    const m = model3d(job);
+    for (const room of job.rooms) {
+      const L = layoutRoom(room);
+      const ceil = m.faces.filter((f) => f.room === room.name && f.kind === 'ceiling');
+      assert.equal(ceil.length, L.ceiling.widths.length, `${room.name} ceiling panels`);
+
+      const floor = m.faces.filter((f) => f.room === room.name && f.kind === 'floor');
+      const wantFloor = room.floor.kind === 'panelised' ? (L.floor.widths?.length ?? 0) : 1;
+      assert.equal(floor.length, wantFloor, `${room.name} floor panels`);
+    }
+  });
+}
+
+t('the 3D model stands on the floor and stops at the room height', () => {
+  const m = model3d(HI_15191);
+  const h = Math.max(...HI_15191.rooms.map((r) => r.ext.h));
+  assert.equal(m.min[2], 0, 'nothing below the floor');
+  assert.equal(m.max[2], h, 'nothing above the tallest room');
+});
+
+t('a room with no outline is reported, not silently dropped', () => {
+  const job = structuredClone(HI_15223);
+  delete job.rooms[0].outline;
+  const m = model3d(job);
+  assert.equal(m.skipped.length, 1);
+  assert.match(m.skipped[0].reason, /outline/);
+});
 
 console.log('\n  door placement\n');
 

@@ -24,7 +24,12 @@ export interface ExpectedRow {
    * with itself. Only the listed fields are overridden; everything else is
    * still compared against what the sheet prints.
    */
-  rule?: Partial<Pick<ExpectedRow, 'ppgiQty' | 'panelQty' | 'blankW' | 'blankL'>>;
+  rule?: Partial<
+    Pick<
+      ExpectedRow,
+      'ppgiQty' | 'panelQty' | 'blankW' | 'blankL' | 'panelW' | 'panelL' | 'chemWeight' | 'areaSqmt'
+    >
+  >;
   /** why the sheet and the rule disagree on this row */
   note?: string;
 }
