@@ -46,10 +46,18 @@ npm run verify  # line-by-line BOQ diff for every job
 npm run check   # both
 ```
 
-Node >= 22.6 runs the TypeScript directly. There is no build step and no
-dependencies — keep it that way for as long as possible. That applies to the
-server and the viewer too: `server/serve.ts` is `node:http` only and `web/` is
-plain HTML/CSS/JS loaded straight from disk.
+Node >= 22.6 runs the TypeScript directly, so there is **no build step for
+development** — and **still no dependencies**, which is the rule that matters.
+Keep it that way for as long as possible. That applies to the server and the
+viewer too: `server/serve.ts` is `node:http` only and `web/` is plain
+HTML/CSS/JS loaded straight from disk.
+
+`npm run build` exists for deployment only. `tools/build.ts` compiles `core/`
+and `server/` into `dist/` as plain JavaScript using Node's own
+`module.stripTypeScriptTypes` — no TypeScript package, no dependency. It is
+there because a host may build with one Node and *start* the app with another,
+and an older runtime throws `Unknown file extension ".ts"` before any of our
+code runs. Nothing in development should need it: run the source.
 
 ## Conventions
 

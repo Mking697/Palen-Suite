@@ -35,9 +35,16 @@ npm run dev     # local viewer at http://127.0.0.1:5173
 npm test        # splitRun unit tests + engine sensitivity checks
 npm run verify  # line-by-line BOQ diff against the production sheet
 npm run check   # both
+npm run build   # deployment only: dist/ as plain JavaScript
 ```
 
-Needs Node >= 22.6 (TypeScript runs natively, no build step).
+Needs Node >= 22.6 (TypeScript runs natively, no build step for development).
+
+`npm run build` exists for hosts, not for development. It compiles `core/` and
+`server/` into `dist/` as plain JavaScript with **no dependency** — Node strips
+the types itself through `module.stripTypeScriptTypes` — so a host that starts
+the app on an older Node than it built with still runs it. `app.js` uses `dist/`
+when it is there and the TypeScript when it is not. See `DEPLOY.md`.
 
 ### The calculator
 
@@ -226,6 +233,9 @@ server/config.ts            where the server binds, and why — its own file so
                             it can be tested, since serve.ts listens on import
 web/                        the viewer — plain HTML/CSS/JS, no build step
 web/guide.js                GUIDE.md rendered as the in-app guide page
+tools/build.ts              core/ + server/ -> dist/ as plain JavaScript, for a
+                            host whose runtime Node cannot read TypeScript. No
+                            dependency: Node strips the types itself
 tools/chat-backup.ts        exports Claude Code session transcripts
 legacy/index.html           the original single-file calculator, kept for
                             reference — its SVG drawing and DXF writer will be

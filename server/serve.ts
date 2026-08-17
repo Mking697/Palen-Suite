@@ -235,8 +235,23 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/** Run the real verifier and hand its output to the browser verbatim. */
+/**
+ * Run the real verifier and hand its output to the browser verbatim.
+ *
+ * The verifier's fixtures are not shipped in a build — they are ground truth
+ * for development, not part of the app — so on a built copy this reports that
+ * rather than spawning something that is not there. Shared hosting usually
+ * blocks spawning anyway; nothing in the calculator calls this.
+ */
 function runVerify(): Promise<{ output: string; code: number }> {
+  if (!import.meta.filename.endsWith('.ts')) {
+    return Promise.resolve({
+      output:
+        'The verifier is not part of a built copy — its expected sheets are ' +
+        'development ground truth. Run `npm run check` from the repository.',
+      code: 0,
+    });
+  }
   return new Promise((done) => {
     const child = spawn(process.execPath, [join(ROOT, 'core', 'verify', 'run.ts')], {
       cwd: ROOT,

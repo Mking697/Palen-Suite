@@ -280,12 +280,26 @@ from GitHub `Mking697/Palen-Suite` (public, branch `main`, identity `Mking697`).
 Hostinger deploys what is on GitHub — so **push before deploying**, or the site
 is built from the last push and not from this machine.
 
-Settings that worked: framework *Other*, branch `main`, **Node 24.x**, root
-`./`, build command *None*, package manager npm, output directory empty, entry
-file `app.js`, and two environment variables — `HOST=0.0.0.0` and
-`NODE_OPTIONS=--experimental-strip-types`. The `NODE_OPTIONS` one is not needed
-on 24.x and is harmless there; it is kept so a change of Node version cannot
-break the deploy.
+Settings: framework *Other*, branch `main`, **Node 24.x**, root `./`, **build
+command `npm run build`**, package manager npm, output directory empty, entry
+file `app.js`, and `HOST=0.0.0.0`.
+
+**The build command is the important one, and it took three failed deploys to
+get there.** The app normally has no build step because Node runs the TypeScript
+directly — that is the one exotic thing about it, and a host cannot be relied on
+to support it. Hostinger *built* on Node 24.x and then started the app with
+something older: `import './server/serve.ts'` threw `Unknown file extension
+".ts"` before a line of ours could print, stdout was not captured, and the
+result was a 503 with the Runtime Logs page saying **"No logs found"** — no
+error, no clue, nothing. An empty log was the evidence.
+
+`tools/build.ts` now compiles `core/` and `server/` into `dist/` as plain
+JavaScript, and **still with no dependency**: Node strips the types itself
+through `module.stripTypeScriptTypes`. `app.js` uses `dist/` when it is there
+and the TypeScript when it is not, so one entry point works both ways and
+development is unchanged. The verifier is not shipped in a build — its expected
+sheets are ground truth, not app — and `/api/verify` says so instead of spawning
+something that is not there.
 
 **The first two deploys returned 503, and the fix is in the repo.** Hostinger's
 wizard applies its environment variables *during the build process*, so `HOST`
@@ -315,12 +329,13 @@ version:
 
 - Do **not** set `PORT` — the host supplies it, and overriding it is the usual
   502.
-- **The Node version is the one thing that can stop this.** 22.18 or newer is
-  the easy case; 22.6–22.17 needs `NODE_OPTIONS=--experimental-strip-types`;
-  18 or 20 will not run the app at all, because there is no build step and Node
-  runs the TypeScript itself. Check the dropdown before anything else.
-- `app.js` **checks the version at startup and prints the fix**, so a failed
-  deploy says which setting is wrong instead of `Unknown file extension ".ts"`.
+- **Set the build command.** With `npm run build` the runtime Node stops
+  mattering entirely, which is the only way to be sure — a host does not tell
+  you which Node it starts the app with, and its panel only shows the one it
+  builds with.
+- `app.js` **checks the version at startup and prints the fix** when running
+  from source — but an old runtime throws before it can, which is why the build
+  matters more than the check.
 - The Hostinger *Import Git repository* button spins forever when Chrome blocks
   its popup — allow pop-ups for `hpanel.hostinger.com`.
 - Checked on this machine in production mode, including the exact case the host

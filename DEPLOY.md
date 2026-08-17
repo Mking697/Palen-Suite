@@ -106,18 +106,31 @@ The app needs nothing but Node — no dependencies, no build, no database — so
 shared "Node.js application" slot is enough. Four things decide whether it
 works.
 
-**1. The Node version is the deal-breaker.** There is no build step because
-Node runs the TypeScript directly, which needs **Node >= 22.6**. On 22.6–22.17
-it also needs `--experimental-strip-types`; from 22.18 and on 23/24 it is on by
-default. Check the version dropdown in the host's Node app settings *first*. If
-it only offers 18 or 20, the choice is to compile to JavaScript before
-uploading — which means adding TypeScript as a build dependency and giving up
-the no-dependency rule — or not to use that host.
+**1. Build it, and the Node version stops mattering.** Set the host's build
+command to:
 
-`app.js` checks this at startup and **says which of the two is wrong**, because
-the raw failure is `Unknown file extension ".ts"` in a log, which tells nobody
-what to do. A version that is too old, or one that needs the flag, stops with
-the fix printed.
+```
+npm run build
+```
+
+`tools/build.ts` compiles `core/` and `server/` into `dist/` as plain
+JavaScript — **no TypeScript left, and still no dependencies**, because Node
+strips the types itself through `module.stripTypeScriptTypes`. `app.js` uses
+`dist/` when it is there and falls back to the TypeScript when it is not, so
+the same entry point works built or not.
+
+This is worth doing even where the version looks fine. A host may **build with
+one Node and start the app with another**, and the runtime one is not shown
+anywhere: on Hostinger the build ran on 24.x, the app never started, and the
+runtime log stayed completely empty — `Unknown file extension ".ts"` thrown
+before a line of ours could print anything. A build removes that whole class of
+failure.
+
+Without a build, Node runs the TypeScript directly and the version *is* the
+deal-breaker: **>= 22.6**, and on 22.6–22.17 also
+`NODE_OPTIONS=--experimental-strip-types`. `app.js` checks both at startup and
+prints which one to change — but only if it gets far enough to run at all,
+which is exactly what an old runtime prevents. Build, and none of this applies.
 
 **2. Entry point and binding.** `app.js` at the repo root is there for hosts
 that want a `.js` file to start; it just loads `server/serve.ts`.
@@ -200,14 +213,15 @@ Then in hPanel:
 
    | Field | Value |
    |---|---|
-   | Build command | *empty* — there is no build |
+   | Build command | `npm run build` |
    | Start command | `npm start` |
    | Entry point | `app.js` |
+   | Output directory | *empty* — `app.js` finds `dist/` itself, so the host does not need to know about it |
    | Environment | `HOST=0.0.0.0` |
-   | Environment, only on Node 22.6–22.17 | `NODE_OPTIONS=--experimental-strip-types` |
 
    Do not set `PORT` — the host supplies it, and overriding it is the usual
-   cause of a 502.
+   cause of a 502. `NODE_OPTIONS=--experimental-strip-types` is only for running
+   from source on Node 22.6–22.17; with a build it does nothing and is harmless.
 
 6. Deploy, then read the application log. If it stopped, `app.js` will have
    printed which of the two settings is wrong.
@@ -244,7 +258,8 @@ listening on 0.0.0.0:38412 — PORT came from the platform, so this is behind a 
 | `listening on 127.0.0.1:…` | `HOST` is set to localhost somewhere — remove it |
 | `Could not listen on …` | the port is taken or not allowed |
 | a Node version message | the version or `NODE_OPTIONS` is wrong; the message says which |
-| nothing at all | the app was never started — check the start command and entry file |
+| `no dist/ — running the TypeScript directly` | the build command is not set; set it to `npm run build` |
+| **nothing at all** | the app never got far enough to print. Almost always the runtime Node is older than the build one and the `.ts` import threw — set the build command. Otherwise check the start command and entry file |
 
 The `environment as it arrived` block under it is the one to read: it shows what
 reached the process, not what the host's panel says it set. Those are different
