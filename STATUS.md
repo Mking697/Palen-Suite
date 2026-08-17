@@ -4,14 +4,15 @@ Read this first if you are picking the project up — on this machine or another
 `README.md` says what the engine does, `DESIGN.md` says where it is going, this
 file says what has actually happened and what is next.
 
-Last updated: 14 August 2026.
+Last updated: 17 August 2026.
 
 ## What exists and works
 
 `npm run dev` opens the **Panel Calculator** at `http://127.0.0.1:5173` — one
 screen, form on the left, drawings and BOQ on the right, updating as you type.
-That is the product. The three verified jobs are now only a *Load example*
-dropdown: proof the engine is right, not the thing anyone uses.
+That is the product. The three verified jobs are now only what the header's
+**Open job no** search finds: proof the engine is right, not the thing anyone
+uses.
 
 | | State |
 |---|---|
@@ -20,19 +21,89 @@ dropdown: proof the engine is right, not the thing anyone uses.
 | Cross-room checks (`core/checks.ts`) | a wall handed to a neighbour that is not there to take it is reported, in mm |
 | Drawings (`core/draw/`) | job layout, wall elevations, ceiling, floor, door elevation — SVG + DXF. All of it on **one sheet** (`sheet.ts`), any view clickable to open full size |
 | 3D (`core/draw/model3d.ts`) | the same panels stood up, behind a 2D/3D toggle. Orbit, standard views, click a panel for its size. No library |
-| Flashing (`core/flashing.ts`) | inner, outer and U per room by the running metre, plus any number typed in. **The one rule with no sheet behind it** |
+| Flashing (`core/flashing.ts`) | inner, outer and U per room by the running metre, the vertical closes at butt joints and at a partition's open ends, plus any number typed in. **The one rule with no sheet behind it** |
+| Door (`core/boq.ts`, `core/draw/`) | hand LHS/RHS drives the printed label and the plan's swing; over a 3050 wall the piece above the door is its own panel |
 | Calculator (`server/`, `web/`) | multi-room, connected rooms, rooms of any right-angled shape typed wall by wall, per-wall sheets, doors, the L cut on or off, floor build-up and run direction, flashing |
-| Tests | 125, plus the line-by-line sheet diff |
+| Guide (`/guide`, `web/guide.js`) | `GUIDE.md` rendered in the app, one button in the header, one copy of the instructions |
+| Tests | 149, plus the line-by-line sheet diff |
 
 `npm run check` must print **`ALL ROWS MATCH across 3 jobs`** with 9 documented
 deviations and **1 plan finding** (HI-15191's ante room — see below). It did at
 the last commit. If the ROWS line changes, stop and find out why before doing
 anything else.
 
-Two things are checked but **not by anything in the repo**: the browser form and
-the 3D maths. Both were exercised from a throwaway `node:vm` harness with a stub
-DOM. Landing that harness is next step 1, and the reason is on the record — an
-undefined identifier once survived a whole session in `web/app.js`.
+**The browser scripts now have a test.** `core/verify/web.test.ts` boots
+`web/app.js` and `web/guide.js` in a `node:vm` context over a stub DOM, drives
+the form's controls and reads what it posts. That closes the gap that had been
+next step 1 since 14 August — an undefined identifier once survived a whole
+session in `web/app.js` because nothing in the repo ever ran the file. The stub
+DOM is deliberately small; extend it when the form needs something it lacks.
+The 3D maths in the browser is still only exercised from a throwaway harness.
+
+## What landed on 17 August
+
+Four things, all asked for by the shop, and none of them moves a verified
+figure — checked, not assumed: `npm run check` still prints `ALL ROWS MATCH
+across 3 jobs` with the same 9 deviations and 1 plan finding.
+
+- **A guide book inside the app.** The question left open on 14 August — render
+  `GUIDE.md`, or write the panel separately — is answered by rendering the file.
+  A **Guide** button in the header opens `/guide` **in a new tab**, so a job
+  half typed into the form is not thrown away by navigating. `server/serve.ts`
+  hands the file over at `/api/guide`; `web/guide.js` renders the Markdown
+  subset the file uses, headings carrying GitHub's own slug ids so the contents
+  table at the top of `GUIDE.md` already links correctly. No dependency, and
+  `core/` is untouched.
+- **A door states which hand it is hung on.** `DoorSpec.hand` — LHS or RHS —
+  with a tick and a dropdown on the door card. It rewrites the `(LHS)`/`(RHS)`
+  token inside the printed label and draws the leaf and its swing arc on the
+  plan. **Unstated, nothing changes**: the label prints exactly as transcribed
+  and no swing is drawn, which is why the three verified jobs — whose labels are
+  each written differently on their own sheets — are untouched. Which end an LHS
+  door hinges on is a reading off the drawings rather than a statement from the
+  shop, and it lives in one function, `drawSwing`; it is recorded in `README.md`
+  as open.
+- **A door top panel, above 3050mm of wall.** `DOOR_TOP_MIN_WALL_HEIGHT`.
+  Over it, the piece above the door is a panel of its own — the door module wide
+  by the wall height less the clear opening, blanked +40, inner skin set back by
+  the L cut, one PPGI a side, `Door Top Panel (Outer)` and `(Inner)` rows. The
+  door assembly then prints at the **clear height** rather than the full wall,
+  so that stretch of wall is counted exactly once, and a test asserts the two
+  add back up to the module. Below the threshold nothing moves, and every source
+  sheet is 2590 or 2745 high, so no sheet can check this rule or contradict it.
+  Legacy's version is a **different rule** — it makes a top panel whenever the
+  door is shorter than the wall, with no threshold — and was not carried over.
+- **Flashing closes the joint between two rooms.** Where a room hands its wall
+  to the room next door, the two walls arriving at that side simply stop: no
+  corner panel, no butt joint. `core/flashing.ts` now counts those **open ends**
+  — one partition gives exactly two, one at each corner — and adds a room height
+  of flashing at each. A plain rectangle takes **inner only**; a shaped room —
+  an L, a U, anything past four walls — takes **inner and outer**. The shape is
+  read off the outline, never off the form's shape mode, because the mode is a
+  fact about the screen and the same room entered two ways must not produce two
+  different sheets. One trap found while building it: an open end cannot be
+  detected from the compiled wall list, because the wall running *through* a
+  butt junction has neither a corner nor a butt at that end either. It is
+  counted off the outline instead.
+
+- **A job is opened by its number.** The *Load example* dropdown is gone; the
+  header has an **Open job no** search box instead, on the browser's own
+  `datalist` so clicking it still lists everything the tool knows. A number that
+  is not there says so beside the box and changes nothing. It is a search rather
+  than a picker because the number is what an estimator reads off the drawing —
+  and because a list stops being a way to find anything once saved jobs
+  outnumber a screenful, which is where this is going.
+
+Also landed: **`core/verify/web.test.ts`**, the harness that has been next step 1
+since 14 August. It runs both browser scripts headless.
+
+**A finding worth acting on:** `RoomSpec.boqGroup` is declared in
+`core/types.ts` and the form sends it, but `buildJob` never reads it —
+`core/boq.ts:397` maps rooms one to one. So the *BOQ group* field on the form
+does nothing at all today. Merging is Phase 3 work and is what HI-15279's
+Ambient + Milk block is waiting for. Until it is built the field should be
+removed from the form or marked as not yet working: a control that silently does
+nothing is worse than no control.
 
 ## What landed on 14 August
 
@@ -204,62 +275,78 @@ different-sized rooms actually get drawn?
 
 ## Where it is deployed
 
-Nowhere yet. The repo is on GitHub at **`Mking697/Palen-Suite`** (public,
-branch `main`, identity `Mking697`).
+Nowhere yet, but it is ready to go and the decision is taken: **Hostinger, on a
+temporary domain first** (17 August 2026), not `hicon.co.in`. The repo is on
+GitHub at **`Mking697/Palen-Suite`** (public, branch `main`, identity
+`Mking697`), and Hostinger deploys what is on GitHub — so **push before
+deploying** or the site is built from the last push, not from this machine.
 
-A Hostinger **Business Web Hosting** plan is being set up via *Add website →
-Deploy Web App → Import Git repository*. Left off mid-wizard. What was learnt:
+`DEPLOY.md` now has the wizard step by step and a list of what to open once it
+is up, each check failing differently so the log points somewhere. The short
+version:
 
-- GitHub repository access is limited to `Palen-Suite` and saved.
+- Build command empty, start `npm start`, entry `app.js`, `HOST=0.0.0.0`.
+  Do **not** set `PORT` — the host supplies it, and overriding it is the usual
+  502.
+- **The Node version is still the one thing that can stop this.** 22.18 or newer
+  is the easy case; 22.6–22.17 needs `NODE_OPTIONS=--experimental-strip-types`
+  as well; 18 or 20 will not run the app at all, because there is no build step
+  and Node runs the TypeScript itself. Check the dropdown before anything else.
+- `app.js` now **checks both at startup and prints the fix**, so a failed deploy
+  says which setting is wrong instead of `Unknown file extension ".ts"`.
 - The Hostinger *Import Git repository* button spins forever when Chrome blocks
-  its popup. Allow pop-ups for `hpanel.hostinger.com`, or fall back to
-  *Upload your files* with a ZIP from GitHub.
-- **The unresolved question is the Node version.** There is no build step
-  because Node runs the TypeScript directly, which needs **>= 22.6**. If
-  Hostinger only offers 18 or 20 the app will not start — the error looks like
-  `Unknown file extension ".ts"`. The options then are to compile to JavaScript
-  before uploading, giving up the no-dependency rule, or to use a VPS.
-- Settings to enter: build command empty, start command `npm start`, entry
-  `app.js`, environment `HOST=0.0.0.0`. Without `HOST` the app stays on
-  localhost and the site returns 502 — that default is deliberate.
-- **There is no login.** Deployed as-is, anyone with the URL gets the
-  calculator and the engine. Decide on access control before pointing a real
-  domain at it.
+  its popup — allow pop-ups for `hpanel.hostinger.com`.
+- Checked on this machine in production mode (`node app.js` with `HOST` and
+  `PORT` set): every route answers, including `/guide` and `/api/render`.
+- **There is no login.** A temporary domain is not a secret, only unguessed.
+  Accounts are `DESIGN.md` Phase 9; until then put basic auth in front of it
+  before any real domain points at it.
 
-See `DEPLOY.md` for the full hosting notes.
+## Agreed on 17 August, written up but not started
+
+**Accounts, saved jobs, Google and email** — `DESIGN.md` Phases 9–12, written
+there in full before any code, which is what the shop asked for. The four
+decisions are taken and recorded: Google through the estimator's **own Apps
+Script Web App** (so no Google credential ever reaches this repo), email through
+an **HTTP email service**, attachments as a **real `.xlsx` and a real vector
+PDF** written by hand, and the plan written down first.
+
+Read that section before starting. The three things it turns on: a URL alone
+cannot write to Google, the folder and sheet being public means anyone with the
+link reads every job in them, and no key can live in this repo because it is
+public. Phase 9 — login, saved jobs, the File menu — is the foundation the other
+three stand on.
 
 ## What to do next
 
 In rough order of value:
 
-0. **A guide book in the app itself.** Agreed 14 August, to build next: a panel
-   on the home page — top, to the side — that says how to use the calculator,
-   so an estimator does not have to be told or sent to `GUIDE.md`. `GUIDE.md`
-   is already written in the estimator's own language and is the obvious source;
-   the open question is whether the panel renders it, or is written separately
-   and kept in step. Decide that first — two copies of the same instructions
-   drift, and the one on screen is the one that gets read.
-1. **The form has no test.** `core/` is verified line by line and `web/app.js`
-   is not covered at all, which is how a call to an identifier that was never
-   defined survived a whole session and would have reached the estimator. It has
-   no imports, so it runs as a plain script in a `node:vm` context with a stub
-   DOM — enough to render each shape mode, build the spec and post it to
-   `/api/render`. That is what the 14 August check ran from, as a throwaway;
-   it belongs in the repo as `core/verify/form.test.ts` or similar.
+1. **Look at the app in a real browser.** Still outstanding from 14 August and
+   now bigger: the drawing sheet, the 3D view, the door swing on the plan and
+   the new guide page have all been verified headless, and none of them has been
+   *seen*. `npm run dev`, then the Guide button, a door with a hand on it, and a
+   room over 3050 high.
 2. **Transcribe HI-15191's printed flashing rows** — Inner PP, Outer PP, Flat
    Strip and U flashing 120/60, with profile and RMTR. The shop is sending them.
    They settle the one rule in the engine that no sheet backs, and the older
-   finding that perimeter estimates missed those figures both ways.
+   finding that perimeter estimates missed those figures both ways. The 17
+   August open-end rule rides on the same reckoning and is settled by the same
+   rows.
 3. **Get the printed sheet for a floor that is not PPGI + ply** — the shop has
    one. Transcribe it as a job + expected pair and it settles how SS and
    chequered layers are counted, which is the one part of the floor build-up
    left unbuilt.
-4. **Finish the Hostinger deploy** — the Node version answer decides everything
-   else. Try a temporary domain first, not `hicon.co.in`.
-5. **Phase 4 of `DESIGN.md`** — machine maximum panel length, door top panel,
-   ceiling light cutout. All present in the legacy calculator, none in this
-   engine.
-6. **Phase 3** — deriving partitions from geometry rather than a tick, which
+4. **A printed sheet from a job with walls over 3050** would be the first that
+   can check the door top panel at all — its size, its blank, and whether the
+   shop splits it when the door module is wider than the panel module. The
+   engine makes one panel and does not split.
+5. **Do the Hostinger deploy** — decided on 17 August, temporary domain first.
+   `DEPLOY.md` has the wizard and the post-deploy checks. The Node version in
+   the dropdown is the one thing that can still stop it.
+6. **The rest of Phase 4 in `DESIGN.md`** — machine maximum panel length and the
+   ceiling light cutout. Both in the legacy calculator, neither in this engine.
+   The door top panel is done, on the shop's own rule rather than legacy's.
+7. **Phase 3** — deriving partitions from geometry rather than a tick, which
    unlocks HI-15279's Ambient+Milk block and HI-15252.
 
 ## What must not be done
@@ -287,6 +374,12 @@ because both unblock a drawing and both are one-line answers:
 Then: trapezoid blanking (blocks angled rooms), which wall runs through a
 corner-less junction, the real machine maximum panel length, and whether a door
 leaf is the wall thickness or fixed by door type.
+
+New on 17 August, and both drawing-only so nothing is blocked on them: **which
+end an LHS door is hinged on**, and **whether a cold room door swings out rather
+than in**. The plan currently hinges LHS at the start of the opening reading the
+wall from outside, and opens the leaf inwards; both live in `drawSwing` in
+`core/draw/roomplan.ts`.
 
 ## Chat history
 

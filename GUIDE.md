@@ -17,8 +17,15 @@ tab chahiye jab kisi purane job ko verify karna ho.
 | L cut | [L cut](#l-cut) |
 | Floor ki layers | [Floor ki build-up](#floor-ki-build-up) |
 | Corner ya butt joint | [Corner ya butt joint](#corner-ya-butt-joint--dono-ek-jagah-nahi) |
+| Door kis taraf khulega | [Door ka hand](#door-ka-hand--lhs--rhs) |
+| Door ke upar ka panel | [Door top panel](#door-top-panel--3050-se-oonchi-wall-par) |
 | Flashing, aur apni flashing jodna | [Flashing](#flashing) |
 | Error aa gaya | [Jo tool mana kar de](#jo-tool-mana-kar-de) |
+
+> **Ye guide app ke andar bhi khulti hai.** Screen ke upar dayein taraf
+> **Guide** button hai — dabate hi yahi page **naye tab me** khul jayega, taaki
+> form me jo job aap type kar rahe the wo bacha rahe. Do copies nahi hain: jo
+> file aap padh rahe hain, wahi screen par bhi dikhti hai.
 
 ## Sabse aasan raasta — Panel Calculator
 
@@ -45,7 +52,15 @@ ki zaroorat nahi.
 | Floor build-up | Floor panel ki chaaron layers, har ek ka material + thickness |
 | **Neighbour's wall** | Us side padosi room ki wall hai |
 | **Door** | Us wall par door, clear opening ke saath |
+| **Door opens from** | LHS ya RHS — door kis taraf khulega |
 | **+ Room** | Ek aur room jodo |
+
+Screen ke upar do cheezein aur hain: **Open job no** — job number type karke
+Enter dabate hi wo job form me khul jaata hai (box par click karo to jitne job
+tool ko pata hain, unki list bhi dikh jaati hai) — aur **Guide**, jo yahi guide
+naye tab me khol deta hai. **Print** browser ka print dialog kholta hai, jahan
+se PDF banti hai: usme form aur upar ki patti chhup jaati hai, sirf drawing
+sheet aur SHEET FABRICATION rehti hai, aur koi block beech se nahi katta.
 
 ### Drawing sheet — sab kuch ek canvas par
 
@@ -279,6 +294,55 @@ chhodna pad raha hai:
 Corner 300 (corner leg) khaata hai, butt sirf ek **wall thickness** — isliye
 butt karne par us wall ka clear run **badh** jaata hai.
 
+### Door ka hand — LHS / RHS
+
+Door box me **Door opens from** ka tick hai. Tick karte hi ek dropdown aata
+hai — **LHS (Left hand side)** ya **RHS (Right hand side)** — yaani door kis
+taraf khulega.
+
+Do cheezein isse chalti hain:
+
+- **BOQ ke label ka apna `(LHS)`/`(RHS)` token** khud badal jaata hai. Label me
+  pehle se token ho to wahi badalta hai, na ho to peeche jud jaata hai.
+- **Plan drawing me door ka swing** banta hai — pat khula hua, aur uske saath wo
+  chauthai gola jo wo ghoomta hai.
+
+**Tick na karein to kuch nahi badalta** — label bilkul waisa hi chhapta hai
+jaisa aapne likha, aur plan par koi swing nahi banti. Wajah: jo baat drawing par
+likhi nahi hai, wo drawing khud se nahi bana sakti. Isi wajah se teeno verified
+job (jinke label sheet se transcribe hue hain) bilkul achhoote hain.
+
+> Hand kis taraf se naapa jaata hai: room ke **bahar khade ho kar wall ko dekho**,
+> to LHS ka kabza (hinge) bayein sire par aur RHS ka dayein sire par lagta hai,
+> aur pat **room ke andar** ki taraf khulta hai. Ye padhna drawings dekh kar
+> banaya gaya hai, shop se poocha nahi gaya — agar aapki shop ulta karti hai to
+> ye ek hi jagah badalni hai, bata dijiye.
+
+### Door top panel — 3050 se oonchi wall par
+
+Wall ki height **3050 se zyada** ho, tabhi door ke upar wale hisse ka **apna
+panel** banta hai. 3050 tak door assembly poori wall ki height ki hi rehti hai
+aur upar alag se kuch nahi bantaa — form neeche likh kar bata deta hai ki abhi
+kaun si soorat chal rahi hai.
+
+| | |
+|---|---|
+| Panel size | Door module ki chaudai × (wall height − door ki clear height) |
+| 3600 wall, 1980 door par | **1180 × 1620** |
+| Blank | Panel **+ 40**, baaki wall panel jaisa hi |
+| Inner skin | L cut laga ho to **ceiling thickness jitni chhoti** (1620 → 1520) |
+| BOQ me | `Door Top Panel (Outer)` aur `(Inner)` — apni do rows, har ek par 1 PPGI |
+
+**Door assembly ki row ab door ki clear height par chhapti hai**, poori wall
+height par nahi — warna wall ka wahi hissa do baar gina jaata, ek baar assembly
+me aur ek baar top panel me. Dono milkar module ko theek ek baar bharte hain.
+
+> Ye rule bhi **shop se aaya hai, kisi chhapi sheet se nahi**. Chaaron verified
+> sheet 2590 ya 2745 ki hain — sab 3050 se neeche — isliye na unme koi door top
+> row hai, aur na hi ye rule unka koi number hila sakta hai. Legacy calculator
+> alag kaam karta tha (wo har chhote door par top banata tha, koi 3050 ki shart
+> nahi thi) — wo follow nahi kiya gaya.
+
 ### Flashing
 
 Har job me **teen flashing** by default aati hain — **Inner, Outer, U**. BOQ ke
@@ -290,6 +354,31 @@ totals me ye kabhi nahi judti.
 | Running MTR | Both width + both length = **2 × (W + L)**, har type ka apna |
 | Width | Wall thickness **+ 2** — 100mm wall par 102mm |
 | Butt joint ho to | Wahan **extra**: ek wall height Inner ka, ek Outer ka. U par kuch nahi |
+| **Padosi room se juda ho to** | Wahan bhi **extra**, neeche dekho |
+
+#### Jude hue room ka vertical flashing
+
+Jis side ki wall padosi room ki hai, us side aapke room ki **koi wall banti hi
+nahi** — aur us side se aane wali **do walls ke sire khule** reh jaate hain:
+wahan na corner panel lagta hai, na butt joint. Bas wahi do jagah do room ko
+jodne ke liye **vertical flashing** lagti hai, **poori room height jitni**.
+
+| Room ka shape | Un do sire par kya lagta hai |
+|---|---|
+| Seedha rectangle | Sirf **Inner** |
+| L-notch, U, ya wall-by-wall bani koi bhi shape | **Inner aur Outer** dono |
+
+Ek partition = **2 sire**. Do partition wale room me 4. Ginti khud junction se
+nikalti hai, aapko alag se kuch tick nahi karna. Table ke neeche note me poora
+hisaab chhapta hai:
+
+```
+Inner Flashing   17.49 m   2 x (3000 + 3000) mm + 2 open ends x 2745 mm
+Outer Flashing   12.00 m   2 x (3000 + 3000) mm
+```
+
+Shape outline se padhi jaati hai, form ke mode se nahi — ek hi room ko rectangle
+mode me banao ya wall-by-wall, flashing ek hi aayegi.
 
 Flashing ki sheet **Flashing** group se chunte hain — default PPGI 0.4.
 
@@ -328,7 +417,9 @@ walls aur 2 corner par aata hai, 4 aur 4 par nahi.
 **Door** — clear opening bharein. "From left" / "From right" khaali chhod do
 toh drawing door ko **center** me rakh degi aur plan par `DOOR CENTRED
 (ASSUMED)` likh degi. BOQ dono soorat me same rehta hai — door ka module run se
-minus hota hai chahe wo kahin bhi ho.
+minus hota hai chahe wo kahin bhi ho. Door kis taraf khulega ye
+[Door ka hand](#door-ka-hand--lhs--rhs) me hai, aur 3050 se oonchi wall par
+uske upar ka panel [Door top panel](#door-top-panel--3050-se-oonchi-wall-par) me.
 
 ### Jab do room alag-alag size ke hon
 
@@ -609,7 +700,8 @@ npm run dev
 Phir `http://127.0.0.1:5173` kholein. **Ek hi screen hai** — bayein form,
 dayein drawing aur BOQ. Jaise-jaise value badlogey, dono turant banenge.
 
-Verified jobs "Load example" dropdown me hain — inhe form me kholkar dekh sakte
+Verified jobs upar wale **Open job no** box se khulte hain — job number type
+karke Enter, ya box par click karke list me se chunein. Inhe form me kholkar dekh sakte
 ho ki engine kin numbers par prove hua hai.
 
 ## 5. Output kaise padhein

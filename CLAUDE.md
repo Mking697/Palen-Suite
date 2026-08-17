@@ -96,12 +96,18 @@ plain HTML/CSS/JS loaded straight from disk.
   from `/api/rules` rather than repeating them — `web/app.js` holds fallbacks
   only for when that call cannot be made, and they say so.
 - A rule derived from a single sample must say so in its comment.
-- **`web/app.js` has no test in the repo.** It is a plain script with no
-  imports, so it runs in a `node:vm` context with a stub DOM — that is how the
-  form and the 3D maths have been checked so far, from a throwaway harness. An
-  identifier that was never defined once survived a whole session this way. If
-  you touch the form, run it that way at least; better, land the harness as
-  `core/verify/form.test.ts`.
+- **The browser scripts are tested by running them, in
+  `core/verify/web.test.ts`.** `web/app.js` and `web/guide.js` are plain scripts
+  with no imports, so they cannot be imported — they are executed in a `node:vm`
+  context over a stub DOM, and the test drives the form's own controls and reads
+  what it posts. Touch either file and run it; the reason is on the record, an
+  identifier that was never defined once survived a whole session because
+  nothing ever ran the file. The stub DOM is deliberately minimal — when the
+  form starts using something it lacks, extend the stub rather than dropping the
+  coverage.
+- **The guide in the app is `GUIDE.md`, not a copy of it.** `/guide` renders
+  the file. Never write a second set of instructions into `web/`: two sets drift
+  apart, and the one that gets read is the one on the screen.
 
 ## Adding a job
 

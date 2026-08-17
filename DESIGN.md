@@ -33,7 +33,7 @@ rediscovered later.
 | Same material picker **per door**, plus core Puf / Rockwool / Honeycomb | `readDoorSheets`, `dmat_*` | ✗ |
 | Door type Sliding 60mm / Hinges 45mm | `readDoor` | ✗ door takes the wall thickness |
 | Door placed by **From Left / From Right** | `doorPlacement` | ✗ position not modelled |
-| **Door top panel** when door is shorter than the wall | `wallCalc`, `topStd/topNon` | ✗ — already flagged as missing for HI-15279 |
+| **Door top panel** when door is shorter than the wall | `wallCalc`, `topStd/topNon` | ✅ — but on a **different rule**: only over a 3050 wall, see below |
 | **Machine max panel length** splits long panels | `splitLen`, `maxLen` | ✗ no limit at all |
 | Ceiling light / laminar cutout, click-positioned | `lightRect`, `ceilingCells` | ✗ |
 | Ceiling split into Top/Bottom/Left/Right regions round the cutout | `ceilingCells` | ✗ |
@@ -43,7 +43,14 @@ rediscovered later.
 | Wall thickness drawn as an inner offset polygon | `buildWallPlan` | n/a — drawing |
 | Plan SVG, ceiling SVG, walls DXF, ceiling DXF, CSV, localStorage | `svgFromGeom`, `dxfFromGeom` | ✗ to be ported |
 
-Four of these are not gaps but **conflicts**, and they are what the open
+The door top panel is the one that turned out to be a **conflict rather than a
+gap**. Legacy makes one whenever the door is shorter than the wall, with no
+threshold at all. The shop's rule (17 August 2026) is that the piece over a door
+is its own panel only once the wall is over 3050mm; below that the door assembly
+is the full height of the wall, which is exactly what all four sheets print.
+Legacy's version was not carried over.
+
+Four more are not gaps but **conflicts**, and they are what the open
 questions at the bottom now cover:
 
 1. **Corner cut ≠ corner panel.** The verified sheets print a corner panel
@@ -298,11 +305,15 @@ Each phase ends with the repo green and something usable.
 | 2 ✅ | `core/draw/` + SVG/DXF renderers; drawings in the viewer | every drawn panel is a panel the BOQ priced, asserted per wall |
 | 3 | Adjacency: shared edges → partitions, corner suppression, `boqGroup` merge | unlocks HI-15279 Ambient+Milk and HI-15252, both already pending |
 | 3a ✅ | Room placement — `at` on a room, one job layout with connected rooms touching | the ante room draws above the freezer, not on top of it |
-| 4 | What legacy has and the engine lacks: machine max panel length, door top panel, door placement, per-wall skins, flashing as manual input, ceiling light cutout | each one reproduces the legacy figure on the same input, and `npm run check` stays green |
+| 4 | What legacy has and the engine lacks: machine max panel length, ceiling light cutout. Door top panel, door placement, per-wall skins and manual flashing are done | each one reproduces the legacy figure on the same input, and `npm run check` stays green |
 | 5 ✅ | The calculator: form in, drawings and BOQ out, on one screen | a job entered from a drawing with no code edit |
 | 6 | Angled, chamfered and triangle rooms | needs the corner and blanking answers below first |
 | 7 ✅ | One drawing sheet, and a 3D view of the same panels behind a toggle | every 3D face is a width the BOQ priced, asserted per wall |
-| 8 | A guide book in the app — how to use it, on the home page rather than in a file | an estimator who has never seen the tool enters a job from a drawing without being told how |
+| 8 ✅ | A guide book in the app — how to use it, in the tool rather than only in a file | an estimator who has never seen the tool enters a job from a drawing without being told how |
+| 9 | Accounts and saved jobs: sign up, log in, File → New / Open / Save / Save As, each user's jobs their own | two users sign up, save a job each by the same number, and neither can see or open the other's |
+| 10 | The BOQ as a real `.xlsx` and the drawing sheet as a real vector PDF, both downloadable | Excel opens the workbook without repair, and the PDF prints 1:1 with every panel figure the sheet shows |
+| 11 | Google: the estimator's own Drive folder and Sheet, connected from their profile | saving a job puts the PDF and the workbook in the folder under the job number, and appends a row to the BOQ and Flashing tabs |
+| 12 | Email: TO / CC / BCC, subject, body, with the PDF and the workbook attached | a job is sent from the tool and arrives with both files, named by job number |
 
 Phase 4 is bigger than it looks because per-wall skins change the shape of the
 printed sheet — today the BOQ has one "PPGI 0.4MM" column because all four
@@ -324,6 +335,180 @@ that no sheet has ever printed.
 summary — standard / non-standard panel counts and running square metres — is
 not carried over; it is replaced, not joined. Flashing running metre survives
 as its own figure because it is a separate purchase, not a panel count.
+
+## Phases 9–12 — accounts, files, Google, email
+
+Agreed with the shop on 17 August 2026. This is the first work that changes what
+the tool *is*: today it is a calculator on one desk, and these four phases make
+it a tool several estimators log into, with their jobs kept for them and their
+paperwork going out of it. Written down before any of it is built, because the
+decisions below are expensive to change later.
+
+### What does not change
+
+- **`core/` stays pure and stays the engine.** No account, no upload and no
+  email may reach it. Everything with a network or a secret in it lives in
+  `server/`. The BOQ is still generated the same way from the same inputs, and
+  `npm run check` still has to print `ALL ROWS MATCH across 3 jobs`.
+- **No npm dependency.** Every piece below was checked against that rule before
+  it was chosen, and each one holds: Supabase's auth and database are plain
+  HTTP, an `.xlsx` is a ZIP that can be written stored (uncompressed), a PDF of
+  lines and text is a content stream much like the DXF the repo already writes
+  by hand, and the email service is an HTTP POST.
+- **The three verified jobs stay TS files in `core/jobs/`.** They are ground
+  truth and are not editable from a browser. Saved jobs are a different thing
+  living in a different place, exactly as this file already says.
+
+### Three facts that shaped the design
+
+1. **A URL alone cannot write to Google.** A public Drive folder or Sheet can be
+   *read* by anyone with the link; writing needs an authenticated call, even to
+   a sheet shared as editable. The shop chose the **Apps Script Web App** route:
+   the estimator deploys a small script from their own Sheet, and the tool POSTs
+   to that URL. The script runs as them, so no Google credential ever reaches
+   this repo or its server. The script ships in `tools/apps-script/`.
+2. **Public means public.** The shop has said the folder and the sheet will be
+   public. Anyone with either link can then read every job, BOQ and client name
+   in them. That is the shop's call, taken knowingly, and it is recorded here
+   rather than argued with.
+3. **No secret can live in the repo.** It is a public repository. The Supabase
+   keys and the email API key are environment variables, and the server refuses
+   to start a feature whose key is missing rather than half-working.
+
+### Where the work sits
+
+```
+   browser                     server/                    outside
+   ───────                     ───────                    ───────
+   auth + saved jobs  ──────────────────────────────────►  Supabase
+        (anon key, RLS)                                    (Postgres + GoTrue)
+
+   the form  ──────────►  /api/render  ──►  core/          —
+                          /api/export  ──►  core/export/   —
+                          /api/push    ─────────────────►  Apps Script Web App
+                          /api/mail    ─────────────────►  email service HTTP API
+```
+
+The split is deliberate. **Auth and job storage go straight from the browser to
+Supabase**, with the anon key and row level security, so no secret is needed on
+our side for the part that holds the data. **Anything with a secret, or with a
+cross-origin problem, goes through the server**: the email API key must never
+be in a browser, and a browser POST to an Apps Script URL runs into CORS while
+a server POST does not.
+
+### The database
+
+Three tables in Supabase, with **row level security on every one of them** —
+that is what makes "each user's own data" true, rather than a promise the UI
+makes.
+
+```
+profiles
+  id            uuid   -> auth.users.id
+  display_name  text
+  drive_script_url  text   -- the Apps Script Web App, phase 11
+  sheet_script_url  text   -- may be the same one
+  mail_from     text       -- phase 12
+
+jobs
+  id          uuid
+  user_id     uuid  -> auth.users.id
+  job_no      text
+  spec        jsonb        -- the JobSpec the form posts, unchanged
+  updated_at  timestamptz
+  unique (user_id, job_no)
+
+job_exports                  -- phase 11, what was pushed and when
+  id, job_id, kind, target_url, pushed_at, ok, message
+```
+
+`spec` is the same `JobSpec` that already goes to `/api/render`, stored whole.
+Nothing about the BOQ is stored — it is generated, and storing a generated
+figure is how a saved job and a fresh one start to disagree.
+
+`unique (user_id, job_no)` is what makes **Save** an upsert and **Save As** a
+new row, and it is per user: two estimators may each have their own HI-15191.
+
+### Phase 9 — accounts and saved jobs
+
+- Sign up and log in against Supabase's auth API by `fetch`. The browser holds
+  the session; the server is not involved and needs no key.
+- **File menu** in the header: **New**, **Open…**, **Save**, **Save As**.
+  *New* warns if the job on screen has unsaved changes. *Save* needs a job
+  number, because that is the key.
+- **Open job no** — already built — searches the estimator's own saved jobs
+  first and the three verified examples after them, so the search box does not
+  change its meaning when there is nothing saved yet.
+- Logged out, the calculator still works exactly as it does today, with nothing
+  saved. That matters: the engine is the product, and an account is a
+  convenience on top of it, not a gate in front of it.
+
+### Phase 10 — the workbook and the PDF
+
+Both are pure, both take what the engine already produced, and both obey the
+rule the drawings obey: **an export never counts anything.**
+
+- `core/export/xlsx.ts` — a minimal `.xlsx` writer. A workbook is a ZIP of XML;
+  written *stored* rather than deflated it needs no compressor, and Excel opens
+  it. One sheet per BOQ block plus a Flashing sheet.
+- `core/export/pdf.ts` — a minimal vector PDF writer, taking the same `Drawing`
+  the SVG and DXF writers take, so the sheet comes out 1:1 in millimetres.
+
+**One thing to settle while building the workbook:** every printed BOQ figure is
+rounded half-up by `core/format.ts`, and Excel would happily re-round whatever
+it is given. The workbook must carry the *rounded* value as a number, and the
+totals row must be the engine's own total rather than an Excel `SUM` — otherwise
+a spreadsheet formula quietly becomes a second opinion about the BOQ. This is
+the same reasoning that keeps `toFixed` out of the browser.
+
+### Phase 11 — Google, through the estimator's own script
+
+The profile takes two URLs, both Apps Script Web Apps the estimator deploys.
+Saving a job POSTs to them from the server:
+
+```
+POST <script url>
+{ jobNo, savedAt, files: [{ name, mimeType, base64 }], boqRows: [...], flashingRows: [...] }
+```
+
+The script writes the files into the Drive folder under the job number, and
+appends to two tabs — **BOQ** and **Flashing** — with the timestamp and the job
+number on every row, which is what the shop asked for. Because the script is
+the estimator's own, the folder and sheet stay theirs and this repo holds no
+Google credential at all.
+
+Every push is written to `job_exports`, success or failure. A push that silently
+did nothing is the worst outcome here: the estimator would believe the drawing
+office has the sheet.
+
+### Phase 12 — email
+
+TO, CC, BCC, subject and body, with the PDF and the workbook attached and named
+by job number. Sent through an HTTP email service so no SMTP client has to be
+written and no mail port has to be open on the host; the API key is an
+environment variable, and the sending domain needs its two DNS records before
+anything will arrive. Nothing about the BOQ is re-computed to send it — the
+attachments are the same bytes the download buttons give.
+
+### Phase 8 result
+
+Done, and the question the phase was blocked on — render `GUIDE.md`, or write
+the panel separately — was answered by rendering the file. Two sets of the same
+instructions drift apart, and the one that gets read is the one on the screen,
+so there is only one.
+
+A **Guide** button in the header opens `/guide` **in a new tab**, which matters
+more than it sounds: the calculator holds a job in the form and nothing else, so
+navigating away from it in the same tab would throw the job away. The server
+hands `GUIDE.md` over at `/api/guide` and `web/guide.js` renders the Markdown
+subset the file uses. No dependency, and `core/` is not involved at all — this
+is a page about the tool, not part of the engine.
+
+The heading ids follow GitHub's own slug rule, so the contents table already at
+the top of `GUIDE.md` links correctly without the file stating anything, and
+`core/verify/web.test.ts` asserts that every in-page link in the file resolves
+to a heading the renderer produced. That test catches the slug rule drifting,
+which is the only way this page can quietly break.
 
 ### Phase 7 result
 
@@ -459,9 +644,11 @@ Per `CLAUDE.md` these get answered, not guessed.
 4. **Where does the odd panel go?** `splitRun` puts the balance last, legacy
    puts the ceiling remainder first. The BOQ cannot tell the difference; the
    drawing can.
-5. **Is a door top panel always cut?** Legacy makes one whenever the door is
-   shorter than the wall. Do the sheets that have no top row simply have
-   full-height doors, or is it sometimes omitted?
+5. ~~**Is a door top panel always cut?**~~ **Answered** by the shop, 17 August
+   2026: only once the wall is over 3050mm. Below that the door assembly is the
+   full height of the wall and there is no separate top panel, which is why none
+   of the four sheets has a top row — they are all 2590 or 2745 high. Built, and
+   noted in `README.md` "Open items" as a rule no sheet can check either way.
 
 **Already open:**
 

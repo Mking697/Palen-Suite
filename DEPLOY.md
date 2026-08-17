@@ -79,10 +79,12 @@ Routes:
 | Route | What it does |
 |---|---|
 | `/` | the Panel Calculator |
+| `/guide` | the guide, which is `GUIDE.md` rendered — one copy of the instructions, not two |
+| `/api/guide` | `GUIDE.md` itself, as text, which is what that page renders |
 | `POST /api/render` | **the calculator's one call** — a job in; its BOQ, the flashing table, the one-canvas drawing sheet with its clickable cells, every individual drawing, and the 3D model out |
 | `POST /api/dxf` | one drawing of an unsaved job as DXF; `{ sheet: true }` for the whole sheet |
-| `/api/rules` | the shop's pick lists — sheet materials, door types and cores, floor build-up, flashing types, the L cut threshold |
-| `/api/jobs` | registered jobs and their rooms, for "Load example" |
+| `/api/rules` | the shop's pick lists — sheet materials, door types, cores and hands, floor build-up, flashing types, and the two thresholds the form has to show: the L cut and the door top |
+| `/api/jobs` | registered jobs and their rooms, for the header's job search |
 | `/api/boq?job=HI-15191` | generated BOQ blocks + totals |
 | `/api/spec?job=HI-15191` | the JobSpec the BOQ was generated from |
 | `POST /api/boq` | build from an edited JobSpec (what-if, nothing persisted) |
@@ -108,11 +110,17 @@ it only offers 18 or 20, the choice is to compile to JavaScript before
 uploading — which means adding TypeScript as a build dependency and giving up
 the no-dependency rule — or not to use that host.
 
+`app.js` checks this at startup and **says which of the two is wrong**, because
+the raw failure is `Unknown file extension ".ts"` in a log, which tells nobody
+what to do. A version that is too old, or one that needs the flag, stops with
+the fix printed.
+
 **2. Entry point and binding.** `app.js` at the repo root is there for hosts
 that want a `.js` file to start; it just loads `server/serve.ts`. The host
 supplies `PORT`, and **`HOST=0.0.0.0` must be set** or the app stays on
 localhost and the proxy cannot reach it. That default is deliberate — going
-public should be a decision, not an accident.
+public should be a decision, not an accident — and `app.js` warns when it is
+unset rather than quietly binding where nothing can reach it.
 
 ```
 Entry point   app.js
@@ -120,13 +128,72 @@ Environment   HOST=0.0.0.0
 ```
 
 **3. It will be public.** Anyone with the URL gets the calculator, the job
-examples and the engine. There is no login. On a shared host, put HTTP basic
-auth in front of it, or keep it on a URL that is not published.
+examples and the engine. There is no login — accounts are `DESIGN.md` Phase 9
+and are not built. On a shared host, put HTTP basic auth in front of it, or keep
+it on a URL that is not published. A temporary domain is not a secret; it is
+only unguessed.
 
 **4. `/api/verify` will probably not work.** It shells out to run the verifier,
 and shared hosting usually blocks spawning processes. Nothing in the calculator
 calls it, so the tool is unaffected — but do not rely on it in production. Run
 `npm run check` locally instead.
+
+### Deploying to Hostinger, step by step
+
+Written for a **temporary domain** first, which is the right way round: the
+domain can be pointed at it once the thing is known to work.
+
+Before anything, from the repo:
+
+```bash
+npm run check          # must print ALL ROWS MATCH across 3 jobs
+git push               # Hostinger deploys what is on GitHub, not what is here
+```
+
+Then in hPanel:
+
+1. **Websites → Add website → Deploy Web App → Import Git repository.**
+   If the button spins forever, Chrome has blocked its popup — allow pop-ups for
+   `hpanel.hostinger.com`. Failing that, *Upload your files* with a ZIP from
+   GitHub works, but then every update is a re-upload.
+2. Repository `Mking697/Palen-Suite`, branch `main`. GitHub access is already
+   granted and saved for this repository.
+3. Choose the **temporary domain** rather than `hicon.co.in`.
+4. **Node version — check this dropdown before going on.** 22.18 or newer is
+   the easy case. 22.6–22.17 also works but needs the environment variable
+   below. 18 or 20 will not run this app at all.
+5. Settings:
+
+   | Field | Value |
+   |---|---|
+   | Build command | *empty* — there is no build |
+   | Start command | `npm start` |
+   | Entry point | `app.js` |
+   | Environment | `HOST=0.0.0.0` |
+   | Environment, only on Node 22.6–22.17 | `NODE_OPTIONS=--experimental-strip-types` |
+
+   Do not set `PORT` — the host supplies it, and overriding it is the usual
+   cause of a 502.
+
+6. Deploy, then read the application log. If it stopped, `app.js` will have
+   printed which of the two settings is wrong.
+
+### What to check once it is up
+
+In this order — each one fails differently and tells you something else:
+
+| Open | Should give | If it does not |
+|---|---|---|
+| `/` | the calculator, form on the left | 502 → `HOST` is not `0.0.0.0`, or the app did not start |
+| `/api/rules` | JSON of the shop's pick lists | the server runs but the engine did not load |
+| `/guide` | the guide, rendered | `/api/guide` cannot read `GUIDE.md` — the repo did not ship whole |
+| type `HI-15191` in **Open job no** | the freezer + ante job in the form | `/api/jobs` or `/api/spec` is not reachable |
+| the drawing sheet appears | `POST /api/render` works, which is the whole tool | this is the one that matters |
+
+`/api/verify` is expected to fail on shared hosting and nothing depends on it.
+
+**After it works, before pointing a real domain at it:** there is no login. Put
+basic auth in front of it or leave it on the temporary domain until Phase 9.
 
 ## Hosting as a static site (not applicable)
 

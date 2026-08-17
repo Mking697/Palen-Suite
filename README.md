@@ -17,9 +17,11 @@ weight and area — with no BOQ figures fed in as input.
 | HI-15279 | Ambient + Milk 60mm merged block | ⬜ needs BOQ-group merging, partition panels, Door TOP |
 | HI-15252 | Freezer 120 + Chiller 60 + F&V 60, module 1030 | ⬜ not yet |
 
-100 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
+149 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
 (`npm run dev`) renders the generated sheet and its drawings, runs the verifier
-in the browser, and lets you rebuild from an edited input.
+in the browser, and lets you rebuild from an edited input. The two browser
+scripts are covered too — `core/verify/web.test.ts` boots them headless in a
+`node:vm` context with a stub DOM.
 
 A room is a closed polygon; its wall list is compiled from that outline, and
 the drawings read the same outline the BOQ reads — so a drawing cannot show a
@@ -72,6 +74,20 @@ go and nothing else to press.
 - **Doors** — on any wall the room owns, including a partition. Type, core,
   clear opening, both leaf sheets, and an optional position from either end.
   Left blank, the drawing centres the door; the BOQ is unaffected either way.
+  A door can also state **which hand it is hung on**, LHS or RHS: that drives
+  the `(LHS)`/`(RHS)` token in its own printed label and draws the leaf and its
+  swing on the plan. Unstated, the label prints exactly as transcribed and no
+  swing is drawn — a drawing does not invent a fact about the building, which
+  is also why the three verified jobs are untouched by it.
+- **Door top panel** — above `DOOR_TOP_MIN_WALL_HEIGHT` (3050mm of wall) the
+  piece over the door is made as its own panel, the door module wide by the
+  wall height less the clear opening, blanked +40 with the inner skin set back
+  by the L cut like any other wall panel. The door assembly then prints at the
+  clear height rather than the full wall, so that stretch of wall is counted
+  exactly once. Below the threshold nothing changes: the assembly is the full
+  height, which is what all four source sheets print — every one of them is
+  2590 or 2745 high, so none of them can check this rule either. From the shop,
+  17 August 2026.
   Each door gets a **typical elevation** like the issued drawing: the frame leg
   either side of the leaf, the AL. chequered sheet up from the bottom, the door
   lift, the ceiling panel over and the puf slab under. Frame and leaf are held
@@ -88,7 +104,15 @@ go and nothing else to press.
   every corner leg, so the chain along a wall adds up to the wall.
 - **Flashing** — inner, outer and U on every job, totalled in running metres and
   kept out of the panel counts because it is a separate purchase. The sheet it
-  is folded from is picked per room. See "Open items": this is the one rule in
+  is folded from is picked per room. A butt joint adds a wall height of inner
+  and one of outer where it lands, and **an open wall end** — the junction where
+  a room hands its wall to the room next door, so there is neither a corner
+  panel nor a butt — is closed vertically for the room's whole height. One
+  partition gives exactly two of them, one at each corner. A plain rectangular
+  room takes inner there; a shaped one — an L, a U, anything past four walls —
+  takes inner and outer both. The shape is read off the outline, never off the
+  mode the room was typed in, because the same room entered two ways must not
+  produce two different sheets. See "Open items": this is the one rule in
   the engine with no printed sheet behind it yet.
 - **Extra flashing** — anything the three computed types do not cover is typed
   in: a gutter, a hanging flashing, a second U. Type, sheet, thickness, width
@@ -152,8 +176,16 @@ go and nothing else to press.
   below, one per room, unchanged. DXF comes out on the layers the drawing office
   expects (`WALL`, `PANEL`, `DOOR`, `DIM`, `LIGHT`, `TEXT`, `CUT`). Print gives the lot as a job
   pack.
-- **Load example** — pulls a verified job into the form, so the numbers the
-  engine was proved against can be inspected in the tool itself.
+- **Open job no** — type a job number in the header and it opens in the form.
+  It is a search box rather than a picker because an estimator reads the number
+  off the drawing, and a list stops being a way to find anything past a
+  screenful; clicking it still offers everything it knows. Today that is the
+  three verified jobs, so it doubles as the way to inspect the numbers the
+  engine was proved against.
+- **Guide** — a button in the header opens `GUIDE.md` as a page, in a new tab so
+  a half-typed job is not lost. The page renders the file itself rather than
+  repeating it: two sets of the same instructions drift apart, and the one that
+  gets read is the one on the screen.
 
 - **Walls in nobody's BOQ** — connected rooms need not be the same size, and
   when they are not, the whole wall between them belongs to the deeper room.
@@ -187,8 +219,11 @@ core/draw/sheet.ts          many drawings -> one 1:1 sheet, by translation only
 core/draw/model3d.ts        the job as flat faces in space, for the 3D toggle
 core/jobs/                  job inputs, transcribed from drawings only
 core/verify/                expected sheets + diff runner + tests
+core/verify/web.test.ts     web/app.js and web/guide.js, booted headless in a
+                            node:vm context with a stub DOM
 server/serve.ts             local dev server (node:http, no dependencies)
 web/                        the viewer — plain HTML/CSS/JS, no build step
+web/guide.js                GUIDE.md rendered as the in-app guide page
 tools/chat-backup.ts        exports Claude Code session transcripts
 legacy/index.html           the original single-file calculator, kept for
                             reference — its SVG drawing and DXF writer will be
@@ -218,7 +253,12 @@ chemWeight        = areaSqmt * thickness/1000 * density
 uFlashingProfile  = 10x40x(thickness + 2)x40x10
 flashingWidth     = wallThickness + 2                <- from the shop, not a sheet
 flashingRmtr      = 2 x (extW + extL) per type; a butt joint adds one wall
-                    height of inner and one of outer
+                    height of inner and one of outer; an open wall end adds one
+                    room height — inner alone on a rectangle, inner and outer on
+                    a shaped room                    <- from the shop, not a sheet
+doorTopPanel      = doorModule x (wallHeight - clearH), only above a 3050 wall;
+                    the door assembly then prints at clearH, not wallHeight
+                                                     <- from the shop, not a sheet
 wallframeVertical = 1220 x (wallHeight + 15)
 ```
 
@@ -356,12 +396,31 @@ engine worthless — see `CLAUDE.md`.
   sheet.** The rule now in `core/flashing.ts` came from the shop on 14 August
   2026: three types on every job, running metre `2 x (extW + extL)` each, width
   `wallTh + 2`, and a butt joint adding one wall height of inner and one of
-  outer. This file previously recorded that **perimeter-based estimates land
-  both above and below HI-15191's printed figures**, which is a live
-  disagreement — either that comparison was wrong, or the sheet carries
-  something the formula does not, and the butt joint extra is a candidate.
+  outer. On 17 August the open wall ends at a partition were added on the same
+  footing — one room height each, inner alone on a rectangle and inner plus
+  outer on a shaped room. This file previously recorded that **perimeter-based
+  estimates land both above and below HI-15191's printed figures**, which is a
+  live disagreement — either that comparison was wrong, or the sheet carries
+  something the formula does not, and these two extras are the candidates.
   HI-15191's printed flashing rows are coming; transcribing them settles it.
   Until then this is the only rule in the engine with no sheet behind it.
+
+- **No sheet can check the door top panel, and none contradicts it.** The rule
+  is the shop's, 17 August 2026: over 3050mm of wall the piece above the door is
+  its own panel, and the door assembly stops at the clear opening. Every source
+  sheet is 2590 or 2745 high, so all four sit below the threshold and print the
+  assembly at the full wall height, exactly as the engine still does there. A
+  printed sheet from a job with walls over 3050 would settle the panel's size,
+  its blank, and whether the shop splits it when the door module is wider than
+  the panel module — the engine makes one panel and does not split.
+
+- **Which end an LHS door is hinged on has not been confirmed.** The plan draws
+  the swing hinged at the start of the opening for LHS and the end for RHS,
+  reading the wall from outside the room, with the leaf opening inwards. That
+  convention was worked out from the drawings, not stated by the shop, and it is
+  in one function — `drawSwing` in `core/draw/roomplan.ts`. The BOQ is
+  unaffected either way; only the drawing is. Whether a cold room door should
+  swing out rather than in is the same question and equally unanswered.
 - **No machine maximum panel length is modelled.** The legacy calculator splits
   any panel longer than a configurable limit; this engine has no limit and will
   happily generate a panel the line cannot make. The legacy default of 3050 is
