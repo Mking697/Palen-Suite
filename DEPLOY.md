@@ -242,6 +242,19 @@ Then in hPanel:
 6. Deploy, then read the application log. If it stopped, `app.js` will have
    printed which of the two settings is wrong.
 
+### After the first deploy, a push *is* the deploy
+
+Auto-deployment is on for `panelsuite.online`, so `git push` to `main` is the
+whole procedure — hPanel picks the commit up on its own and the dashboard shows
+it building, named by its commit line. There is no Redeploy button to hunt for
+and pressing one is not part of shipping a change; that is only for re-running a
+deploy that failed or for picking up an environment variable you have just
+edited, since those do not come from the repository.
+
+What this makes true, and it is worth saying plainly: **`git push` publishes.**
+`npm run check` before pushing is not tidiness, it is the last gate before the
+shop is looking at it.
+
 ### What to check once it is up
 
 In this order — each one fails differently and tells you something else:
