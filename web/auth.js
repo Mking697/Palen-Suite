@@ -191,8 +191,23 @@
      * decides what to *say*.
      */
     async profile() {
+      const session = await fresh();
+      if (!session) return null;
       try {
-        const rows = await db('profiles?select=id,email,access_until,is_admin&limit=1');
+        /*
+         * Asked for by id, not with `limit=1`.
+         *
+         * An ordinary user can only read their own row, so "give me one row"
+         * looked equivalent — until the admin policy widened the read to every
+         * row, and then the administrator was handed somebody else's profile:
+         * not an admin, and with the wrong expiry date. The screen dutifully
+         * showed it. Widening a policy can quietly break an assumption the app
+         * did not know it was making, so this asks for the row it means.
+         */
+        const rows = await db(
+          `profiles?id=eq.${encodeURIComponent(session.user.id)}` +
+            '&select=id,email,access_until,is_admin&limit=1',
+        );
         state.profile = rows && rows.length ? rows[0] : null;
         state.profileError = '';
       } catch (err) {

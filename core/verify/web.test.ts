@@ -188,6 +188,8 @@ interface Harness {
   ctx: Record<string, unknown>;
   ids: Map<string, StubEl>;
   posts: Array<{ url: string; body: unknown }>;
+  /** every URL fetched, so a test can check what was asked for, not only sent */
+  reads: string[];
   errors: unknown[];
   fileButtons: StubEl[];
   /** every question a prompt asked, in order */
@@ -218,6 +220,7 @@ function harness(
   });
 
   const posts: Array<{ url: string; body: unknown }> = [];
+  const reads: string[] = [];
   const errors: unknown[] = [];
 
   const document = {
@@ -242,6 +245,7 @@ function harness(
     const route = Object.keys(routes)
       .filter((k) => url.startsWith(k))
       .sort((a, b) => b.length - a.length)[0];
+    reads.push(url);
     if (init?.method && init.method !== 'GET') {
       posts.push({ url, body: init.body ? JSON.parse(init.body) : null });
     }
@@ -312,6 +316,7 @@ function harness(
     ctx,
     ids,
     posts,
+    reads,
     errors,
     fileButtons,
     asked,
@@ -786,6 +791,25 @@ await t('an admin is never locked out by a date', async () => {
   assert.ok(
     textOf(admin.ids.get('#accountPanel')).includes('Administrator'),
     'and is told they are one',
+  );
+});
+
+await t('the profile is asked for by id, not just "one row"', async () => {
+  /*
+   * An admin may read every profile, so `limit=1` hands them whichever row
+   * comes first — which showed the administrator somebody else's expiry date
+   * and no admin rights at all. It has to name the row it wants.
+   */
+  const admin = signedInAs({ ...PROFILE, is_admin: true });
+  await settle();
+
+  const asked = admin.reads.find(
+    (u) => u.includes('/rest/v1/profiles') && u.includes('select=id,email'),
+  );
+  assert.ok(asked, 'the profile was never fetched');
+  assert.ok(
+    asked!.includes(`id=eq.${SESSION.user.id}`),
+    `it must ask for its own row: ${asked}`,
   );
 });
 
