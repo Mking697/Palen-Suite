@@ -2514,7 +2514,7 @@ function renderAccount() {
   }
 
   button.textContent = 'Sign in';
-  const email = el('input', { type: 'email', placeholder: 'you@hikom.in', autocomplete: 'email' });
+  const email = el('input', { type: 'email', placeholder: 'your email', autocomplete: 'email' });
   const pass = el('input', { type: 'password', placeholder: 'password', autocomplete: 'current-password' });
   const note = el('p', { class: 'hint', text: '' });
 

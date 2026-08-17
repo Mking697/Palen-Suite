@@ -7,8 +7,8 @@ On GitHub at **`Mking697/Palen-Suite`**, public, branch `main` tracking
 on this machine keeps its own:
 
 ```bash
-git -C /f/hikom-panel-suite config user.name   # Mking697
-git remote -v                                  # https://Mking697@github.com/...
+git config user.name   # Mking697 — run from the repo root
+git remote -v          # https://Mking697@github.com/...
 ```
 
 Ordinary work is `git push`. The rest of this section only matters if the remote
@@ -27,9 +27,10 @@ has to be set up again on another machine.
 
 ### Windows credential clash
 
-Windows Credential Manager caches one login per host, and `Hikom8428` is
-already cached for `github.com`. Pushing to a second account with the plain URL
-gives **403 Permission denied** with no useful message.
+Windows Credential Manager caches one login per host, and **another GitHub
+account is already cached** for `github.com` on this machine. Pushing to a
+second account with the plain URL gives **403 Permission denied** with no
+useful message.
 
 The `NEW_USERNAME@` prefix in the remote URL above is what avoids this — it
 makes Git ask for that account specifically. If it still fails:
@@ -312,21 +313,15 @@ basic auth in front of it or leave it on the temporary domain until Phase 9.
 
 ## Hosting as a static site (not applicable)
 
-Nothing is deployed yet — the engine is a library with a CLI verifier and a
-local viewer.
+This is a server, deliberately, and it cannot become a static page as it
+stands. `POST /api/render` runs the engine, `/api/config` reads the
+environment, and `/api/dxf` builds a file — all of that is Node. Publishing it
+as a static site would mean building `core/` to browser JavaScript so the
+engine runs client-side, and giving up the two routes that read the server's
+own environment.
 
-The viewer is deliberately a server, not a static page: `/api/verify` shells
-out to the verifier and `POST /api/boq` runs the engine. Publishing it as a
-static site means either dropping those two, or building `core/` to browser JS
-so the engine runs client-side.
-
-When that happens it will be a static Vite build, so GitHub Pages works the
-same way `hikom8428.github.io/panel-calculator` does today: build to `dist/`
-and publish that folder. Two things to remember at that point:
-
-- Vite needs `base: '/REPO_NAME/'` for a project page, otherwise assets 404.
-- `core/` must keep building without the UI, so the engine stays independently
-  testable.
+If it ever happens, `core/` must keep building without the UI, so the engine
+stays independently testable — that is the property everything else rests on.
 
 ## Chat transcript backup
 
@@ -345,7 +340,8 @@ which is gitignored — transcripts are not source.
 
 ## The old repo
 
-`f:\panel-calculator` (`Hikom8428/panel-calculator`) still holds the live
-single-file calculator and is untouched. It also has an untracked copy of an
-early `core/` from before this repo was split out — that copy is stale and can
-be deleted whenever convenient.
+The earlier `panel-calculator` repository, under the other GitHub account on
+this machine, still holds the original single-file calculator and is untouched
+— `legacy/index.html` here is a copy of it. That repo also has an untracked
+copy of an early `core/` from before this one was split out; it is stale and
+can be deleted whenever convenient.

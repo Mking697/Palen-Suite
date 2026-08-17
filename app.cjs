@@ -46,7 +46,7 @@ function say(line) {
 
 async function start() {
   say('');
-  say('=== Hikom Panel Suite starting ===');
+  say('=== Panel Suite starting ===');
   say(`node ${process.version} · pid ${process.pid}`);
   say(`cwd  ${process.cwd()}`);
   say(`dir  ${HERE}`);

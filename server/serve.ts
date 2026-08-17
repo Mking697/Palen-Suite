@@ -468,7 +468,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n  Hikom Panel Suite — http://${HOST}:${PORT}`);
+  console.log(`\n  Panel Suite — http://${HOST}:${PORT}`);
   // printed every time: when a host returns 503, these lines are the answer,
   // and its own panel only shows what it meant to set, not what arrived
   console.log(`  listening on ${HOST}:${PORT} — ${BIND_REASON}`);

@@ -578,7 +578,7 @@ const SESSION = {
   access_token: 'token-for-asha',
   refresh_token: 'refresh-for-asha',
   expires_in: 3600,
-  user: { id: 'user-asha', email: 'asha@hikom.in' },
+  user: { id: 'user-asha', email: 'asha@example.com' },
 };
 
 /** What the estimator has saved, as the database would hand it back. */
@@ -590,7 +590,7 @@ const acct = harness(APP_SOURCES, APP_IDS, {
   '/api/jobs': [{ jobNo: 'HI-15191', rooms: [{ name: 'Freezer Room' }] }],
   '/api/render': RENDER_REPLY,
   [`${SUPA}/auth/v1/token`]: SESSION,
-  [`${SUPA}/auth/v1/signup`]: { user: { id: 'new', email: 'new@hikom.in' } }, // no token: confirm first
+  [`${SUPA}/auth/v1/signup`]: { user: { id: 'new', email: 'newcomer@example.com' } }, // no token: confirm first
   [`${SUPA}/rest/v1/jobs`]: (url: string, init?: { method?: string }) =>
     init?.method === 'POST' ? null : url.includes('select=spec') ? [] : SAVED,
 });
@@ -612,7 +612,7 @@ await t('signed out, the panel offers sign in and sign up', () => {
 });
 
 await t('signing up says to confirm the email rather than nothing at all', async () => {
-  acctInput('email')!.value = 'new@hikom.in';
+  acctInput('email')!.value = 'newcomer@example.com';
   acctInput('password')!.value = 'a-good-password';
   acctButton('Sign up')!.fire('click');
   await settle();
@@ -623,12 +623,12 @@ await t('signing up says to confirm the email rather than nothing at all', async
 });
 
 await t('signing in shows who it is, and lists their own saved jobs', async () => {
-  acctInput('email')!.value = 'asha@hikom.in';
+  acctInput('email')!.value = 'asha@example.com';
   acctInput('password')!.value = 'a-good-password';
   acctButton('Sign in')!.fire('click');
   await settle();
 
-  assert.equal(acct.ids.get('#accountBtn')!.ownText, 'asha@hikom.in');
+  assert.equal(acct.ids.get('#accountBtn')!.ownText, 'asha@example.com');
   const listed = acct.ids.get('#jobList')!.children.map((c) => (c as StubEl).attrs.value);
   assert.deepEqual(listed, ['HI-20001', 'HI-15191'], 'their own first, then the examples');
 });
@@ -677,7 +677,7 @@ await t('New warns first, and does nothing when the warning is declined', async 
 
 await t('a session is kept, so a reload does not sign the estimator out', () => {
   const kept = (acct.ctx.localStorage as { getItem(k: string): string | null }).getItem(
-    'hikom.session',
+    'panelcalc.session',
   );
   assert.ok(kept, 'nothing was stored');
   assert.ok(kept!.includes('refresh-for-asha'), 'the refresh token has to be kept');

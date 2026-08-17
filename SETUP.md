@@ -22,7 +22,7 @@ hai — usme koi key kabhi nahi jayegi.
 1. [supabase.com](https://supabase.com) par account banaiye (GitHub se login ho
    jayega).
 2. **New project**:
-   - **Name** — `hikom-panel-suite`
+   - **Name** — `panel-suite`
    - **Database password** — strong rakhiye aur **kahin likh kar rakhiye**,
      dobara nahi dikhega
    - **Region** — **Mumbai / ap-south-1**, kyunki users India me hain
@@ -137,39 +137,45 @@ Brevo do kaam karega:
 1. **Supabase ki verification email bhejega** (SMTP ke through)
 2. **BOQ + drawing wali email bhejega** (API ke through, Phase 12 me)
 
-### B0. Hikom ka apna Brevo account — Admetics wale se alag
+### B0. Is project ka apna Brevo account
 
-**Hikom ke liye alag Brevo account banaya gaya hai** (17 August 2026), Admetics
-wale me domain jodne ke bajaye. Wajah quota hai: free plan ka **300 email/din
-poore account ka saanjha** hota hai, aur Admetics se marketing campaign jaati
-hai. Ek blast quota kha jaata, aur us din **koi estimator login hi nahi kar
-paata** — kyunki confirmation email hi nahi jaati. Login email kisi doosre
-business ki marketing par nahi tik sakti.
+**Is project ke liye alag Brevo account banaya gaya hai** (17 August 2026),
+kisi maujooda account me ek aur domain jodne ke bajaye. Wajah quota hai: free
+plan ka **300 email/din poore account ka saanjha** hota hai. Us account se agar
+marketing campaign bhi jaati ho, to ek blast quota kha jaata hai — aur us din
+**koi estimator login hi nahi kar paata**, kyunki confirmation email hi nahi
+jaati. **Login email kisi doosre kaam ki marketing par nahi tik sakti.**
 
-Register karne ke liye Brevo ko har account ka alag email chahiye — `info@hikom.in`.
+Brevo ko har account ke liye alag email chahiye, to register bhi alag pate se
+hua hai.
 
-### B1. Sender — pehle jaldi wala, phir sahi wala
+Is project ka domain **`panelsuite.online`** hai (Hostinger par, 17 August 2026
+liya gaya), aur sender **`info@panelsuite.online`**.
 
-Do raaste hain. **Dono kar lijiye**: pehla aaj kaam chala dega, doosra asli hai.
+### B1. Sender — seedha domain authenticate kijiye
 
-**Jaldi wala (2 minute) — single sender:**
+Brevo do tareeke deta hai. **Yahan domain wala hi chalega**, aur wajah jaan
+lena zaroori hai:
 
-1. **Settings → Senders, domains, IPs → Senders** tab → **Add a sender**
-2. Name `Hikom Panel Suite`, Email `info@hikom.in`
-3. Us pate par Brevo ek confirmation email bhejega — **link click kijiye**
-4. Bas. Ab **usi ek address** se email ja sakti hai
+> **Single sender verify karne ke liye us pate par email *aani* chahiye.**
+> Brevo us address par ek link bhejta hai. Domain naya hai aur uspar abhi koi
+> mailbox nahi hai, to wo email kahin nahi pahunchegi aur sender kabhi verify
+> nahi hoga. **Domain authentication me mailbox ki zaroorat hi nahi** — sirf DNS
+> chahiye, jo aapke paas hai. Isliye seedha yahi kijiye.
 
-**Asli wala (DNS, ghanton me) — poora domain:**
-
-1. **Domains** tab → **Add a new domain** → `hikom.in`
+1. **Settings → Senders, domains, IPs → Domains → Add a new domain**
+   → `panelsuite.online`
 2. Brevo teen TXT record dega — ek **verification code**, ek **DKIM**
    (`mail._domainkey`), ek **DMARC** (`_dmarc`)
-3. Inhe `hikom.in` ke DNS me daaliye. Domain Hostinger par hi ho to
-   **hPanel → Domains → DNS Zone**
-4. Brevo me wapas jaakar **Authenticate** dabaiye
+3. **hPanel → Domains → `panelsuite.online` → DNS / Nameservers** me teeno
+   daaliye
+4. Brevo me wapas **Authenticate** dabaiye. 15 minute se kuch ghante lagte hain
+5. Ho jaye to **Senders → Add a sender** me `info@panelsuite.online` daal
+   dijiye — authenticated domain ka koi bhi pata bina alag verification ke
+   chalta hai
 
-> **Domain kyun zaroori hai:** bina iske email spam me jaati hai ya bounce hoti
-> hai. Single sender se kaam chal jaata hai par deliverability kamzor rehti hai.
+> Domain authenticate hone tak signup ki email nahi jayegi. Wo intezaar DNS ka
+> hai, kisi setting ka nahi.
 
 ### B2. SMTP credentials — Supabase ke liye
 
@@ -185,9 +191,9 @@ Do raaste hain. **Dono kar lijiye**: pehla aaj kaam chala dega, doosra asli hai.
 Ab **Supabase → Project Settings → Authentication → SMTP Settings**:
 
 - **Enable Custom SMTP** — on
-- **Sender email** — `info@hikom.in` (wahi jo Brevo me verify kiya — dusra pata
+- **Sender email** — `info@panelsuite.online` (wahi jo Brevo me verify kiya — dusra pata
   daalne par Brevo bhejne se mana kar dega)
-- **Sender name** — `Hikom Panel Suite`
+- **Sender name** — `Panel Suite`
 - **Host** — `smtp-relay.brevo.com` · **Port** — `587`
 - **Username / Password** — upar wale
 
@@ -205,10 +211,11 @@ ki signup toota hua hai.
 
 | | |
 |---|---|
-| **Site URL** | `https://aqua-finch-257417.hostingersite.com` |
-| **Redirect URLs** | wahi, aur test ke liye `http://127.0.0.1:5173` bhi jod dijiye |
+| **Site URL** | abhi `https://aqua-finch-257417.hostingersite.com`, aur `panelsuite.online` site se judte hi **`https://panelsuite.online`** |
+| **Redirect URLs** | dono, aur test ke liye `http://127.0.0.1:5173` bhi jod dijiye |
 
-Asli domain lagne par Site URL wahin badalni hogi.
+Redirect URLs me ek se zyada rakh sakte hain, to temporary aur asli dono daal
+dijiye — phir domain badalne par link kabhi nahi tootega.
 
 ### B3. API key — app ki apni email ke liye
 
@@ -241,7 +248,7 @@ Us Sheet me **Extensions → Apps Script**, sab kuch hata kar ye paste kijiye:
 
 ```javascript
 /**
- * Hikom Panel Suite — Drive + Sheet endpoint.
+ * Panel Suite — Drive + Sheet endpoint.
  * Ye script aapke apne Google account me chalti hai.
  */
 var FOLDER_ID = 'YAHAN_FOLDER_ID_PASTE_KIJIYE';
@@ -313,7 +320,7 @@ Environment Variables** me:
 | `SUPABASE_URL` | `https://kyzexsarilxkzwkntode.supabase.co` | nahi | **ab — login isi se chalega** |
 | `SUPABASE_ANON_KEY` | anon / public key | nahi — browser me jaati hi hai | **ab** |
 | `BREVO_API_KEY` | Brevo API key | **haan — kisi ko mat dijiye** | Phase 12 |
-| `MAIL_FROM` | `info@hikom.in` | nahi | Phase 12 |
+| `MAIL_FROM` |  `info@panelsuite.online` | nahi | Phase 12 |
 
 Phir **Save and redeploy**.
 

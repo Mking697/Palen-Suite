@@ -1,7 +1,7 @@
-# Hikom Panel Suite
+# Panel Suite
 
-Live at **aqua-finch-257417.hostingersite.com** — a temporary domain, with no
-login on it yet. See `DEPLOY.md`.
+Live at **aqua-finch-257417.hostingersite.com**, a temporary domain, until
+**panelsuite.online** is pointed at it. See `DEPLOY.md`.
 
 PUF panel wall / ceiling layout and SHEET FABRICATION BOQ engine for cold room
 projects (freezer, chiller, ante, ambient).

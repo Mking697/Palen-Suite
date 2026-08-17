@@ -14,7 +14,7 @@
   'use strict';
 
   /** Where the session lives between page loads. */
-  const STORE = 'hikom.session';
+  const STORE = 'panelcalc.session';
 
   const state = {
     /** { url, anonKey } once /api/config answers, null when accounts are off */

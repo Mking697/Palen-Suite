@@ -278,7 +278,19 @@ different-sized rooms actually get drawn?
 
 **Live on Hostinger at `aqua-finch-257417.hostingersite.com`** since 17 August
 2026, deploying from GitHub `Mking697/Palen-Suite` (public, branch `main`,
-identity `Mking697`). Hostinger deploys what is on GitHub — so **push before
+identity `Mking697`).
+
+**`panelsuite.online` was bought for it** on 17 August (Hostinger, auto-renew
+on, expires 2027-08-17) and is not connected yet — its nameservers are still
+Hostinger's parking pair. Two things change when it is: the site's own address,
+and **Supabase's Site URL**, which decides where a signup confirmation link
+sends people. Put both addresses in Supabase's Redirect URLs and the link never
+breaks while the move happens.
+
+The product is named after it: **Panel Suite**, with the calculator as the
+screen inside it. There is no company name anywhere in the repo — that was
+removed on 17 August at the shop's request, so the tool can be sold or handed
+on without a rename. Hostinger deploys what is on GitHub — so **push before
 deploying**, or the site is built from the last push and not from this machine.
 
 Settings that work: framework *Other*, branch `main`, **Node 24.x**, root `./`,
