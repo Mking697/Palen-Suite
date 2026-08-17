@@ -63,16 +63,21 @@ export function wallElevations(room: RoomSpec): Drawing[] {
           text: `${wall.door.clearW} x ${wall.door.clearH}`,
           std: false,
         });
-        // the panel above a short door — legacy cuts one, this engine does not
-        // price it yet, so it is drawn and dimensioned but not claimed
+        // the stretch above the door. On a wall over DOOR_TOP_MIN_WALL_HEIGHT
+        // it is a panel of its own and the sizes come from `layoutRoom`; below
+        // it the door assembly is the full height of the wall and this is
+        // already inside it, so the drawing says so rather than implying a
+        // panel nobody makes
         if (top > 1) {
           d.cells.push({
             x0: s.a,
             y0: 0,
             x1: s.b,
             y1: top,
-            text: `TOP ${Math.round(s.width)} x ${Math.round(top)}`,
-            std: false,
+            text: L.doorTop
+              ? `DOOR TOP ${L.doorTop.w} x ${L.doorTop.l}`
+              : `${Math.round(s.width)} x ${Math.round(top)} in the door assembly`,
+            std: !!L.doorTop,
           });
         }
       } else {

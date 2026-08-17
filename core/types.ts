@@ -89,6 +89,14 @@ export interface DoorSpec {
   type?: string;
   /** leaf core: Puf, Rockwool or Honeycomb */
   core?: string;
+  /**
+   * Which hand the door is hung on — LHS or RHS, the abbreviations the sheets
+   * already use inside the label. Stated, it drives the label's own token and
+   * the swing on the plan; omitted, the label is printed exactly as
+   * transcribed, which is how the verified jobs stay untouched. See
+   * `doorLabel` in core/rules.ts.
+   */
+  hand?: string;
   /** skins on the door leaf; defaults to the room's */
   skin?: Partial<SkinPair>;
   /** clear opening */
@@ -172,6 +180,8 @@ export interface RoomLabels {
   cornerOuter: string;
   cornerInner: string;
   roof: string;
+  doorTopOuter: string;
+  doorTopInner: string;
 }
 
 /** One layer of a panelised floor panel. */

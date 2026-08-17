@@ -157,16 +157,39 @@ function roomFaces(room: RoomSpec): Face3[] {
 
       if (s.door && wall.door) {
         const d = wall.door;
-        // the module the door takes out of the run, then the leaf standing in it
+        /*
+         * The module the door takes out of the run, then the leaf standing in
+         * it. On a wall tall enough to carry one, the piece over the door is a
+         * panel of its own, so the module stops at the door head exactly where
+         * the BOQ stops it — the head height is read off `layoutRoom`, never
+         * worked out here.
+         */
+        const headZ = L.doorTop ? h - L.doorTop.l : h;
         out.push({
-          pts: upright(p0, p1, 0, h),
+          pts: upright(p0, p1, 0, headZ),
           kind: 'wall',
           room: room.name,
           wallId: wall.id,
           label: `${room.name} · wall ${wall.id} · door module`,
-          detail: [`${mm(s.width)} x ${mm(h)} mm`, `frame ${mm(d.frame)} mm each side`],
+          detail: [`${mm(s.width)} x ${mm(headZ)} mm`, `frame ${mm(d.frame)} mm each side`],
           std: false,
         });
+
+        if (L.doorTop) {
+          out.push({
+            pts: upright(p0, p1, headZ, h),
+            kind: 'wall',
+            room: room.name,
+            wallId: wall.id,
+            label: `${room.name} · wall ${wall.id} · door top`,
+            detail: [
+              `panel ${mm(L.doorTop.w)} x ${mm(L.doorTop.l)} mm`,
+              `blank ${mm(L.doorTop.w + 40)} x ${mm(L.doorTop.l)} mm`,
+              'over the door',
+            ],
+            std: true,
+          });
+        }
 
         const lift = d.liftAboveFloor ?? 0;
         const midFrom = (s.width - d.clearW) / 2;

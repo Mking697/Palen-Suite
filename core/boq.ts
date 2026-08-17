@@ -26,6 +26,7 @@ import {
   DEFAULT_LABELS,
   DEFAULT_SKIN,
   DOOR_BLANK_OFFSETS,
+  doorLabel,
   floorDesc,
   lCutDefault,
   skinLabel,
@@ -260,6 +261,47 @@ export function buildRoomBlock(
     });
   }
 
+  // ---- door top ----------------------------------------------------------
+  /*
+   * The piece over the door, which the shop makes as its own panel once the
+   * wall is over `DOOR_TOP_MIN_WALL_HEIGHT` (from the shop, 17 August 2026 —
+   * no sheet shows one, because all four are shorter than that). It is built
+   * like any other wall panel: blank +40, the inner skin set back by the L cut,
+   * one PPGI a side.
+   */
+  if (L.doorTop) {
+    const { w, l } = L.doorTop;
+    const topSkin = skinOf(room.walls.find((x) => x.door)?.skin, room);
+    const a = area(w, l, 1);
+    rows.push({
+      desc: lbl.doorTopOuter,
+      panelW: w,
+      panelL: l,
+      blankW: blank(w),
+      blankL: l,
+      panelQty: 1,
+      ppgiQty: 1,
+      thk: room.wallTh,
+      areaSqmt: a,
+      chemWeight: weight(a, room.wallTh, density),
+      skin: skinLabel(topSkin.outer),
+    });
+    // the rebate is at the top of the wall, which is this panel's own top
+    const topInnerL = lCut ? l - room.ceilTh : l;
+    rows.push({
+      desc: lbl.doorTopInner,
+      panelW: w,
+      panelL: topInnerL,
+      blankW: blank(w),
+      blankL: topInnerL,
+      ppgiQty: 1,
+      thk: room.wallTh,
+      areaSqmt: 0,
+      chemWeight: 0,
+      skin: skinLabel(topSkin.inner),
+    });
+  }
+
   // ---- door assembly -----------------------------------------------------
   const door = room.walls.find((w) => w.door)?.door;
   if (door) {
@@ -270,11 +312,20 @@ export function buildRoomBlock(
       );
     }
     const doorSkin = skinOf(door.skin, room);
-    const a = area(door.moduleW, H, 1);
+    /*
+     * How much of the wall the door assembly itself occupies. On a wall tall
+     * enough to carry a door top panel that is the clear opening and no more,
+     * because the piece above it is priced as its own panel — counting the
+     * assembly over the full height as well would charge that stretch of wall
+     * twice. Every source sheet is below the threshold, so this is the full
+     * height there, exactly as it prints.
+     */
+    const doorH = L.doorTop ? door.clearH : H;
+    const a = area(door.moduleW, doorH, 1);
     rows.push({
       desc: 'Inner Sheet',
       panelW: door.moduleW,
-      panelL: H,
+      panelL: doorH,
       blankW: door.clearW + off.innerW,
       blankL: door.clearH + off.innerH,
       panelQty: 1,
@@ -315,7 +366,7 @@ export function buildRoomBlock(
       skin: skinLabel(doorSkin.outer),
     });
     rows.push({
-      desc: door.label,
+      desc: doorLabel(door),
       panelW: door.clearW,
       panelL: door.clearH,
       thk: room.wallTh,

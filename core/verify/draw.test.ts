@@ -25,6 +25,7 @@ import {
   roomPlan,
   wallElevations,
 } from '../draw/index.ts';
+import { doorLabel } from '../rules.ts';
 import { toDxf } from '../draw/dxf.ts';
 import { toSvg } from '../draw/svg.ts';
 import type { RoomSpec } from '../types.ts';
@@ -315,6 +316,93 @@ t('the lift stands the door off the slab, and the leaf stays clear of it', () =>
   const bottom = Math.max(...doorLines.map((l) => Math.max(l.y1, l.y2)));
   // slab top is 2590 - 100 = 2490; a 150 lift puts the leaf at 2340
   assert.equal(bottom, room.ext.h - room.floor.th - door.liftAboveFloor!);
+});
+
+console.log('\n  the door top panel on a tall wall\n');
+
+/** HI-15279's freezer stood up past the door top threshold. */
+const tall = (): RoomSpec => {
+  const room = structuredClone(HI_15279.rooms[0]);
+  room.ext.h = 3600;
+  return room;
+};
+
+t('the elevation names the top as a panel only when one is made', () => {
+  const doorCell = (room: RoomSpec) => {
+    const wall = compileWalls(room.outline!).find((w) => w.door)!;
+    const d = wallElevations(room).find((x) => x.title.includes(`Wall ${wall.id} `))!;
+    return d.cells.map((c) => c.text);
+  };
+  assert.ok(doorCell(tall()).some((x) => x.startsWith('DOOR TOP 1180 x 1620')));
+  // short wall: the stretch is inside the door assembly, and says so
+  assert.ok(doorCell(HI_15279.rooms[0]).some((x) => x.includes('in the door assembly')));
+});
+
+t('the 3D door module stops at the head and the top panel carries the rest', () => {
+  const room = tall();
+  const L = layoutRoom(room);
+  const faces = model3d({ ...HI_15279, rooms: [room] }).faces.filter(
+    (f) => f.label.includes('door module') || f.label.includes('door top'),
+  );
+  assert.equal(faces.length, 2);
+
+  const zs = (label: string) => {
+    const f = faces.find((x) => x.label.includes(label))!;
+    return [Math.min(...f.pts.map((p) => p[2])), Math.max(...f.pts.map((p) => p[2]))];
+  };
+  const head = room.ext.h - L.doorTop!.l;
+  assert.deepEqual(zs('door module'), [0, head], 'the module stops at the head');
+  assert.deepEqual(zs('door top'), [head, room.ext.h], 'and the top panel goes on to the ceiling');
+});
+
+console.log('\n  door hand — LHS / RHS\n');
+
+/** The leaf of the swing: on a horizontal wall it is the line square to it. */
+const leafOf = (d: ReturnType<typeof roomPlan>) =>
+  d.lines.filter((l) => l.layer === 'DOOR' && l.x1 === l.x2 && !l.dash);
+
+/** The freezer with its door hung the stated way. */
+const handed = (hand?: string) => {
+  const room = structuredClone(HI_15191.rooms[0]);
+  const edge = room.outline!.edges![0];
+  edge.door = { ...edge.door!, hand };
+  return roomPlan(room);
+};
+
+t('no hand, no swing — the plan does not invent one', () => {
+  assert.equal(leafOf(handed(undefined)).length, 0);
+  // the opening itself is still drawn across the wall
+  assert.ok(handed(undefined).lines.some((l) => l.layer === 'DOOR'));
+});
+
+t('a stated hand draws the leaf open into the room, and the arc it sweeps', () => {
+  const d = handed('LHS');
+  const leaf = leafOf(d);
+  assert.equal(leaf.length, 1, 'one leaf');
+  // the door is on the top wall, so into the room is down the drawing
+  assert.ok(leaf[0].y2 > leaf[0].y1, 'the leaf swings inwards');
+  const door = HI_15191.rooms[0].walls.find((w) => w.door)!.door!;
+  assert.equal(Math.round(Math.abs(leaf[0].y2 - leaf[0].y1)), door.clearW, 'a leaf wide');
+  assert.equal(d.lines.filter((l) => l.layer === 'DOOR' && l.dash).length, 8, 'the arc');
+});
+
+t('LHS and RHS hinge at opposite jambs, one leaf width apart', () => {
+  const door = HI_15191.rooms[0].walls.find((w) => w.door)!.door!;
+  const lhs = leafOf(handed('LHS'))[0];
+  const rhs = leafOf(handed('RHS'))[0];
+  // reading the wall from outside the room, left is the way the edge runs
+  assert.equal(Math.round(rhs.x1 - lhs.x1), door.clearW);
+});
+
+t('the hand rewrites the label\'s own token, and only when it is stated', () => {
+  // the three verified jobs each write it differently, and none states a hand
+  assert.equal(doorLabel({ label: 'Flush Door (LHS) PP' }), 'Flush Door (LHS) PP');
+  assert.equal(doorLabel({ label: 'Flush Door  (LHS)SS/PP' }), 'Flush Door  (LHS)SS/PP');
+  // stated, the token follows it wherever it sits in the label
+  assert.equal(doorLabel({ label: 'Flush Door (LHS) PP', hand: 'RHS' }), 'Flush Door (RHS) PP');
+  assert.equal(doorLabel({ label: 'Flush Door PP (LHS)', hand: 'RHS' }), 'Flush Door PP (RHS)');
+  // and a label with no token to rewrite gets one
+  assert.equal(doorLabel({ label: 'Sliding Door', hand: 'LHS' }), 'Sliding Door (LHS)');
 });
 
 t('a room with a door gets a door elevation among its drawings', () => {

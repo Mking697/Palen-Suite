@@ -6,9 +6,11 @@
  * `layoutRoom`, never from here, so the plan and the BOQ cannot disagree.
  */
 
-import type { Mm, Pt, RoomSpec } from '../types.ts';
+import type { DoorSpec, Mm, Pt, RoomSpec } from '../types.ts';
 import { layoutRoom } from '../layout.ts';
 import { compileWalls } from '../plan.ts';
+import { doorLabel } from '../rules.ts';
+import { defaultFrame } from './door.ts';
 import { emptyDrawing, type Drawing } from './types.ts';
 import {
   add,
@@ -22,6 +24,55 @@ import {
   signedArea,
   wallSegments,
 } from './geom.ts';
+
+/** Segments a quarter circle is drawn in — the IR carries lines, not arcs. */
+const SWING_STEPS = 8;
+
+/**
+ * The door leaf standing open, and the quarter circle it sweeps.
+ *
+ * Which end it is hinged on comes off `DoorSpec.hand`, and nothing is drawn
+ * without one: a swing the job has not stated would be the drawing inventing a
+ * fact about the building.
+ *
+ * **The convention, which came from reading the drawings and not from the
+ * shop:** facing a wall from outside the room, the left hand points along that
+ * edge's own direction — the outlines run clockwise, so this holds on every
+ * wall — which puts an LHS hinge at the start of the opening and an RHS hinge
+ * at its end. The leaf is drawn swinging *into* the room. If the shop hangs
+ * them the other way, this function is the only place that changes.
+ */
+function drawSwing(d: Drawing, door: DoorSpec, p0: Pt, p1: Pt, u: Pt, n: Pt): void {
+  if (!door.hand) return;
+
+  // the leaf sits inside the module, a frame leg either side of it
+  const frame = defaultFrame(door);
+  const left = add(p0, scale(u, frame));
+  const right = add(p1, scale(u, -frame));
+  const hinge = door.hand === 'RHS' ? right : left;
+  const jamb = door.hand === 'RHS' ? left : right;
+
+  const r = length([jamb[0] - hinge[0], jamb[1] - hinge[1]]);
+  if (r < 1) return;
+
+  const open: Pt = [hinge[0] + n[0] * r, hinge[1] + n[1] * r];
+  d.lines.push({ x1: hinge[0], y1: hinge[1], x2: open[0], y2: open[1], layer: 'DOOR' });
+
+  const a0 = Math.atan2(jamb[1] - hinge[1], jamb[0] - hinge[0]);
+  const a1 = Math.atan2(open[1] - hinge[1], open[0] - hinge[0]);
+  // the short way round, so the arc is the quarter the leaf actually sweeps
+  let sweep = a1 - a0;
+  while (sweep > Math.PI) sweep -= 2 * Math.PI;
+  while (sweep < -Math.PI) sweep += 2 * Math.PI;
+
+  let prev: Pt = jamb;
+  for (let k = 1; k <= SWING_STEPS; k++) {
+    const ang = a0 + (sweep * k) / SWING_STEPS;
+    const q: Pt = [hinge[0] + Math.cos(ang) * r, hinge[1] + Math.sin(ang) * r];
+    d.lines.push({ x1: prev[0], y1: prev[1], x2: q[0], y2: q[1], layer: 'DOOR', dash: true });
+    prev = q;
+  }
+}
 
 /**
  * @param origin where the room sits on the job plan. A room drawn on its own
@@ -145,12 +196,13 @@ export function roomPlan(room: RoomSpec, origin: Pt = [0, 0]): Drawing {
 
       if (s.door && wall.door) {
         d.lines.push({ x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1], layer: 'DOOR' });
+        drawSwing(d, wall.door, p0, p1, u, n);
         const mid: Pt = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2];
         const rot = horizontal ? 0 : 90;
         d.notes.push({
           x: mid[0] + n[0] * tick * 1.7,
           y: mid[1] + n[1] * tick * 1.7,
-          text: wall.door.label,
+          text: doorLabel(wall.door),
           rot,
           layer: 'DOOR',
           scale: 0.8,

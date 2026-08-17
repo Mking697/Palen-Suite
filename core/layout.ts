@@ -5,7 +5,7 @@
 
 import type { Mm, RoomSpec, EndKind, WallSpec } from './types.ts';
 import { splitRun, type SplitOptions } from './split.ts';
-import { lCutDefault } from './rules.ts';
+import { hasDoorTop, lCutDefault } from './rules.ts';
 
 export interface WallPanelRun {
   wallId: string;
@@ -28,6 +28,17 @@ export interface RoomLayout {
   cornerCount: number;
   ceiling: { panelLength: Mm; widths: Mm[]; w: Mm; l: Mm };
   floor: { w: Mm; l: Mm; panelLength: Mm; widths: Mm[] | null };
+  /**
+   * The panel over the door, on a wall tall enough for the shop to make one —
+   * see `DOOR_TOP_MIN_WALL_HEIGHT`. Null on a shorter wall, where the door
+   * assembly is the full height of the wall and there is no separate piece.
+   *
+   * `w` is the door module and `l` the gap left above the clear opening, so the
+   * door and this panel together fill the module top to bottom and nothing in
+   * that stretch of wall is counted twice. One panel: no door module wider than
+   * the panel module has come up, so nothing is split here.
+   */
+  doorTop: { w: Mm; l: Mm } | null;
 }
 
 /**
@@ -131,6 +142,17 @@ export function layoutRoom(room: RoomSpec): RoomLayout {
   const floorSplitAlong = floorAxis === 'w' ? floorW : floorL;
   const floorPanelLength = floorAxis === 'w' ? floorL : floorW;
 
+  /*
+   * The piece over the door, on a wall tall enough to be built that way. The
+   * BOQ prices one door per room — the first wall that carries one — so the
+   * top panel is that door's, and it is the same door the assembly rows use.
+   */
+  const door = room.walls.find((w) => w.door)?.door;
+  const doorTop =
+    door && hasDoorTop(room.ext.h)
+      ? { w: door.moduleW, l: Math.round(room.ext.h - door.clearH) }
+      : null;
+
   return {
     wallRuns,
     wallWidths: room.walls
@@ -155,5 +177,6 @@ export function layoutRoom(room: RoomSpec): RoomLayout {
           ? splitRun(floorSplitAlong, { ...split, module: room.floor.module ?? 1220 })
           : null,
     },
+    doorTop,
   };
 }

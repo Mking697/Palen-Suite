@@ -76,7 +76,26 @@ export const DEFAULT_LABELS = {
   cornerOuter: 'Corner Panel (Outer)',
   cornerInner: 'Corner Panel (Inner)',
   roof: 'Roof Panel',
+  doorTopOuter: 'Door Top Panel (Outer)',
+  doorTopInner: 'Door Top Panel (Inner)',
 } as const;
+
+/**
+ * A door is made the full height of its wall until the wall is taller than
+ * this, and then the piece over the door is a panel of its own.
+ *
+ * From the shop, 17 August 2026 — **not** read off a sheet. All four source
+ * sheets are 2590 or 2745 high, so every one of them is below the threshold and
+ * none of them prints a door top row; the rule cannot move a verified figure,
+ * and it cannot be checked against one either. The legacy calculator makes a
+ * top panel whenever the door is shorter than the wall, with no threshold at
+ * all — that is a different rule and it is not the one built here.
+ */
+export const DOOR_TOP_MIN_WALL_HEIGHT: Mm = 3050;
+
+/** Whether the piece over a door is made as its own panel. */
+export const hasDoorTop = (wallHeight: Mm): boolean =>
+  wallHeight > DOOR_TOP_MIN_WALL_HEIGHT;
 
 /**
  * Sheet materials and the thicknesses each is stocked in, from the legacy
@@ -176,6 +195,28 @@ export const DOOR_TYPES: Record<string, { label: string; thickness: Mm }> = {
 
 /** Door leaf core. Legacy offers these three. */
 export const DOOR_CORES = ['Puf', 'Rockwool', 'Honeycomb'] as const;
+
+/** Which hand a door is hung on, as the sheets abbreviate it. */
+export const DOOR_HANDS = ['LHS', 'RHS'] as const;
+export type DoorHand = (typeof DOOR_HANDS)[number];
+
+/**
+ * The printed door label, with its hand token in step with `DoorSpec.hand`.
+ *
+ * The label is transcribed off the sheet and the verified jobs write it three
+ * different ways — `Flush Door (LHS) PP`, `Flush Door PP (LHS)`,
+ * `Flush Door  (LHS)SS/PP`. None of them states a hand, so none of them is
+ * touched here: the token is only rewritten for a door that says which way it
+ * is hung, and only appended when there is no token to rewrite. A transcribed
+ * label stays exactly as transcribed.
+ */
+export function doorLabel(door: { label: string; hand?: string }): string {
+  if (!door.hand) return door.label;
+  const token = /\((?:LHS|RHS)\)/;
+  return token.test(door.label)
+    ? door.label.replace(token, `(${door.hand})`)
+    : `${door.label} (${door.hand})`;
+}
 
 /**
  * The flashing types the shop works in, taken from the legacy calculator's own

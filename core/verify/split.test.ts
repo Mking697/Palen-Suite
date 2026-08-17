@@ -14,8 +14,9 @@ import { HI_15191 } from '../jobs/hi-15191.ts';
 import { HI_15223 } from '../jobs/hi-15223.ts';
 import { HI_15279 } from '../jobs/hi-15279.ts';
 import { round2 } from '../format.ts';
-import { floorCoreTh, lCutDefault } from '../rules.ts';
-import { roomFlashing } from '../flashing.ts';
+import { DOOR_TOP_MIN_WALL_HEIGHT, floorCoreTh, lCutDefault } from '../rules.ts';
+import { junctions, roomFlashing } from '../flashing.ts';
+import { chain, notched, toChain } from '../plan.ts';
 
 let passed = 0;
 function t(name: string, fn: () => void) {
@@ -263,6 +264,67 @@ t('a floor that states its build-up prints every layer of it', () => {
   assert.equal(printed.desc, 'Bottom PPGI +Puf + 12 mm Ply + 2mm AL. CHQ ON Top = 100mm');
 });
 
+console.log('\n  the door top panel — the shop\'s rule, above 3050 only\n');
+
+/** The same freezer, stood up to the given wall height. */
+const atHeight = (h: number) => {
+  const room = structuredClone(freezer79); // 100mm walls, 1180 door, 1980 clear
+  room.ext.h = h;
+  return room;
+};
+
+t('no door top up to 3050, and one above it', () => {
+  assert.equal(layoutRoom(atHeight(2745)).doorTop, null, 'every verified sheet is here');
+  assert.equal(layoutRoom(atHeight(DOOR_TOP_MIN_WALL_HEIGHT)).doorTop, null, 'not at 3050');
+  assert.deepEqual(layoutRoom(atHeight(3600)).doorTop, { w: 1180, l: 1620 }, '3600 - 1980');
+});
+
+t('below the threshold the door assembly is still the full wall height', () => {
+  const rows = buildRoomBlock(atHeight(2745), 40).rows;
+  assert.equal(rows.some((r) => r.desc.startsWith('Door Top')), false);
+  assert.equal(rows.find((r) => r.desc === 'Inner Sheet')!.panelL, 2745);
+});
+
+t('above it the top is its own panel, built like any other wall panel', () => {
+  const room = atHeight(3600);
+  const rows = buildRoomBlock(room, 40).rows;
+
+  const outer = rows.find((r) => r.desc === 'Door Top Panel (Outer)')!;
+  assert.deepEqual(
+    [outer.panelW, outer.panelL, outer.blankW, outer.blankL, outer.panelQty, outer.ppgiQty],
+    [1180, 1620, 1220, 1620, 1, 1],
+    'blank is panel + 40, one PPGI',
+  );
+  assert.equal(round2(outer.areaSqmt), 1.91);
+  assert.equal(round2(outer.chemWeight), 7.65);
+
+  // the rebate is at the top of the wall, so the inner skin is a ceiling short
+  const inner = rows.find((r) => r.desc === 'Door Top Panel (Inner)')!;
+  assert.equal(inner.panelL, 1620 - room.ceilTh);
+  assert.equal(inner.areaSqmt, 0, 'the outer row owns the foam');
+});
+
+t('the door top and the door assembly fill the module exactly once', () => {
+  const room = atHeight(3600);
+  const rows = buildRoomBlock(room, 40).rows;
+  const door = room.walls.find((w) => w.door)!.door!;
+
+  // the assembly stops at the head, and the top panel carries the rest
+  assert.equal(rows.find((r) => r.desc === 'Inner Sheet')!.panelL, door.clearH);
+  const inThatStretch =
+    rows.find((r) => r.desc === 'Inner Sheet')!.areaSqmt +
+    rows.find((r) => r.desc === 'Door Top Panel (Outer)')!.areaSqmt;
+  // 1180 x 3600 of wall, counted once
+  assert.equal(round2(inThatStretch), round2((door.moduleW / 1000) * (room.ext.h / 1000)));
+});
+
+t('the L cut off leaves the door top inner as long as its outer', () => {
+  const room = atHeight(3600);
+  room.lCut = false;
+  const rows = buildRoomBlock(room, 40).rows;
+  assert.equal(rows.find((r) => r.desc === 'Door Top Panel (Inner)')!.panelL, 1620);
+});
+
 console.log('\n  flashing — the shop\'s rule, not yet a sheet\'s\n');
 
 t('three flashings on every room, each running the whole perimeter', () => {
@@ -297,6 +359,61 @@ t('a butt joint adds one wall height of inner and one of outer, and no U', () =>
   assert.equal(gained('inner'), butted.ext.h, 'inner gains a wall height');
   assert.equal(gained('outer'), butted.ext.h, 'outer gains a wall height');
   assert.equal(gained('u'), 0, 'the U flashing is unchanged');
+});
+
+/** How much a flashing runs beyond the room's own perimeter, in millimetres. */
+const beyondPerimeter = (f: ReturnType<typeof roomFlashing>, kind: string, room: typeof freezer79) =>
+  Math.round(
+    (f.rows.find((r) => r.kind === kind)!.rmtr - (2 * (room.ext.w + room.ext.l)) / 1000) * 1000,
+  );
+
+t('a partition leaves two open ends, one at each of its corners', () => {
+  // the chiller hands its fourth side to the freezer, so two of its wall ends
+  // stop against a wall it does not own
+  assert.deepEqual(junctions(chiller79), { butts: 0, opens: 2 });
+  // the freezer owns all four of its walls, so every end is a corner
+  assert.deepEqual(junctions(freezer79), { butts: 0, opens: 0 });
+});
+
+t('a plain rectangle closes an open end with inner flashing only', () => {
+  const f = roomFlashing(chiller79); // 7380 x 3400 x 2745, one partition
+  const H = chiller79.ext.h;
+  assert.equal(beyondPerimeter(f, 'inner', chiller79), 2 * H, 'one room height per open end');
+  assert.equal(beyondPerimeter(f, 'outer', chiller79), 0, 'a rectangle takes no outer here');
+  assert.equal(beyondPerimeter(f, 'u', chiller79), 0, 'the U flashing is unchanged');
+});
+
+t('a shaped room closes its open ends on both faces', () => {
+  const shaped = structuredClone(chiller79);
+  // same bounding box, so the perimeter is untouched and only the junctions
+  // differ: a notch out of one corner, and the top wall the neighbour's
+  shaped.outline = notched(
+    shaped.ext.w,
+    shaped.ext.l,
+    { corner: 'SE', w: 1600, d: 305, through: 'next' },
+    { 0: { shared: true } },
+  );
+  assert.deepEqual(junctions(shaped), { butts: 1, opens: 2 });
+
+  const f = roomFlashing(shaped);
+  const H = shaped.ext.h;
+  // the butt joint adds a height to both faces, and so does each open end
+  assert.equal(beyondPerimeter(f, 'inner', shaped), 3 * H);
+  assert.equal(beyondPerimeter(f, 'outer', shaped), 3 * H, 'a shaped room takes outer too');
+  assert.equal(beyondPerimeter(f, 'u', shaped), 0);
+});
+
+t('the same room typed two ways gets the same flashing', () => {
+  // the shape is read off the outline, never off the mode the form was in, so
+  // a rectangle walked out wall by wall is still a rectangle
+  const walked = structuredClone(chiller79);
+  walked.outline = chain(
+    toChain(chiller79.outline!.points),
+    chiller79.outline!.edges,
+    chiller79.outline!.vertices,
+  );
+  assert.equal(walked.outline.points.length, 4);
+  assert.equal(roomFlashing(walked).totalRmtr, roomFlashing(chiller79).totalRmtr);
 });
 
 t('extra flashing is printed as typed, and marked apart from the rule rows', () => {

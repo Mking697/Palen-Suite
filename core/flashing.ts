@@ -3,12 +3,22 @@
  * from the panels, bought by the running metre, so it is totalled on its own
  * and never joins the panel counts.
  *
- * Every rule here came from the shop on 14 August 2026, not off a sheet:
+ * Every rule here came from the shop, not off a sheet. 14 August 2026:
  *
  *   running metre = both widths + both lengths = 2 x (extW + extL)
  *   width         = wall thickness + 2
  *   three types are fitted on every job: inner, outer and U
  *   a butt joint adds one wall height of inner and one of outer, at that joint
+ *
+ * 17 August 2026 — an **open** wall end, where a room hands its wall to the
+ * room next door, is closed the same way, vertically, one room height per end:
+ *
+ *   a plain rectangular room  -> inner only
+ *   a shaped room (L, U, stepped, anything past four walls) -> inner and outer
+ *
+ * The shape is read off the outline rather than off the form, because the mode
+ * a room was typed in is a fact about the screen and not about the job — the
+ * same room entered two ways must not produce two different sheets.
  *
  * **Not yet verified against a printed sheet.** `README.md` records an earlier
  * finding that perimeter-based estimates land both above and below HI-15191's
@@ -69,33 +79,67 @@ const LABELS: Record<'inner' | 'outer' | 'u', string> = {
 };
 
 /**
- * Butt joints in a room: junctions where two walls meet with no corner panel,
- * so one runs through and the other butts into its face.
+ * The two kinds of wall end that need closing with a strip rather than a panel.
  *
- * `compileWalls` can never put a corner and a butt at the same end, which is
- * the shop's rule — see `core/verify/plan.test.ts`. So counting butt ends
- * counts junctions, with no risk of double counting a corner.
+ * **butts** — two walls meet with no corner panel, so one runs through and the
+ * other butts into its face.
+ *
+ * **opens** — a wall simply stops: no corner panel and no butt joint. This is
+ * the junction where a room meets the room next door. `compileWalls` reaches it
+ * only at the ends of an edge the room has handed to a neighbour, because every
+ * junction between two walls the room owns takes either the corner branch or
+ * the butt one — the shop's rule that the two never share an end, held by
+ * `core/verify/plan.test.ts`. So one partition always gives exactly two open
+ * ends, one at each of its corners.
+ *
+ * An open end is counted off the outline rather than off the compiled walls,
+ * because a wall carries no flag for one: at a butt junction the wall that runs
+ * *through* has neither a corner nor a butt at that end either, and it is not
+ * open — the joint is closed by the wall butting into it.
  */
-export function buttJoints(room: RoomSpec): number {
-  if (!room.outline) return 0;
-  return compileWalls(room.outline).reduce(
+export function junctions(room: RoomSpec): { butts: number; opens: number } {
+  const outline = room.outline;
+  if (!outline) return { butts: 0, opens: 0 };
+
+  const butts = compileWalls(outline).reduce(
     (n, w) => n + (w.buttStart ? 1 : 0) + (w.buttEnd ? 1 : 0),
     0,
   );
+
+  const n = outline.points.length;
+  const owned = (i: number) => !outline.edges?.[(i + n) % n]?.shared;
+
+  let opens = 0;
+  for (let v = 0; v < n; v++) {
+    // the edge ending at this vertex, and the one starting from it
+    const before = owned((v - 1 + n) % n);
+    const after = owned(v);
+    // one of them is this room's wall and the other is the neighbour's, so
+    // this room's wall stops here against a wall it does not own
+    if (before !== after) opens++;
+  }
+
+  return { butts, opens };
 }
 
 export function roomFlashing(room: RoomSpec): RoomFlashing {
   const skin: SkinSpec = room.flashingSkin ?? DEFAULT_SKIN;
   const perimeter = 2 * (room.ext.w + room.ext.l);
-  const butts = buttJoints(room);
+  const { butts, opens } = junctions(room);
   // a butt joint is closed top to bottom, inside and out
   const extra = butts * room.ext.h;
+  // and so is an open end, but only a shaped room is closed on both faces
+  const shaped = (room.outline?.points.length ?? 4) > 4;
+  const vertical = opens * room.ext.h;
   const width = room.wallTh + 2;
 
   const m = (mm: Mm) => mm / 1000;
   const perimeterNote = `2 x (${room.ext.w} + ${room.ext.l}) mm`;
   const buttNote = butts
     ? ` + ${butts} butt joint${butts > 1 ? 's' : ''} x ${room.ext.h} mm`
+    : '';
+  const openNote = opens
+    ? ` + ${opens} open end${opens > 1 ? 's' : ''} x ${room.ext.h} mm`
     : '';
 
   const row = (
@@ -117,8 +161,18 @@ export function roomFlashing(room: RoomSpec): RoomFlashing {
   });
 
   const rows: FlashingRow[] = [
-    row('inner', FLASHING_PROFILES.inner, perimeter + extra, perimeterNote + buttNote),
-    row('outer', FLASHING_PROFILES.outer, perimeter + extra, perimeterNote + buttNote),
+    row(
+      'inner',
+      FLASHING_PROFILES.inner,
+      perimeter + extra + vertical,
+      perimeterNote + buttNote + openNote,
+    ),
+    row(
+      'outer',
+      FLASHING_PROFILES.outer,
+      perimeter + extra + (shaped ? vertical : 0),
+      perimeterNote + buttNote + (shaped ? openNote : ''),
+    ),
     // the only profile that carries the panel thickness in its own section
     row('u', uFlashingProfile(room.wallTh), perimeter, perimeterNote),
   ];
