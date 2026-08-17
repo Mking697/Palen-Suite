@@ -285,6 +285,28 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
 
   try {
+    /*
+     * What the browser needs to reach Supabase, from the environment rather
+     * than from the repo — this repository is public and nothing that looks
+     * like a key belongs in it.
+     *
+     * The anon key is *meant* to be here: it identifies the project, not a
+     * person, and row level security is what protects the data. The
+     * service_role key would bypass all of that and must never be read here,
+     * or set on this host at all.
+     *
+     * Both absent, the calculator still works and simply cannot sign anyone
+     * in — the engine is the product and an account is a convenience on top.
+     */
+    if (path === '/api/config') {
+      const url = process.env.SUPABASE_URL ?? '';
+      const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
+      return json(res, 200, {
+        supabase: url && anonKey ? { url, anonKey } : null,
+        accountsReason: url && anonKey ? '' : 'SUPABASE_URL / SUPABASE_ANON_KEY are not set',
+      });
+    }
+
     // the pick lists the form offers, straight from core/rules.ts
     if (path === '/api/rules') {
       return json(res, 200, {

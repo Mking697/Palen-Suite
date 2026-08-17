@@ -17,6 +17,7 @@ tab chahiye jab kisi purane job ko verify karna ho.
 | L cut | [L cut](#l-cut) |
 | Floor ki layers | [Floor ki build-up](#floor-ki-build-up) |
 | Corner ya butt joint | [Corner ya butt joint](#corner-ya-butt-joint--dono-ek-jagah-nahi) |
+| Account, aur job save karna | [Apna account, apne job](#apna-account-apne-job) |
 | Door kis taraf khulega | [Door ka hand](#door-ka-hand--lhs--rhs) |
 | Door ke upar ka panel | [Door top panel](#door-top-panel--3050-se-oonchi-wall-par) |
 | Flashing, aur apni flashing jodna | [Flashing](#flashing) |
@@ -54,6 +55,36 @@ ki zaroorat nahi.
 | **Door** | Us wall par door, clear opening ke saath |
 | **Door opens from** | LHS ya RHS — door kis taraf khulega |
 | **+ Room** | Ek aur room jodo |
+
+### Apna account, apne job
+
+Screen ke upar dayein kone me **Sign in** hai. Account banane ke liye apna email
+aur password daal kar **Sign up** dabaiye — email par ek link aayega, **usse
+click karne ke baad hi** login hoga. Phir **Sign in**.
+
+Login karne ke baad **File** menu kaam karta hai:
+
+| | |
+|---|---|
+| **New** | khaali job — pehle poochega, kyunki screen par jo hai wo chala jayega |
+| **Open…** | job number poochega aur wo job khol dega |
+| **Save** | isi job number par save — dobara save karne par purana badal jaata hai |
+| **Save As…** | naya job number poochega aur uspar save karega |
+
+**Aapka data sirf aapka hai.** Ye app ka vaada nahi, **database khud rokta
+hai** — doosre account se aapke job na dikhte hain, na khulte hain, chahe koi
+job number sahi hi kyun na likh de. Do alag estimator apne-apne HI-15191 rakh
+sakte hain, dono alag.
+
+Save **sirf job ka input** karta hai — jo aapne form me bhara. **BOQ save nahi
+hoti**, wo hamesha nayi banti hai. Wajah: bani hui BOQ ko save kar dein to ek
+din purana job aur naya job do alag baat kahenge.
+
+**Bina login ke bhi calculator poora chalta hai** — drawing, BOQ, DXF, print,
+sab. Sirf Save aur Open ke liye account chahiye.
+
+Upar wale **Open job no** box me pehle **aapke apne save kiye job** dhoonde
+jaate hain, phir verified example.
 
 Screen ke upar do cheezein aur hain: **Open job no** — job number type karke
 Enter dabate hi wo job form me khul jaata hai (box par click karo to jitne job

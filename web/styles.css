@@ -241,6 +241,33 @@ table.flash .fl-typed td:first-child { border-left: 2px solid var(--dev); paddin
 .hint3d { font-size: 10.5px; color: var(--ink-3); }
 .btn.ghost { background: var(--card); color: var(--ink-2); }
 
+/* ---------- header menus (File, account) ---------- */
+
+/* details/summary, so a menu opens and closes itself with no script */
+.menu { position: relative; }
+.menu > summary { list-style: none; user-select: none; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu-items {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
+  min-width: 190px; padding: 6px;
+  background: var(--card); border: 1px solid var(--line-2);
+  border-radius: 10px; box-shadow: 0 10px 28px rgb(0 0 0 / 18%);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.menu-items > button {
+  text-align: left; font: inherit; font-size: 13px; color: var(--ink);
+  background: none; border: 0; border-radius: 7px; padding: 8px 10px; cursor: pointer;
+}
+.menu-items > button:hover { background: var(--bg); }
+
+.menu-items.account { min-width: 250px; gap: 8px; padding: 12px; }
+.menu-items.account input {
+  font: inherit; font-size: 13px; padding: 8px 10px;
+  border: 1px solid var(--line-2); border-radius: 8px; background: var(--card); color: var(--ink);
+}
+.menu-items.account .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.menu-items.account .hint { margin: 0; }
+
 /* the picked panel's own figures, read straight off the model */
 .pick3d {
   display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline;

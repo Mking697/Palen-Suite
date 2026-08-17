@@ -22,6 +22,18 @@
       </div>
 
       <div class="top-actions">
+        <!-- File menu. Plain details/summary, so it opens and closes itself
+             and needs no script to be a menu. -->
+        <details class="menu" id="fileMenu">
+          <summary class="btn">File</summary>
+          <div class="menu-items">
+            <button type="button" data-file="new">New</button>
+            <button type="button" data-file="open">Open…</button>
+            <button type="button" data-file="save">Save</button>
+            <button type="button" data-file="saveAs">Save As…</button>
+          </div>
+        </details>
+
         <!-- type a job number, or click for the list. The datalist is the
              browser's own, so this needs no library and no dropdown of ours. -->
         <input
@@ -37,6 +49,11 @@
         <!-- a new tab, so a job half typed into the form is not lost -->
         <a class="btn" id="guideBtn" href="/guide" target="_blank" rel="noopener">Guide</a>
         <button class="btn" id="printBtn">Print</button>
+
+        <details class="menu" id="accountMenu">
+          <summary class="btn" id="accountBtn">Sign in</summary>
+          <div class="menu-items account" id="accountPanel"></div>
+        </details>
       </div>
     </header>
 
@@ -47,6 +64,9 @@
       </main>
     </div>
 
+    <!-- auth.js first: it puts `Auth` on window, and app.js uses it. Both are
+         plain scripts so core/verify/web.test.ts can run them together. -->
+    <script src="/auth.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

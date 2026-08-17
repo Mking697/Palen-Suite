@@ -68,6 +68,19 @@ npm run dev                    # http://127.0.0.1:5173
 node server/serve.ts --local   # the same thing
 ```
 
+**`npm run dev` runs the source; `node app.cjs` runs `dist/` when it exists.**
+A `dist/` left over from an earlier `npm run build` will serve that older code
+and nothing will say so — a route added since will simply 404. Run
+`npm run build` again, or delete `dist/`, before reading anything into what a
+local `app.cjs` does. On a host this cannot happen: every deploy builds fresh.
+
+Accounts need two environment variables. Node reads a `.env` itself, with no
+package:
+
+```bash
+node --env-file=.env app.cjs   # SUPABASE_URL, SUPABASE_ANON_KEY — see SETUP.md
+```
+
 `npm run dev` passes `--local`, which is what keeps the desk server on
 localhost. Started any other way it binds every interface — see the binding
 table below, and the two failed deploys that put it that way round.
@@ -87,6 +100,7 @@ Routes:
 | `/api/guide` | `GUIDE.md` itself, as text, which is what that page renders |
 | `POST /api/render` | **the calculator's one call** — a job in; its BOQ, the flashing table, the one-canvas drawing sheet with its clickable cells, every individual drawing, and the 3D model out |
 | `POST /api/dxf` | one drawing of an unsaved job as DXF; `{ sheet: true }` for the whole sheet |
+| `/api/config` | the Supabase project the browser should sign in against, **from the environment** — `null` when it is not configured, and then the calculator works with no accounts |
 | `/api/rules` | the shop's pick lists — sheet materials, door types, cores and hands, floor build-up, flashing types, and the two thresholds the form has to show: the L cut and the door top |
 | `/api/jobs` | registered jobs and their rooms, for the header's job search |
 | `/api/boq?job=HI-15191` | generated BOQ blocks + totals |
@@ -216,8 +230,8 @@ Then in hPanel:
    | Build command | `npm run build` |
    | Start command | `npm start` |
    | **Entry point** | **`app.cjs` — not `app.js`. This is the one that mattered; see below** |
-   | Output directory | *empty* — `app.js` finds `dist/` itself, so the host does not need to know about it |
-   | Environment | `HOST=0.0.0.0` |
+   | Output directory | *empty* — the entry finds `dist/` itself, so the host does not need to know about it |
+   | Environment | `HOST=0.0.0.0`, and for accounts `SUPABASE_URL` + `SUPABASE_ANON_KEY` — see `SETUP.md` |
 
    Do not set `PORT` — the host supplies it, and overriding it is the usual
    cause of a 502. `NODE_OPTIONS=--experimental-strip-types` is only for running

@@ -118,8 +118,15 @@ hai, jo theek bhi hai.
 - **Enable Email provider** — on
 - **Confirm email** — **on** (aapne yahi maanga hai: verify karke hi login)
 
-Abhi Supabase apne default email se bhejta hai, jo **ghante me sirf 3–4 email**
-bhejta hai aur production ke liye nahi hai. Isliye ab Brevo.
+> **Signup test karne se pehle Brevo SMTP laga lijiye (Part B).** Supabase ka
+> apna default mailer **ghante me sirf 3–4 email** bhejta hai aur production ke
+> liye hai hi nahi — bina Brevo ke signup to ho jayega, par **confirmation email
+> shayad kabhi na aaye**, aur bina us link ke login nahi hoga. Ye "kuch hua hi
+> nahi" wali soorat hai; asli wajah yahi hoti hai.
+
+Ek aur baat jo waqt bachayegi: Supabase **nakli domain reject karta hai**.
+`@example.com` jaise pate par `email_address_invalid` milega. Test ke liye apna
+asli email hi use kijiye.
 
 ---
 
@@ -263,15 +270,19 @@ profile me daalna hai.
 Sab kuch ho jaye to **hPanel → Deployments → Settings and redeploy →
 Environment Variables** me:
 
-| Key | Value | Secret? |
-|---|---|---|
-| `HOST` | `0.0.0.0` | nahi |
-| `SUPABASE_URL` | aapka Project URL | nahi |
-| `SUPABASE_ANON_KEY` | anon / public key | nahi — browser me jaati hi hai |
-| `BREVO_API_KEY` | Brevo API key | **haan — kisi ko mat dijiye** |
-| `MAIL_FROM` | `info@hikom.in` | nahi |
+| Key | Value | Secret? | Kab se chahiye |
+|---|---|---|---|
+| `HOST` | `0.0.0.0` | nahi | pehle se laga hai |
+| `SUPABASE_URL` | `https://kyzexsarilxkzwkntode.supabase.co` | nahi | **ab — login isi se chalega** |
+| `SUPABASE_ANON_KEY` | anon / public key | nahi — browser me jaati hi hai | **ab** |
+| `BREVO_API_KEY` | Brevo API key | **haan — kisi ko mat dijiye** | Phase 12 |
+| `MAIL_FROM` | `info@hikom.in` | nahi | Phase 12 |
 
 Phir **Save and redeploy**.
+
+Ye do na daale jaayein to bhi calculator poora chalta hai — bas account panel
+keh dega ki accounts set nahi hain, aur Save kaam nahi karega. Engine hi asli
+cheez hai; account uske upar ki suvidha hai, uske aage ka darwaza nahi.
 
 Local par test karna ho to repo me `.env` file bana lijiye (wo gitignored hai)
 aur `node --env-file=.env app.cjs` chalaiye — Node khud padh leta hai, koi
@@ -279,17 +290,17 @@ package nahi chahiye.
 
 ---
 
-## E — Mujhe kya chahiye, kaam shuru karne ke liye
+## E — Ab kya bacha hai
 
-**Phase 9 (login) ke liye bas ye do**, aur dono secret nahi hain:
+**Login ban chuka hai** aur Supabase se juda hua hai. Ab kram se ye:
 
-1. **Supabase Project URL**
-2. **Supabase anon key**
+1. **Hostinger me `SUPABASE_URL` aur `SUPABASE_ANON_KEY` daal kar redeploy** —
+   iske bina live site par account panel kahega ki accounts set nahi hain.
+2. **Brevo SMTP laga dijiye** (Part B) — iske bina signup ki confirmation email
+   shayad na aaye, aur bina us link ke login nahi hoga.
+3. Phir apne email se **sign up → email me link → sign in → Save**. Ek job save
+   karke doosre account se dekhiye — dikhna nahi chahiye. Wahi asli test hai.
 
-Ya to mujhe bata dijiye, ya seedha Hostinger ke environment me daal dijiye aur
-mujhe bas ye keh dijiye ki daal diye — main code aise likhunga ki wo environment
-se hi uthaye.
-
-Baaki (Brevo API key, Apps Script URL) tab chahiye jab Phase 11–12 par aayenge.
-**Brevo ka domain verification aaj hi shuru kar dijiye** — DNS failne me ghante
-lag jaate hain, aur wo intezaar baaki kaam ke saath-saath ho jayega.
+Baaki (Brevo API key, Apps Script URL) Phase 11–12 ke waqt. **Brevo ka domain
+verification aaj hi shuru kar dijiye** — DNS failne me ghante lagte hain, aur wo
+intezaar baaki kaam ke saath chal jayega.

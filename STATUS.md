@@ -25,7 +25,8 @@ uses.
 | Door (`core/boq.ts`, `core/draw/`) | hand LHS/RHS drives the printed label and the plan's swing; over a 3050 wall the piece above the door is its own panel |
 | Calculator (`server/`, `web/`) | multi-room, connected rooms, rooms of any right-angled shape typed wall by wall, per-wall sheets, doors, the L cut on or off, floor build-up and run direction, flashing |
 | Guide (`/guide`, `web/guide.js`) | `GUIDE.md` rendered in the app, one button in the header, one copy of the instructions |
-| Tests | 160, plus the line-by-line sheet diff |
+| Accounts (`web/auth.js`, `/api/config`) | sign up with email confirmation, sign in, File → New / Open / Save / Save As. Each estimator's jobs their own, enforced by the database |
+| Tests | 169, plus the line-by-line sheet diff |
 
 `npm run check` must print **`ALL ROWS MATCH across 3 jobs`** with 9 documented
 deviations and **1 plan finding** (HI-15191's ante room — see below). It did at
@@ -369,19 +370,35 @@ version:
   Accounts are `DESIGN.md` Phase 9; until then put basic auth in front of it
   before any real domain points at it.
 
-## Waiting on the shop before Phase 9 can start
+## Accounts are built — Phase 9 landed 17 August
 
-`SETUP.md` is written: Supabase, Brevo and the Google Apps Script, step by step,
-with the SQL to paste and the script to deploy. Two things unblock the code:
+Sign up, confirm by email, sign in, and **File → New / Open / Save / Save As**.
+The Supabase project is live (`kyzexsarilxkzwkntode`), its tables and policies
+are in place, and `SETUP.md` has the SQL that made them.
 
-1. **Supabase Project URL and anon key.** Neither is a secret — the anon key is
-   meant to be in the browser, and row level security is what protects the data.
-2. Nothing else. Brevo's API key and the Apps Script URL are Phase 11–12, and
-   **no key ever needs to reach this repo or a chat** — they go into Hostinger's
-   environment variables and the code reads them from there.
+- `web/auth.js` is a Supabase client in `fetch` — no dependency. It loads before
+  `app.js` as a plain script, so `core/verify/web.test.ts` still runs both.
+- **`/api/config` is all the server does for accounts**: it hands the browser
+  the project URL and anon key **from the environment**. This repo is public and
+  nothing key-shaped goes in it. The anon key belongs in a browser — it names
+  the project, not a person.
+- **Row level security is what keeps one estimator's jobs their own**, not any
+  filter in the app. Checked, not assumed: with the anon key and nobody signed
+  in, reads come back empty and an insert is refused 401.
+- Only the **spec** is saved. The BOQ is always generated — a stored figure is
+  how a saved job and a fresh one start to disagree.
+- **Signed out, nothing changes.** Drawings, BOQ, DXF and print all work; only
+  Save and Open want an account, and a server with no Supabase configured says
+  so in the panel rather than breaking.
 
-The one thing worth starting today is **Brevo's domain verification**, because
-DNS takes hours and that wait can run alongside everything else.
+**Two things left before anyone can actually sign in:**
+
+1. **Put `SUPABASE_URL` and `SUPABASE_ANON_KEY` into Hostinger** and redeploy.
+   Until then the live site's account panel will say accounts are not set up.
+2. **Configure Brevo SMTP** (`SETUP.md` Part B). Supabase's built-in mailer
+   sends a handful an hour and is not for production — without Brevo the
+   confirmation email may never arrive, and without that link the account cannot
+   be used. This is the one part that could not be tested from this side.
 
 Also removed on 17 August: the form's **BOQ group** field. It was declared,
 sent, and never read — `buildJob` maps rooms one to one. Merging is Phase 3.

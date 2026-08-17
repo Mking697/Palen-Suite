@@ -310,7 +310,7 @@ Each phase ends with the repo green and something usable.
 | 6 | Angled, chamfered and triangle rooms | needs the corner and blanking answers below first |
 | 7 ✅ | One drawing sheet, and a 3D view of the same panels behind a toggle | every 3D face is a width the BOQ priced, asserted per wall |
 | 8 ✅ | A guide book in the app — how to use it, in the tool rather than only in a file | an estimator who has never seen the tool enters a job from a drawing without being told how |
-| 9 | Accounts and saved jobs: sign up, log in, File → New / Open / Save / Save As, each user's jobs their own | two users sign up, save a job each by the same number, and neither can see or open the other's |
+| 9 ✅ | Accounts and saved jobs: sign up, log in, File → New / Open / Save / Save As, each user's jobs their own | two users sign up, save a job each by the same number, and neither can see or open the other's |
 | 10 | The BOQ as a real `.xlsx` and the drawing sheet as a real vector PDF, both downloadable | Excel opens the workbook without repair, and the PDF prints 1:1 with every panel figure the sheet shows |
 | 11 | Google: the estimator's own Drive folder and Sheet, connected from their profile | saving a job puts the PDF and the workbook in the folder under the job number, and appends a row to the BOQ and Flashing tabs |
 | 12 | Email: TO / CC / BCC, subject, body, with the PDF and the workbook attached | a job is sent from the tool and arrives with both files, named by job number |
@@ -489,6 +489,49 @@ written and no mail port has to be open on the host; the API key is an
 environment variable, and the sending domain needs its two DNS records before
 anything will arrive. Nothing about the BOQ is re-computed to send it — the
 attachments are the same bytes the download buttons give.
+
+### Phase 9 result
+
+Built on 17 August 2026, against a real Supabase project.
+
+`web/auth.js` is the whole of it: a Supabase client in `fetch`, no dependency,
+loaded before `app.js` as a plain script so both stay runnable by
+`core/verify/web.test.ts`. It puts itself on `window.Auth`, and `app.js` takes a
+reference from there rather than using a bare global, because a bare global only
+exists in a browser and that file is also run headless.
+
+**The browser talks to Supabase directly and the server holds no secret.** The
+only thing `server/serve.ts` contributes is `/api/config`, which hands over the
+project URL and anon key **from the environment** — this repository is public
+and nothing key-shaped belongs in it. The anon key is meant to be in a browser:
+it names the project, not a person.
+
+**What keeps one estimator's jobs from another is row level security**, in
+Postgres, and that is deliberate. The app does not filter by user; it cannot,
+because a filter in a browser is a suggestion. Every policy is
+`auth.uid() = user_id`, so a request without a session is refused by the
+database whatever the client asks for. Verified rather than assumed: with the
+anon key and nobody signed in, reads return an empty list and an insert is
+refused 401.
+
+Three decisions worth keeping:
+
+- **Only the spec is stored.** The BOQ is generated on every render, and storing
+  a generated figure is exactly how a saved job and a fresh one start to
+  disagree — the same reasoning that keeps `toFixed` out of the browser.
+- **`unique (user_id, job_no)`** makes *Save* an upsert and *Save As* a new row,
+  per user, so two estimators may each have their own HI-15191.
+- **Signed out, the calculator is untouched.** Drawings, BOQ, DXF and print all
+  work; only Save and Open need an account. The engine is the product and an
+  account is a convenience on top of it, never a gate in front of it — which is
+  also why a server with no Supabase configured says so in the account panel
+  instead of failing.
+
+Not verified here, and it cannot be from this side: that the confirmation email
+actually arrives. Supabase's built-in mailer sends a handful an hour and is not
+for production, so **Brevo SMTP has to be configured before signup is tested**
+with a real address, or the link never comes and the account cannot be used.
+`SETUP.md` says so where it will be read.
 
 ### Phase 8 result
 

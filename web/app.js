@@ -6,6 +6,15 @@
 
 const $ = (s) => document.querySelector(s);
 
+/**
+ * Accounts, from auth.js, which the page loads before this file. Taken off
+ * `window` rather than used as a bare global, because a bare global only
+ * exists in a browser and this file is also run headless by
+ * `core/verify/web.test.ts`. Undefined when auth.js is not there, and every
+ * use is guarded — the calculator works signed out.
+ */
+const Auth = window.Auth;
+
 const el = (tag, attrs = {}, kids = []) => {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -2371,39 +2380,81 @@ function loadExample(job) {
  * an estimator knows the job number off the drawing, and a list stops being a
  * way to find anything once there are more than a screenful.
  */
+/** The verified examples, from /api/jobs. Loaded once at boot. */
+let EXAMPLES = [];
+
+/**
+ * Fill the datalist: the estimator's own saved jobs first, then the examples.
+ * Their own work is what they are usually looking for.
+ */
+async function refreshJobList() {
+  const list = $('#jobList');
+  list.replaceChildren();
+
+  if (window.Auth && Auth.user) {
+    try {
+      for (const row of await Auth.listJobs()) {
+        list.append(
+          el('option', { value: row.job_no, label: `saved ${row.updated_at.slice(0, 10)}` }),
+        );
+      }
+    } catch {
+      /* the list is a convenience; the box still opens a job by name */
+    }
+  }
+  for (const j of EXAMPLES) {
+    list.append(el('option', { value: j.jobNo, label: j.rooms.map((r) => r.name).join(', ') }));
+  }
+}
+
+/**
+ * Open a job by its number: the estimator's own saved jobs first, then the
+ * verified examples. Their own is what they mean when the two share a number.
+ */
+async function openJobNo(wanted) {
+  const msg = $('#jobSearchMsg');
+  const name = String(wanted ?? '').trim();
+  if (!name) return false;
+
+  if (window.Auth && Auth.user) {
+    try {
+      const spec = await Auth.loadJob(name);
+      if (spec) {
+        loadExample(spec);
+        msg.textContent = `opened ${name}`;
+        return true;
+      }
+    } catch (err) {
+      msg.textContent = err.message;
+      return false;
+    }
+  }
+
+  // typed by hand, so match on case and stray spaces the estimator did not mean
+  const hit = EXAMPLES.find((j) => j.jobNo.toLowerCase() === name.toLowerCase());
+  if (!hit) {
+    msg.textContent = `No job ${name}`;
+    return false;
+  }
+  const spec = await (await fetch(`/api/spec?job=${encodeURIComponent(hit.jobNo)}`)).json();
+  loadExample(spec);
+  msg.textContent = '';
+  return true;
+}
+
 async function initJobSearch() {
   const box = $('#jobSearch');
   const msg = $('#jobSearchMsg');
-  const list = $('#jobList');
 
-  let jobs = [];
   try {
-    jobs = await (await fetch('/api/jobs')).json();
+    EXAMPLES = await (await fetch('/api/jobs')).json();
   } catch {
     msg.textContent = 'job list unavailable';
-    return;
   }
-
-  // clicking the box offers every job it knows; typing narrows it
-  for (const j of jobs) {
-    list.append(
-      el('option', { value: j.jobNo, label: j.rooms.map((r) => r.name).join(', ') }),
-    );
-  }
+  await refreshJobList();
 
   const open = async () => {
-    const wanted = String(box.value ?? '').trim();
-    if (!wanted) return;
-    // typed by hand, so match on case and stray spaces the estimator did not mean
-    const hit = jobs.find((j) => j.jobNo.toLowerCase() === wanted.toLowerCase());
-    if (!hit) {
-      msg.textContent = `No job ${wanted}`;
-      return;
-    }
-    msg.textContent = '';
-    const spec = await (await fetch(`/api/spec?job=${encodeURIComponent(hit.jobNo)}`)).json();
-    loadExample(spec);
-    box.value = '';
+    if (await openJobNo(box.value)) box.value = '';
   };
 
   box.addEventListener('change', open); //  picking from the list fires this
@@ -2413,6 +2464,156 @@ async function initJobSearch() {
   box.addEventListener('input', () => {
     msg.textContent = '';
   });
+}
+
+/* ---------- accounts, and the File menu ---------- */
+
+/** Set by Save, so Save can save again without asking for the number. */
+let savedAs = '';
+
+const closeMenus = () => {
+  for (const id of ['#fileMenu', '#accountMenu']) {
+    const menu = $(id);
+    if (menu) menu.open = false;
+  }
+};
+
+function renderAccount() {
+  const panel = $('#accountPanel');
+  const button = $('#accountBtn');
+  if (!panel || !button) return;
+  panel.replaceChildren();
+
+  if (!window.Auth || !Auth.available) {
+    button.textContent = 'Sign in';
+    panel.append(
+      el('p', { class: 'hint', text: Auth ? Auth.reason : 'Accounts are not available.' }),
+      el('p', {
+        class: 'hint',
+        text: 'The calculator works without an account — only saving jobs needs one.',
+      }),
+    );
+    return;
+  }
+
+  if (Auth.user) {
+    button.textContent = Auth.email;
+    const out = el('button', { class: 'btn', type: 'button', text: 'Sign out' });
+    out.addEventListener('click', async () => {
+      await Auth.signOut();
+      savedAs = '';
+      renderAccount();
+      refreshJobList();
+      closeMenus();
+    });
+    panel.append(
+      el('p', { class: 'hint', text: `Signed in as ${Auth.email}. Your jobs are yours alone.` }),
+      out,
+    );
+    return;
+  }
+
+  button.textContent = 'Sign in';
+  const email = el('input', { type: 'email', placeholder: 'you@hikom.in', autocomplete: 'email' });
+  const pass = el('input', { type: 'password', placeholder: 'password', autocomplete: 'current-password' });
+  const note = el('p', { class: 'hint', text: '' });
+
+  const run = async (what) => {
+    note.textContent = 'working…';
+    try {
+      if (what === 'in') {
+        await Auth.signIn(email.value.trim(), pass.value);
+        renderAccount();
+        await refreshJobList();
+        closeMenus();
+        return;
+      }
+      const { verified } = await Auth.signUp(email.value.trim(), pass.value);
+      note.textContent = verified
+        ? 'Signed up.'
+        : 'Check your email and click the link, then sign in. It may take a minute.';
+      if (verified) {
+        renderAccount();
+        await refreshJobList();
+      }
+    } catch (err) {
+      note.textContent = err.message;
+    }
+  };
+
+  const signIn = el('button', { class: 'btn', type: 'button', text: 'Sign in' });
+  const signUp = el('button', { class: 'btn ghost', type: 'button', text: 'Sign up' });
+  signIn.addEventListener('click', () => run('in'));
+  signUp.addEventListener('click', () => run('up'));
+  pass.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') run('in');
+  });
+
+  panel.append(
+    email,
+    pass,
+    el('div', { class: 'row2' }, [signIn, signUp]),
+    note,
+    el('p', {
+      class: 'hint',
+      text: 'Signing up sends a confirmation email; the account works once that link is clicked.',
+    }),
+  );
+}
+
+/** Ask for a job number, offering the one already in the header. */
+const askJobNo = (suggested) => {
+  const asked = window.prompt('Save as job number', suggested || '');
+  return asked === null ? null : asked.trim();
+};
+
+async function fileAction(what) {
+  const msg = $('#jobSearchMsg');
+  closeMenus();
+
+  if (what === 'new') {
+    if (!window.confirm('Start a new job? Anything unsaved on screen is lost.')) return;
+    savedAs = '';
+    state.jobNo = 'HI-';
+    state.rooms = [newRoom()];
+    state.active = 0;
+    $('#jobNo').value = state.jobNo;
+    renderForm();
+    refresh();
+    return;
+  }
+
+  if (what === 'open') {
+    const wanted = askJobNo(savedAs || state.jobNo);
+    if (wanted) await openJobNo(wanted);
+    return;
+  }
+
+  if (!window.Auth || !Auth.user) {
+    msg.textContent = 'Sign in to save';
+    return;
+  }
+
+  const jobNo = what === 'saveAs' ? askJobNo(state.jobNo) : savedAs || state.jobNo;
+  if (!jobNo) return;
+  if (jobNo === 'HI-' || !jobNo.trim()) {
+    msg.textContent = 'Give the job a number first';
+    return;
+  }
+
+  try {
+    // the spec is what is saved, never the BOQ — that is generated, and a
+    // stored figure is how a saved job and a fresh one start to disagree
+    await Auth.saveJob(jobNo, jobSpec());
+    savedAs = jobNo;
+    state.jobNo = jobNo;
+    $('#jobNo').value = jobNo;
+    msg.textContent = `saved ${jobNo}`;
+    await refreshJobList();
+    refresh();
+  } catch (err) {
+    msg.textContent = err.message;
+  }
 }
 
 /* ---------- boot ---------- */
@@ -2427,6 +2628,10 @@ $('#density').addEventListener('input', (e) => {
 });
 $('#printBtn').addEventListener('click', () => window.print());
 
+for (const b of document.querySelectorAll('#fileMenu [data-file]')) {
+  b.addEventListener('click', () => fileAction(b.getAttribute('data-file')));
+}
+
 /** Pick lists come from core/rules.ts so the form and the engine agree. */
 async function boot() {
   try {
@@ -2434,6 +2639,17 @@ async function boot() {
   } catch {
     /* keep the defaults — the form still works on PPGI 0.4 */
   }
+  // an account is a convenience on top of the calculator, never a gate in
+  // front of it: if this fails the form still works, unsaved
+  if (window.Auth) {
+    try {
+      await Auth.boot();
+    } catch {
+      /* renderAccount says why */
+    }
+  }
+  renderAccount();
+
   state.rooms = [newRoom()];
   renderForm();
   initJobSearch();

@@ -187,6 +187,11 @@ interface Harness {
   ids: Map<string, StubEl>;
   posts: Array<{ url: string; body: unknown }>;
   errors: unknown[];
+  fileButtons: StubEl[];
+  /** every question a prompt asked, in order */
+  asked: string[];
+  answerWith: (value: string | null) => void;
+  confirmWith: (value: boolean) => void;
 }
 
 /**
@@ -195,9 +200,20 @@ interface Harness {
  * @param idList the elements the page's own HTML provides, which the script
  * looks up rather than creates.
  */
-function harness(src: string, idList: string[], routes: Record<string, unknown>): Harness {
+function harness(
+  sources: string | string[],
+  idList: string[],
+  routes: Record<string, unknown>,
+): Harness {
   const ids = new Map<string, StubEl>();
-  for (const id of idList) ids.set(id, new StubEl(id.startsWith('#') ? 'div' : 'div'));
+  for (const id of idList) ids.set(id, new StubEl('div'));
+
+  /** The File menu's buttons, which the page's own HTML provides. */
+  const fileButtons = ['new', 'open', 'save', 'saveAs'].map((what) => {
+    const b = new StubEl('button');
+    b.attrs['data-file'] = what;
+    return b;
+  });
 
   const posts: Array<{ url: string; body: unknown }> = [];
   const errors: unknown[] = [];
@@ -207,18 +223,31 @@ function harness(src: string, idList: string[], routes: Record<string, unknown>)
     createTextNode: (text: string) => ({ textContent: String(text) }),
     createDocumentFragment: () => new StubEl('#fragment'),
     querySelector: (sel: string) => ids.get(sel) ?? null,
-    querySelectorAll: () => [],
+    querySelectorAll: (sel: string) => (sel.includes('data-file') ? fileButtons : []),
     getElementById: (id: string) => ids.get(`#${id}`) ?? null,
     addEventListener: () => {},
     body: new StubEl('body'),
     documentElement: new StubEl('html'),
   };
 
+  /** What the estimator types into a prompt, and whether they confirm. */
+  const asked: string[] = [];
+  let answer: string | null = null;
+  let confirmed = true;
+
   const fetchStub = (url: string, init?: { method?: string; body?: string }) => {
-    const route = Object.keys(routes).find((k) => url.startsWith(k));
-    if (init?.method === 'POST') posts.push({ url, body: JSON.parse(init.body ?? 'null') });
+    // longest prefix wins, so /api/config does not shadow /api/c…
+    const route = Object.keys(routes)
+      .filter((k) => url.startsWith(k))
+      .sort((a, b) => b.length - a.length)[0];
+    if (init?.method && init.method !== 'GET') {
+      posts.push({ url, body: init.body ? JSON.parse(init.body) : null });
+    }
     if (route === undefined) return Promise.reject(new Error(`no stub route for ${url}`));
-    const data = routes[route];
+    const entry = routes[route];
+    // a route may be a value, or a function of the call, for one that answers
+    // differently to a read and a write
+    const data = typeof entry === 'function' ? (entry as Function)(url, init) : entry;
     return Promise.resolve({
       ok: true,
       status: 200,
@@ -227,20 +256,36 @@ function harness(src: string, idList: string[], routes: Record<string, unknown>)
     });
   };
 
+  const stored = new Map<string, string>();
+  const localStorage = {
+    getItem: (k: string) => stored.get(k) ?? null,
+    setItem: (k: string, v: string) => void stored.set(k, String(v)),
+    removeItem: (k: string) => void stored.delete(k),
+  };
+
+  const win: Record<string, unknown> = {
+    print: () => {},
+    devicePixelRatio: 1,
+    addEventListener: () => {},
+    localStorage,
+    prompt: (question: string) => {
+      asked.push(question);
+      return answer;
+    },
+    confirm: () => confirmed,
+    requestAnimationFrame: (fn: () => void) => {
+      fn();
+      return 1;
+    },
+  };
+
   const ctx: Record<string, unknown> = {
     document,
     fetch: fetchStub,
     console: { log: () => {}, warn: () => {}, error: (...a: unknown[]) => errors.push(a) },
     location: { hash: '', href: 'http://127.0.0.1:5173/' },
-    window: {
-      print: () => {},
-      devicePixelRatio: 1,
-      addEventListener: () => {},
-      requestAnimationFrame: (fn: () => void) => {
-        fn();
-        return 1;
-      },
-    },
+    localStorage,
+    window: win,
     requestAnimationFrame: (fn: () => void) => {
       fn();
       return 1;
@@ -255,9 +300,22 @@ function harness(src: string, idList: string[], routes: Record<string, unknown>)
   };
   ctx.globalThis = ctx;
   createContext(ctx);
-  runInContext(src, ctx, { filename: 'browser-script.js' });
+  // the page loads auth.js then app.js as two plain scripts sharing one
+  // global scope, so they are run the same way here
+  for (const src of [sources].flat()) {
+    runInContext(src, ctx, { filename: 'browser-script.js' });
+  }
 
-  return { ctx, ids, posts, errors };
+  return {
+    ctx,
+    ids,
+    posts,
+    errors,
+    fileButtons,
+    asked,
+    answerWith: (value: string | null) => void (answer = value),
+    confirmWith: (value: boolean) => void (confirmed = value),
+  };
 }
 
 /* ---------- the guide page ---------- */
@@ -344,10 +402,19 @@ const APP_IDS = [
   '#jobSearch',
   '#jobList',
   '#jobSearchMsg',
+  '#fileMenu',
+  '#accountMenu',
+  '#accountBtn',
+  '#accountPanel',
   '.form',
 ];
 
-const app = harness(read('web/app.js'), APP_IDS, {
+/** Both browser scripts, in the order the page loads them. */
+const APP_SOURCES = [read('web/auth.js'), read('web/app.js')];
+
+const app = harness(APP_SOURCES, APP_IDS, {
+  // accounts off: no Supabase configured on this server
+  '/api/config': { supabase: null, accountsReason: 'SUPABASE_URL / SUPABASE_ANON_KEY are not set' },
   '/api/rules': {
     materials: { PPGI: [0.4] },
     defaultSkin: { material: 'PPGI', thickness: 0.4 },
@@ -486,6 +553,134 @@ await t('the form knows both shop thresholds, and takes them from the engine', (
   assert.ok(src.includes('RULES.doorTopMinWallHeight'), 'the door top threshold is hardcoded');
   assert.ok(src.includes('RULES.lCutMinWallTh'), 'the L cut threshold is hardcoded');
   assert.ok(read('server/serve.ts').includes('doorTopMinWallHeight: DOOR_TOP_MIN_WALL_HEIGHT'));
+});
+
+await t('with no accounts configured the calculator still works, and says why', () => {
+  // an account is a convenience on top of the engine, never a gate in front
+  assert.ok(app.ids.get('#form')!.children.length > 0, 'the form is gone');
+  assert.equal(app.ids.get('#accountBtn')!.ownText, 'Sign in');
+  const panel = textOf(app.ids.get('#accountPanel'));
+  assert.ok(panel.includes('SUPABASE_URL'), `the panel should say why: ${panel}`);
+  assert.ok(panel.includes('works without an account'));
+});
+
+await t('Save without an account says so instead of failing quietly', async () => {
+  const save = app.fileButtons.find((b) => b.attrs['data-file'] === 'save')!;
+  save.fire('click');
+  await settle();
+  assert.equal(app.ids.get('#jobSearchMsg')!.ownText, 'Sign in to save');
+});
+
+console.log('\n  accounts — each estimator their own jobs\n');
+
+const SUPA = 'https://demo.supabase.co';
+const SESSION = {
+  access_token: 'token-for-asha',
+  refresh_token: 'refresh-for-asha',
+  expires_in: 3600,
+  user: { id: 'user-asha', email: 'asha@hikom.in' },
+};
+
+/** What the estimator has saved, as the database would hand it back. */
+const SAVED = [{ job_no: 'HI-20001', updated_at: '2026-08-17T10:00:00Z' }];
+
+const acct = harness(APP_SOURCES, APP_IDS, {
+  '/api/config': { supabase: { url: SUPA, anonKey: 'anon-key' } },
+  '/api/rules': { materials: { PPGI: [0.4] }, defaultSkin: { material: 'PPGI', thickness: 0.4 }, doorTypes: [], doorCores: ['Puf'], doorHands: ['LHS', 'RHS'], lCutMinWallTh: 50, doorTopMinWallHeight: 3050, floorMaterials: ['PPGI'], floorLayers: [], flashingTypes: ['U Flashing'] },
+  '/api/jobs': [{ jobNo: 'HI-15191', rooms: [{ name: 'Freezer Room' }] }],
+  '/api/render': RENDER_REPLY,
+  [`${SUPA}/auth/v1/token`]: SESSION,
+  [`${SUPA}/auth/v1/signup`]: { user: { id: 'new', email: 'new@hikom.in' } }, // no token: confirm first
+  [`${SUPA}/rest/v1/jobs`]: (url: string, init?: { method?: string }) =>
+    init?.method === 'POST' ? null : url.includes('select=spec') ? [] : SAVED,
+});
+
+await settle();
+
+/** The account panel's own controls. */
+const acctInput = (type: string) =>
+  [...walk(acct.ids.get('#accountPanel')!)].find((n) => n.tag === 'input' && n.attrs.type === type);
+const acctButton = (label: string) =>
+  [...walk(acct.ids.get('#accountPanel')!)].find(
+    (n) => n.tag === 'button' && textOf(n).trim() === label,
+  );
+
+await t('signed out, the panel offers sign in and sign up', () => {
+  assert.ok(acctInput('email'), 'no email field');
+  assert.ok(acctInput('password'), 'no password field');
+  assert.ok(acctButton('Sign in') && acctButton('Sign up'), 'no buttons');
+});
+
+await t('signing up says to confirm the email rather than nothing at all', async () => {
+  acctInput('email')!.value = 'new@hikom.in';
+  acctInput('password')!.value = 'a-good-password';
+  acctButton('Sign up')!.fire('click');
+  await settle();
+
+  const said = textOf(acct.ids.get('#accountPanel'));
+  assert.ok(said.includes('Check your email'), `should say to confirm: ${said}`);
+  assert.equal(acct.ids.get('#accountBtn')!.ownText, 'Sign in', 'not signed in until confirmed');
+});
+
+await t('signing in shows who it is, and lists their own saved jobs', async () => {
+  acctInput('email')!.value = 'asha@hikom.in';
+  acctInput('password')!.value = 'a-good-password';
+  acctButton('Sign in')!.fire('click');
+  await settle();
+
+  assert.equal(acct.ids.get('#accountBtn')!.ownText, 'asha@hikom.in');
+  const listed = acct.ids.get('#jobList')!.children.map((c) => (c as StubEl).attrs.value);
+  assert.deepEqual(listed, ['HI-20001', 'HI-15191'], 'their own first, then the examples');
+});
+
+await t('Save stores the spec under the job number, as that user', async () => {
+  acct.ids.get('#jobNo')!.value = 'HI-20002';
+  acct.ids.get('#jobNo')!.fire('input');
+  await settle();
+
+  const before = acct.posts.length;
+  acct.fileButtons.find((b) => b.attrs['data-file'] === 'save')!.fire('click');
+  await settle();
+
+  const saved = acct.posts.slice(before).find((p) => p.url.includes('/rest/v1/jobs'));
+  assert.ok(saved, 'nothing was saved');
+  const row = (saved!.body as Array<Record<string, unknown>>)[0];
+  assert.equal(row.job_no, 'HI-20002');
+  assert.equal(row.user_id, 'user-asha', 'saved as the signed-in user');
+  // the spec is stored and the BOQ is not — it is generated, and a stored
+  // figure is how a saved job and a fresh one start to disagree
+  assert.ok(row.spec && typeof row.spec === 'object');
+  assert.ok(!('blocks' in (row.spec as object)), 'a BOQ must never be stored');
+  assert.equal(acct.ids.get('#jobSearchMsg')!.ownText, 'saved HI-20002');
+});
+
+await t('Save As asks for a number, and saves under that one', async () => {
+  acct.answerWith('HI-20003');
+  const before = acct.posts.length;
+  acct.fileButtons.find((b) => b.attrs['data-file'] === 'saveAs')!.fire('click');
+  await settle();
+
+  assert.ok(acct.asked.some((q) => q.includes('job number')), 'it should have asked');
+  const saved = acct.posts.slice(before).find((p) => p.url.includes('/rest/v1/jobs'));
+  assert.equal((saved!.body as Array<Record<string, unknown>>)[0].job_no, 'HI-20003');
+});
+
+await t('New warns first, and does nothing when the warning is declined', async () => {
+  acct.confirmWith(false);
+  const rooms = () => (acct.ctx as { state?: unknown }) && acct.ids.get('#form')!.children.length;
+  const before = rooms();
+  acct.fileButtons.find((b) => b.attrs['data-file'] === 'new')!.fire('click');
+  await settle();
+  assert.equal(rooms(), before, 'the form was cleared despite the warning being declined');
+  assert.equal(acct.ids.get('#jobNo')!.value, 'HI-20003', 'the job number survived');
+});
+
+await t('a session is kept, so a reload does not sign the estimator out', () => {
+  const kept = (acct.ctx.localStorage as { getItem(k: string): string | null }).getItem(
+    'hikom.session',
+  );
+  assert.ok(kept, 'nothing was stored');
+  assert.ok(kept!.includes('refresh-for-asha'), 'the refresh token has to be kept');
 });
 
 console.log(`\n  ${passed} passed\n`);

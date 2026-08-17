@@ -20,7 +20,7 @@ weight and area — with no BOQ figures fed in as input.
 | HI-15279 | Ambient + Milk 60mm merged block | ⬜ needs BOQ-group merging, partition panels, Door TOP |
 | HI-15252 | Freezer 120 + Chiller 60 + F&V 60, module 1030 | ⬜ not yet |
 
-160 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
+169 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
 (`npm run dev`) renders the generated sheet and its drawings, runs the verifier
 in the browser, and lets you rebuild from an edited input. The two browser
 scripts are covered too — `core/verify/web.test.ts` boots them headless in a
@@ -186,6 +186,16 @@ go and nothing else to press.
   below, one per room, unchanged. DXF comes out on the layers the drawing office
   expects (`WALL`, `PANEL`, `DOOR`, `DIM`, `LIGHT`, `TEXT`, `CUT`). Print gives the lot as a job
   pack.
+- **Accounts** — sign up, confirm by email, and each estimator's saved jobs are
+  their own. **Row level security in the database is what makes that true**, not
+  a filter in the browser: every policy is `auth.uid() = user_id`, so a request
+  without a session is refused by Postgres whatever the client asks for. The
+  header's **File** menu is New / Open / Save / Save As, and `unique (user_id,
+  job_no)` makes Save an upsert — two estimators may each have their own
+  HI-15191. Only the job's **spec** is stored; the BOQ is always generated,
+  because a stored figure is how a saved job and a fresh one start to disagree.
+  Signed out the calculator is untouched — drawings, BOQ, DXF and print all
+  work, and only saving needs an account. `SETUP.md` has the one-time setup.
 - **Open job no** — type a job number in the header and it opens in the form.
   It is a search box rather than a picker because an estimator reads the number
   off the drawing, and a list stops being a way to find anything past a
@@ -234,6 +244,9 @@ core/verify/web.test.ts     web/app.js and web/guide.js, booted headless in a
 server/serve.ts             local dev server (node:http, no dependencies)
 server/config.ts            where the server binds, and why — its own file so
                             it can be tested, since serve.ts listens on import
+web/auth.js                 accounts and saved jobs — a Supabase client in
+                            fetch, no dependency. The database's row level
+                            security is what keeps one user's jobs their own
 web/                        the viewer — plain HTML/CSS/JS, no build step
 web/guide.js                GUIDE.md rendered as the in-app guide page
 tools/build.ts              core/ + server/ -> dist/ as plain JavaScript, for a
