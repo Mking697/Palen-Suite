@@ -7,6 +7,18 @@ chahiye. Ek baar ka kaam hai. `DESIGN.md` ke Phase 9–12 isi par khade hain.
 Har key aap khud Hostinger ke *Environment variables* me daalenge. Repo public
 hai — usme koi key kabhi nahi jayegi.
 
+Ek key galti se kahin bhej di jaye — chat me, message me, screenshot me — to
+usse **badal dena hi sahi tareeka hai**. Brevo, Supabase, dono me key delete
+karke nayi banana ek minute ka kaam hai, aur purani us pal se bekaar ho jaati
+hai. Kaunsi key kaisi dikhti hai:
+
+| Kaisi dikhti hai | Kya hai | Secret? |
+|---|---|---|
+| `eyJhbGci…` (lambi, teen hisso me) — role `anon` | Supabase anon key | nahi — browser me jaati hi hai |
+| `eyJhbGci…` — role `service_role` | Supabase service key | **haan, sabse khatarnak** — RLS bypass karti hai |
+| `xkeysib-…` | Brevo API key | **haan** |
+| SMTP key | Brevo SMTP password | **haan** |
+
 | Kya | Kis kaam ka | Kab chahiye |
 |---|---|---|
 | [Supabase](#a--supabase--login-aur-database) | Login + har user ka apna database | Phase 9, sabse pehle |
@@ -206,14 +218,28 @@ lena zaroori hai:
 
 ### B2. SMTP credentials — Supabase ke liye
 
-**Brevo → SMTP & API → SMTP** tab:
+> **Brevo me do alag key hoti hain, aur ye aksar ulti pakdi jaati hai.**
+>
+> | Key | Kis tab par | Kis kaam ki |
+> |---|---|---|
+> | **SMTP key** | `SMTP` | Supabase ki auth email — **abhi yahi chahiye** |
+> | **API key** (`xkeysib-…`) | `API keys & MCP` | Phase 12, jab app khud email bhejegi |
+>
+> Supabase ke SMTP form me API key daalne se wo kabhi kaam nahi karega.
 
-| | |
+**Brevo → SMTP & API → SMTP** tab. Upar *Your SMTP Settings* me teen cheezein
+pehle se likhi hoti hain — wahi Supabase me jaani hain:
+
+| Brevo par likha | Supabase me |
 |---|---|
-| Server | `smtp-relay.brevo.com` |
-| Port | `587` |
-| Login | aapka Brevo login, jaise `8xxxxx@smtp-brevo.com` |
-| Password | **Generate a new SMTP key** dabakar jo mile |
+| SMTP Server `smtp-relay.brevo.com` | Host |
+| Port `587` | Port number |
+| **Login** `b5c3fe001@smtp-brevo.com` jaisa | **Username** ← ye dhoondhna padta hai |
+
+Password alag banani padti hai: usi tab par neeche *Your SMTP Keys* ki list
+khaali hoti hai aur **"Click here to generate an SMTP key"** likha hota hai.
+Wahi key Supabase ka **Password** hai — **ek hi baar dikhti hai**, turant copy
+kar lijiye.
 
 Ab **Supabase → Project Settings → Authentication → SMTP Settings**:
 
