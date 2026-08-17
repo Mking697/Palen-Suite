@@ -275,14 +275,14 @@ different-sized rooms actually get drawn?
 
 ## Where it is deployed
 
-**Hostinger, temporary domain `aqua-finch-257417.hostingersite.com`**, deploying
-from GitHub `Mking697/Palen-Suite` (public, branch `main`, identity `Mking697`).
-Hostinger deploys what is on GitHub — so **push before deploying**, or the site
-is built from the last push and not from this machine.
+**Live on Hostinger at `aqua-finch-257417.hostingersite.com`** since 17 August
+2026, deploying from GitHub `Mking697/Palen-Suite` (public, branch `main`,
+identity `Mking697`). Hostinger deploys what is on GitHub — so **push before
+deploying**, or the site is built from the last push and not from this machine.
 
-Settings: framework *Other*, branch `main`, **Node 24.x**, root `./`, **build
-command `npm run build`**, package manager npm, output directory empty, entry
-file `app.js`, and `HOST=0.0.0.0`.
+Settings that work: framework *Other*, branch `main`, **Node 24.x**, root `./`,
+**build command `npm run build`**, package manager npm, output directory empty,
+**entry file `app.cjs`**, and `HOST=0.0.0.0`.
 
 **The build command is the important one, and it took three failed deploys to
 get there.** The app normally has no build step because Node runs the TypeScript
@@ -301,20 +301,28 @@ development is unchanged. The verifier is not shipped in a build — its expecte
 sheets are ground truth, not app — and `/api/verify` says so instead of spawning
 something that is not there.
 
-**And the build did not fix it either — the log stayed empty.** So the app was
-never the problem: either the host does not start this process, or it does not
-capture what the process prints, and an empty log cannot tell those apart. So
-the entry now **writes its own `startup.log` beside itself**, readable in any
-file manager, and it is `app.cjs` — CommonJS, because an app server that loads
-an entry with `require()` cannot load an ES module and fails before any logging
-of ours can run. `app.js` is one line importing it, so both entry names work.
+### The thing that actually caused it — worth reading before the next deploy
 
-**That file is the next step, and it answers it either way:** if `startup.log`
-is not there after a deploy, the host never started this process and the fault
-is the start command or the entry file; if it is there, it states the Node it
-got, the environment as it arrived, whether `dist/` was found, and the error
-with its stack. Hostinger Business also has SSH under *Advanced*, and running
-`node app.cjs` by hand in the app's folder gives the same answer immediately.
+The build did not fix it either. Three deploys, three empty runtime logs. The
+cause turned out to be the entry file, and changing it to **`app.cjs`** brought
+the site up on the first try:
+
+> **Hostinger's app server loads the entry point with `require()`, and
+> `require()` cannot load an ES module.** `package.json` has
+> `"type": "module"`, so `app.js` was one, and it failed **before a single line
+> of ours ran** — which is exactly why nothing ever reached any log, in any
+> configuration. The empty log *was* the symptom, not a missing feature of the
+> host.
+
+That is why the earlier fixes changed nothing: `HOST`, the binding rule and the
+build were all correct, and none of them ever executed.
+
+Two of them are still worth keeping. The **build** means the runtime Node no
+longer matters, and a host does not tell you which Node it starts the app with.
+The **`startup.log`** the entry writes beside itself means the next silence is
+readable: no file means the process was never started, a file means read it.
+Hostinger Business also has SSH under *Advanced*, and `node app.cjs` in the
+app's folder gives the same answer in one command.
 
 **The first two deploys returned 503, and the fix is in the repo.** Hostinger's
 wizard applies its environment variables *during the build process*, so `HOST`
@@ -342,6 +350,7 @@ command `GUIDE.md` tells an estimator to run is `npm run dev`.
 is up, each check failing differently so the log points somewhere. The short
 version:
 
+- **Entry file `app.cjs`.** This is the one that decided it — see below.
 - Do **not** set `PORT` — the host supplies it, and overriding it is the usual
   502.
 - **Set the build command.** With `npm run build` the runtime Node stops
@@ -398,9 +407,10 @@ In rough order of value:
    can check the door top panel at all — its size, its blank, and whether the
    shop splits it when the door module is wider than the panel module. The
    engine makes one panel and does not split.
-5. **Do the Hostinger deploy** — decided on 17 August, temporary domain first.
-   `DEPLOY.md` has the wizard and the post-deploy checks. The Node version in
-   the dropdown is the one thing that can still stop it.
+5. **Point a real domain at it, once there is a login.** The deploy is done and
+   live on the temporary domain. There is still no account on it, so anyone with
+   the URL has the tool and every job in it — a temporary domain is unguessed,
+   not secret. Either Phase 9 lands first, or basic auth goes in front of it.
 6. **The rest of Phase 4 in `DESIGN.md`** — machine maximum panel length and the
    ceiling light cutout. Both in the legacy calculator, neither in this engine.
    The door top panel is done, on the shop's own rule rather than legacy's.

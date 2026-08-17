@@ -215,7 +215,7 @@ Then in hPanel:
    |---|---|
    | Build command | `npm run build` |
    | Start command | `npm start` |
-   | Entry point | `app.cjs` — or `app.js`, which is one line importing it |
+   | **Entry point** | **`app.cjs` — not `app.js`. This is the one that mattered; see below** |
    | Output directory | *empty* — `app.js` finds `dist/` itself, so the host does not need to know about it |
    | Environment | `HOST=0.0.0.0` |
 
@@ -246,21 +246,29 @@ The build log is not the application log. A build that ends `found 0
 vulnerabilities` only means `npm install` ran — it says nothing about whether
 the app started.
 
-**If the host's runtime log is empty, read `startup.log` instead.** `app.cjs`
-writes its own startup lines to a file beside itself, precisely because an empty
-runtime log is ambiguous: it can mean the process never started, or only that
-the host does not capture stdout, and those need different fixes. Open the app's
-folder in the host's file manager:
+**A completely empty runtime log means the entry file, and the answer is
+`app.cjs`.** This cost three deploys on Hostinger (17 August 2026) before it was
+found, and it is worth stating plainly because nothing about it is visible:
+
+> Hostinger's app server loads the entry point with **`require()`**, and
+> `require()` cannot load an ES module. `package.json` has `"type": "module"`,
+> so `app.js` is one — and it failed **before a single line of ours ran**. No
+> error reached any log, in three different configurations, because the failure
+> was in loading our first file at all. An empty log was the whole symptom.
+
+`app.cjs` is therefore CommonJS deliberately, and it is the entry to give a
+host. `app.js` is one line importing it, so running `node app.js` still works
+on a desk; it is only a host's `require()` that cannot use it.
+
+**If the runtime log is empty, also read `startup.log`.** `app.cjs` writes its
+own startup lines to a file beside itself, because an empty runtime log is
+otherwise ambiguous — it can mean the process never started, or only that the
+host does not capture stdout, and those need different fixes:
 
 | | What it means |
 |---|---|
-| **`startup.log` is not there** | the host never started this process. The fault is the start command or the entry file, not the app. Try entry `app.cjs` |
-| **it is there** | read it — it states the Node it got, the environment as it arrived, whether `dist/` was found, and the error with its stack if the import threw |
-
-`app.cjs` is CommonJS on purpose. An app server that loads an entry point with
-`require()` cannot load an ES module, and that failure happens before any of our
-code — including any logging — can run. `app.js` is one line importing it, so
-both entry file names work and neither can be the cause.
+| **`startup.log` is not there** | the host never started this process — check the entry file first, then the start command |
+| **it is there** | read it: the Node it got, the environment as it arrived, whether `dist/` was found, and the error with its stack if the import threw |
 
 The host's own runtime log, when it has anything in it, says the same things:
 
@@ -275,8 +283,8 @@ listening on 0.0.0.0:38412 — PORT came from the platform, so this is behind a 
 | `listening on 127.0.0.1:…` | `HOST` is set to localhost somewhere — remove it |
 | `Could not listen on …` | the port is taken or not allowed |
 | a Node version message | the version or `NODE_OPTIONS` is wrong; the message says which |
-| `no dist/ — running the TypeScript directly` | the build command is not set; set it to `npm run build` |
-| **nothing at all** | the app never got far enough to print. Almost always the runtime Node is older than the build one and the `.ts` import threw — set the build command. Otherwise check the start command and entry file |
+| `dist/ present: false` | the build command is not set; set it to `npm run build` |
+| **nothing at all, anywhere** | the entry file. Set it to `app.cjs` — see above |
 
 The `environment as it arrived` block under it is the one to read: it shows what
 reached the process, not what the host's panel says it set. Those are different
