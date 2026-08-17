@@ -195,7 +195,12 @@ go and nothing else to press.
   HI-15191. Only the job's **spec** is stored; the BOQ is always generated,
   because a stored figure is how a saved job and a fresh one start to disagree.
   **Signing in comes first**: the calculator is behind the account, not beside
-  it. The one exception is a server with no Supabase configured, which runs
+  it. Signup is verified by a **six digit code** rather than a link — a link
+  only works if Supabase's Site URL is right, and a code depends on no URL at
+  all. A new account gets **14 days**, and an **administrator** grants more,
+  stops an account without losing its jobs, or deletes one for good. **Access
+  is enforced by the database**: the `jobs` policy carries `has_access()`, so
+  an expired account is refused by Postgres whatever the screen does. The one exception is a server with no Supabase configured, which runs
   unlocked and says so — gating there would lock everyone out, owner included,
   with no way back in from the screen, and with no Supabase there is no saved
   job to protect either. `SETUP.md` has the one-time setup.

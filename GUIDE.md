@@ -62,8 +62,13 @@ ki zaroorat nahi.
 khulta hai — bina account ke aage kuch nahi.
 
 Pehli baar: apna email aur password daal kar **Sign up** dabaiye. Email par ek
-link aayega, **usse click karne ke baad hi** account chalu hoga. Phir wapas
-aakar **Sign in**.
+**6 digit ka code** aayega — wahi screen par daal kar **Verify** dabaiye, aur
+account chalu ho jayega. Code na aaye to **Send again** hai (ek minute me ek
+baar hi bhej sakte hain).
+
+**Naye account ko 14 din ka access** milta hai. Uske baad admin se badhwana
+padta hai — sign in to ho jayega, par tool nahi khulega aur screen par saaf
+likha aayega ki access kab khatam hua.
 
 Ek baar sign in karne ke baad **session bacha rehta hai** — page reload karne
 par ya browser band karke dobara kholne par phir se login nahi karna padta.
@@ -89,6 +94,23 @@ din purana job aur naya job do alag baat kahenge.
 
 Upar wale **Open job no** box me pehle **aapke apne save kiye job** dhoonde
 jaate hain, phir verified example.
+
+### Admin ke liye
+
+Admin ke account me upar apne email par click karne se **Manage users** aata
+hai. Wahan har user ki list hai — email, uska access kab tak hai, aur do kaam:
+
+| | Kya karta hai |
+|---|---|
+| **+7d / +30d / +365d** | Aaj se utne din ka access de deta hai |
+| **Stop** | Access abhi band. Account aur uske saare job bache rehte hain — dobara din dekar chalu kiya ja sakta hai |
+| **Delete** | Account aur uske **saare saved job hamesha ke liye mit jate hain**. Wapas nahi aata |
+
+Rozana ka kaam **Stop** hai, **Delete** nahi. Stop palta ja sakta hai, Delete
+nahi — isiliye Delete confirm maangta hai aur alag dikhta hai.
+
+Admin ka apna access kabhi khatam nahi hota, aur admin apna hi account delete
+nahi kar sakta.
 
 Screen ke upar do cheezein aur hain: **Open job no** — job number type karke
 Enter dabate hi wo job form me khul jaata hai (box par click karo to jitne job

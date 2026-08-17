@@ -2495,15 +2495,153 @@ function renderAccount() {
       refreshJobList();
       closeMenus();
     });
+
+    const until = Auth.accessUntil;
     panel.append(
       el('p', { class: 'hint', text: `Signed in as ${Auth.email}. Your jobs are yours alone.` }),
-      out,
+      el('p', {
+        class: 'hint',
+        text: Auth.isAdmin
+          ? 'Administrator.'
+          : until
+            ? `Access until ${String(until).slice(0, 10)}.`
+            : 'No access granted.',
+      }),
     );
+
+    if (Auth.isAdmin) {
+      const admin = el('button', { class: 'btn', type: 'button', text: 'Manage users' });
+      admin.addEventListener('click', () => {
+        closeMenus();
+        openAdmin();
+      });
+      panel.append(admin);
+    }
+    panel.append(out);
     return;
   }
 
   button.textContent = 'Sign in';
 }
+
+/* ---------- admin ---------- */
+
+const DAY = 86400000;
+const dayStamp = (days) => new Date(Date.now() + days * DAY).toISOString();
+
+/**
+ * The administrator's screen: who has an account, until when, and the two
+ * things that can be done about it.
+ *
+ * The list itself is not filtered here. `listUsers` asks for every profile and
+ * the database returns what the asker is allowed to see — one row for an
+ * ordinary user, all of them for an admin. A screen that filtered would be a
+ * screen that could forget to.
+ */
+async function openAdmin() {
+  const back = $('#adminBack');
+  const body = $('#adminBody');
+  const panel = $('#admin');
+  if (!panel || !body) return;
+
+  panel.hidden = false;
+  body.replaceChildren(el('p', { class: 'muted', text: 'Loading…' }));
+  if (back && !back.dataset.wired) {
+    back.dataset.wired = '1';
+    back.addEventListener('click', () => {
+      panel.hidden = true;
+    });
+  }
+
+  let users = [];
+  try {
+    users = await Auth.listUsers();
+  } catch (err) {
+    body.replaceChildren(el('p', { class: 'error', text: err.message }));
+    return;
+  }
+
+  const rows = users.map((u) => {
+    const until = u.access_until ? new Date(u.access_until) : null;
+    const live = u.is_admin || (until && until.getTime() > Date.now());
+    const state = el('span', {
+      class: live ? 'ok-tag' : 'dev-tag',
+      text: u.is_admin
+        ? 'admin'
+        : until
+          ? `${live ? 'until' : 'ended'} ${u.access_until.slice(0, 10)}`
+          : 'no access',
+    });
+
+    const apply = async (fn, confirmText) => {
+      if (confirmText && !window.confirm(confirmText)) return;
+      try {
+        await fn();
+        await openAdmin(); //  read it back rather than guess what it became
+      } catch (err) {
+        body.append(el('p', { class: 'error', text: err.message }));
+      }
+    };
+
+    const give = (days) => {
+      const b = el('button', { class: 'btn', type: 'button', text: `+${days}d` });
+      b.addEventListener('click', () => apply(() => Auth.setAccess(u.id, dayStamp(days))));
+      return b;
+    };
+
+    const stop = el('button', { class: 'btn ghost', type: 'button', text: 'Stop' });
+    stop.addEventListener('click', () =>
+      apply(
+        () => Auth.setAccess(u.id, null),
+        `Stop access for ${u.email}? Their saved jobs are kept.`,
+      ),
+    );
+
+    const del = el('button', { class: 'link-del', type: 'button', text: 'Delete' });
+    del.addEventListener('click', () =>
+      apply(
+        () => Auth.deleteUser(u.id),
+        `Delete ${u.email} for good, with every job they saved? This cannot be undone.`,
+      ),
+    );
+
+    return el('tr', {}, [
+      el('td', { text: u.email || u.id }),
+      el('td', {}, [state]),
+      el(
+        'td',
+        {},
+        u.is_admin
+          ? [el('span', { class: 'muted', text: '—' })]
+          : [give(7), give(30), give(365), stop, del],
+      ),
+    ]);
+  });
+
+  body.replaceChildren(
+    el('div', { class: 'scroller' }, [
+      el('table', {}, [
+        el('thead', {}, [
+          el('tr', {}, [
+            el('th', { text: 'User' }),
+            el('th', { text: 'Access' }),
+            el('th', { text: 'Give access' }),
+          ]),
+        ]),
+        el('tbody', {}, rows),
+      ]),
+    ]),
+    el('p', {
+      class: 'hint',
+      text:
+        'Stop keeps the account and its jobs and only ends access — it can be given back. ' +
+        'Delete removes the account and every job it saved, and cannot be undone.',
+    }),
+  );
+}
+
+/** Set after a sign up, while the six digit code is being waited for. */
+let pendingEmail = '';
 
 /**
  * The sign in / sign up controls. Built here rather than written into the page
@@ -2532,21 +2670,17 @@ function authForm() {
     try {
       if (what === 'in') {
         await Auth.signIn(email.value.trim(), pass.value);
-        renderAccount();
-        renderGate();
-        await refreshJobList();
-        closeMenus();
+        await afterSignIn();
         return;
       }
       const { verified } = await Auth.signUp(email.value.trim(), pass.value);
-      note.textContent = verified
-        ? 'Signed up.'
-        : 'Check your email and click the link, then sign in. It may take a minute.';
       if (verified) {
-        renderAccount();
-        renderGate();
-        await refreshJobList();
+        // confirmation is turned off on this project after all
+        await afterSignIn();
+        return;
       }
+      pendingEmail = email.value.trim();
+      renderGate(); //  hands over to the code screen
     } catch (err) {
       note.textContent = err.message;
     }
@@ -2574,32 +2708,137 @@ function authForm() {
   ]);
 }
 
+/** The six digit code from the signup email. */
+function otpForm() {
+  const code = el('input', {
+    type: 'text',
+    inputmode: 'numeric',
+    autocomplete: 'one-time-code',
+    placeholder: '6-digit code',
+    maxlength: 8,
+  });
+  const note = el('p', { class: 'hint', text: `Code sent to ${pendingEmail}.` });
+
+  const verify = async () => {
+    if (!code.value.trim()) {
+      note.textContent = 'Enter the code from the email.';
+      return;
+    }
+    note.textContent = 'checking…';
+    try {
+      await Auth.verifyOtp(pendingEmail, code.value);
+      pendingEmail = '';
+      await afterSignIn();
+    } catch (err) {
+      note.textContent = err.message;
+    }
+  };
+
+  const go = el('button', { class: 'btn', type: 'button', text: 'Verify' });
+  const again = el('button', { class: 'btn ghost', type: 'button', text: 'Send again' });
+  go.addEventListener('click', verify);
+  code.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') verify();
+  });
+  again.addEventListener('click', async () => {
+    note.textContent = 'sending…';
+    try {
+      await Auth.resendConfirmation(pendingEmail);
+      note.textContent = 'Sent. It can take a minute, and only one a minute is allowed.';
+    } catch (err) {
+      note.textContent = err.message;
+    }
+  });
+
+  const back = el('button', { class: 'link-del', type: 'button', text: 'Use a different email' });
+  back.addEventListener('click', () => {
+    pendingEmail = '';
+    renderGate();
+  });
+
+  return el('div', { class: 'auth-form' }, [
+    code,
+    el('div', { class: 'row2' }, [go, again]),
+    note,
+    back,
+  ]);
+}
+
+/** Signed in, but nobody has given this account any time. */
+function noAccessCard() {
+  const until = Auth.accessUntil;
+  const out = el('button', { class: 'btn', type: 'button', text: 'Sign out' });
+  out.addEventListener('click', async () => {
+    await Auth.signOut();
+    renderAccount();
+    renderGate();
+  });
+  return el('div', { class: 'auth-form' }, [
+    el('p', {
+      class: 'hint',
+      text: until
+        ? `Your access ran out on ${String(until).slice(0, 10)}. Ask the administrator to extend it.`
+        : 'This account has no access yet. Ask the administrator to grant it.',
+    }),
+    el('p', { class: 'hint', text: `Signed in as ${Auth.email}.` }),
+    out,
+  ]);
+}
+
 /**
  * Sign in first, calculator after. The shop asked for this on 17 August: it is
  * a tool people log into, not a page that happens to offer saving.
  *
- * The one exception is a server with no Supabase configured, which shows the
- * calculator and says so. Gating there would lock everyone out, owner
- * included, with no way back in from the screen — and with no Supabase there
- * is no saved job to protect either, only the calculator itself.
+ * Four states, in order: waiting for a code, not signed in, signed in with no
+ * access left, and in. The one exception is a server with no Supabase
+ * configured, which shows the calculator and says so — gating there would lock
+ * everyone out, owner included, with no way back in from the screen, and with
+ * no Supabase there is no saved job to protect either.
  */
 function renderGate() {
   const gate = $('#gate');
   const holder = $('#gateForm');
   const reason = $('#gateReason');
+  const sub = $('#gateSub');
   if (!gate || !holder) return;
 
-  const locked = !!(window.Auth && Auth.available) && !Auth.user;
+  const accounts = !!(window.Auth && Auth.available);
+  const waiting = accounts && !!pendingEmail && !Auth.user;
+  const signedOut = accounts && !Auth.user && !waiting;
+  const noAccess = accounts && !!Auth.user && !Auth.hasAccess;
+  const locked = waiting || signedOut || noAccess;
+
   document.body.className = locked ? 'signed-out' : '';
   gate.hidden = !locked;
 
   if (reason) {
-    reason.textContent =
-      window.Auth && !Auth.available
-        ? `Accounts are not set up on this server — ${Auth.reason} Nothing can be saved.`
-        : '';
+    reason.textContent = accounts
+      ? ''
+      : `Accounts are not set up on this server — ${window.Auth ? Auth.reason : ''} Nothing can be saved.`;
   }
-  if (locked) holder.replaceChildren(authForm());
+  if (!locked) return;
+
+  if (sub) {
+    sub.textContent = waiting
+      ? 'Enter the code we emailed you.'
+      : noAccess
+        ? 'This account is not active.'
+        : 'Sign in to draw a job and build its BOQ.';
+  }
+  holder.replaceChildren(waiting ? otpForm() : noAccess ? noAccessCard() : authForm());
+}
+
+/** Everything that has to happen once a session exists. */
+async function afterSignIn() {
+  try {
+    await Auth.profile();
+  } catch {
+    /* renderGate shows the no-access card if this leaves us without one */
+  }
+  renderAccount();
+  renderGate();
+  closeMenus();
+  if (Auth.hasAccess) await refreshJobList();
 }
 
 /** Ask for a job number, offering the one already in the header. */
@@ -2684,9 +2923,12 @@ async function boot() {
   // front of it: if this fails the form still works, unsaved
   if (window.Auth) {
     try {
-      await Auth.boot();
+      const session = await Auth.boot();
+      // a kept session still has to say who it is and until when — the answer
+      // decides whether the tool opens at all
+      if (session) await Auth.profile();
     } catch {
-      /* renderGate says why */
+      /* renderGate shows the sign-in card, which is the right fallback */
     }
   }
   renderAccount();

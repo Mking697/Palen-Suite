@@ -51,6 +51,7 @@ class StubEl {
   hidden = false;
   ownText = '';
   html = '';
+  dataset: Record<string, string> = {};
   style: Record<string, unknown> = {};
   classList = {
     add: () => {},
@@ -589,13 +590,23 @@ const SESSION = {
 /** What the estimator has saved, as the database would hand it back. */
 const SAVED = [{ job_no: 'HI-20001', updated_at: '2026-08-17T10:00:00Z' }];
 
-const acct = harness(APP_SOURCES, APP_IDS, {
+/** The signed-in user's own profile row, with access well into the future. */
+const PROFILE = {
+  id: 'user-asha',
+  email: 'asha@example.com',
+  access_until: '2099-01-01T00:00:00Z',
+  is_admin: false,
+};
+
+const acct = harness(APP_SOURCES, [...APP_IDS, '#admin', '#adminBody', '#adminBack'], {
   '/api/config': { supabase: { url: SUPA, anonKey: 'anon-key' } },
   '/api/rules': { materials: { PPGI: [0.4] }, defaultSkin: { material: 'PPGI', thickness: 0.4 }, doorTypes: [], doorCores: ['Puf'], doorHands: ['LHS', 'RHS'], lCutMinWallTh: 50, doorTopMinWallHeight: 3050, floorMaterials: ['PPGI'], floorLayers: [], flashingTypes: ['U Flashing'] },
   '/api/jobs': [{ jobNo: 'HI-15191', rooms: [{ name: 'Freezer Room' }] }],
   '/api/render': RENDER_REPLY,
   [`${SUPA}/auth/v1/token`]: SESSION,
-  [`${SUPA}/auth/v1/signup`]: { user: { id: 'new', email: 'newcomer@example.com' } }, // no token: confirm first
+  [`${SUPA}/auth/v1/signup`]: { user: { id: 'new', email: 'newcomer@example.com' } }, // no token: a code goes out
+  [`${SUPA}/auth/v1/verify`]: SESSION,
+  [`${SUPA}/rest/v1/profiles`]: [PROFILE],
   [`${SUPA}/rest/v1/jobs`]: (url: string, init?: { method?: string }) =>
     init?.method === 'POST' ? null : url.includes('select=spec') ? [] : SAVED,
 });
@@ -635,15 +646,42 @@ await t('empty fields are answered here, not by Supabase', async () => {
   assert.equal(acct.posts.length, before, 'nothing should have been sent');
 });
 
-await t('signing up says to confirm the email rather than nothing at all', async () => {
+await t('signing up asks for the code, rather than saying nothing at all', async () => {
   acctInput('email')!.value = 'newcomer@example.com';
   acctInput('password')!.value = 'a-good-password';
   acctButton('Sign up')!.fire('click');
   await settle();
 
   const said = textOf(acct.ids.get('#gateForm'));
-  assert.ok(said.includes('Check your email'), `should say to confirm: ${said}`);
-  assert.equal(acct.ids.get('#gate')!.hidden, false, 'still locked until confirmed');
+  assert.ok(said.includes('Code sent to newcomer@example.com'), `should ask for a code: ${said}`);
+  assert.ok(acctButton('Verify'), 'no verify button');
+  assert.equal(acct.ids.get('#gate')!.hidden, false, 'still locked until verified');
+});
+
+await t('the code is what opens it — no link, so no Site URL to get wrong', async () => {
+  const box = [...walk(acct.ids.get('#gateForm')!)].find((n) => n.tag === 'input')!;
+  box.value = '123456';
+  acctButton('Verify')!.fire('click');
+  await settle();
+
+  const sent = acct.posts.find((p) => p.url.includes('/auth/v1/verify'));
+  assert.ok(sent, 'nothing was verified');
+  assert.deepEqual(sent!.body, {
+    type: 'signup',
+    email: 'newcomer@example.com',
+    token: '123456',
+  });
+  assert.equal(acct.ids.get('#gate')!.hidden, true, 'the gate should be down');
+});
+
+await t('signing out puts the gate back', async () => {
+  const menu = [...walk(acct.ids.get('#accountPanel')!)].find(
+    (n) => n.tag === 'button' && textOf(n).trim() === 'Sign out',
+  );
+  assert.ok(menu, 'no sign out');
+  menu!.fire('click');
+  await settle();
+  assert.equal(acct.ids.get('#gate')!.hidden, false);
 });
 
 await t('signing in opens the tool, and lists their own saved jobs', async () => {
@@ -707,6 +745,88 @@ await t('a session is kept, so a reload does not sign the estimator out', () => 
   );
   assert.ok(kept, 'nothing was stored');
   assert.ok(kept!.includes('refresh-for-asha'), 'the refresh token has to be kept');
+});
+
+console.log('\n  access, and the administrator\n');
+
+/** A harness that is already signed in, with the profile it is given. */
+const signedInAs = (profile: Record<string, unknown>, users?: unknown) => {
+  const h = harness(APP_SOURCES, [...APP_IDS, '#admin', '#adminBody', '#adminBack'], {
+    '/api/config': { supabase: { url: SUPA, anonKey: 'anon-key' } },
+    '/api/rules': { materials: { PPGI: [0.4] }, defaultSkin: { material: 'PPGI', thickness: 0.4 }, doorTypes: [], doorCores: ['Puf'], doorHands: ['LHS'], lCutMinWallTh: 50, doorTopMinWallHeight: 3050, floorMaterials: ['PPGI'], floorLayers: [], flashingTypes: ['U Flashing'] },
+    '/api/jobs': [],
+    '/api/render': RENDER_REPLY,
+    [`${SUPA}/auth/v1/token`]: SESSION,
+    [`${SUPA}/rest/v1/profiles`]: (url: string) =>
+      url.includes('order=') ? (users ?? [profile]) : [profile],
+    [`${SUPA}/rest/v1/jobs`]: [],
+  });
+  // a kept session, so boot() signs in without anyone typing
+  (h.ctx.localStorage as { setItem(k: string, v: string): void }).setItem(
+    'panelcalc.session',
+    JSON.stringify({ ...SESSION, expires_at: Math.floor(Date.now() / 1000) + 3600 }),
+  );
+  return h;
+};
+
+await t('an account whose access has run out is told so, and gets no tool', async () => {
+  const expired = signedInAs({ ...PROFILE, access_until: '2020-01-01T00:00:00Z' });
+  await settle();
+
+  assert.equal(expired.ids.get('#gate')!.hidden, false, 'the gate should still be up');
+  const said = textOf(expired.ids.get('#gateForm'));
+  assert.ok(said.includes('ran out on 2020-01-01'), `should say when: ${said}`);
+  assert.ok(said.includes('administrator'), 'and who to ask');
+});
+
+await t('an admin is never locked out by a date', async () => {
+  const admin = signedInAs({ ...PROFILE, is_admin: true, access_until: '2020-01-01T00:00:00Z' });
+  await settle();
+  assert.equal(admin.ids.get('#gate')!.hidden, true, 'an admin gets in regardless');
+  assert.ok(
+    textOf(admin.ids.get('#accountPanel')).includes('Administrator'),
+    'and is told they are one',
+  );
+});
+
+await t('only an admin is offered the users screen', async () => {
+  const ordinary = signedInAs(PROFILE);
+  await settle();
+  const items = textOf(ordinary.ids.get('#accountPanel'));
+  assert.ok(!items.includes('Manage users'), 'an ordinary user must not be offered it');
+});
+
+await t('the users screen lists everyone, and giving days writes a date', async () => {
+  const admin = signedInAs({ ...PROFILE, is_admin: true }, [
+    { ...PROFILE, is_admin: true },
+    { id: 'user-ben', email: 'ben@example.com', access_until: null, is_admin: false },
+  ]);
+  await settle();
+
+  const open = [...walk(admin.ids.get('#accountPanel')!)].find(
+    (n) => n.tag === 'button' && textOf(n).trim() === 'Manage users',
+  );
+  assert.ok(open, 'no way in');
+  open!.fire('click');
+  await settle();
+
+  const listed = textOf(admin.ids.get('#adminBody'));
+  assert.ok(listed.includes('ben@example.com'), `everyone should be listed: ${listed}`);
+  assert.ok(listed.includes('no access'), 'and their state said');
+
+  const before = admin.posts.length;
+  const grant = [...walk(admin.ids.get('#adminBody')!)].find(
+    (n) => n.tag === 'button' && textOf(n).trim() === '+30d',
+  );
+  assert.ok(grant, 'no way to give access');
+  grant!.fire('click');
+  await settle();
+
+  const patch = admin.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  assert.ok(patch, 'nothing was written');
+  const until = (patch!.body as { access_until: string }).access_until;
+  const days = (new Date(until).getTime() - Date.now()) / 86400000;
+  assert.ok(days > 29 && days < 31, `should be about 30 days, was ${days}`);
 });
 
 console.log(`\n  ${passed} passed\n`);

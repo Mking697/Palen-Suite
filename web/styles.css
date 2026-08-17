@@ -293,6 +293,24 @@ body.signed-out .gate {
   font-size: 12.5px; color: var(--dev);
 }
 
+/* ---------- the administrator's screen ---------- */
+
+.admin[hidden] { display: none; }
+.admin {
+  max-width: 900px; margin: 0 auto; padding: 26px 20px 60px;
+}
+.admin-head { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+.admin-head h2 { margin: 0; font-size: 20px; flex: 1; }
+.admin .scroller { border: 1px solid var(--line); border-radius: 11px; background: var(--card); }
+.admin td, .admin th { text-align: left; white-space: nowrap; }
+.admin td:last-child { display: flex; gap: 6px; flex-wrap: wrap; }
+.admin .btn { padding: 4px 10px; font-size: 12px; }
+.ok-tag, .dev-tag {
+  font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+}
+.ok-tag { background: #e7f6ed; color: var(--ok); }
+.dev-tag { background: #fff8ea; color: var(--dev); }
+
 /* ---------- header menus (File, account) ---------- */
 
 /* details/summary, so a menu opens and closes itself with no script */

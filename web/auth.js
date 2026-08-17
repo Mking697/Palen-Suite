@@ -23,6 +23,8 @@
     reason: '',
     /** { access_token, refresh_token, expires_at, user } */
     session: null,
+    /** the signed-in user's own profiles row, once fetched */
+    profile: null,
   };
 
   const readStored = () => {
@@ -35,6 +37,7 @@
 
   const store = (session) => {
     state.session = session;
+    if (!session) state.profile = null; //  signed out: whose profile would it be
     try {
       if (session) localStorage.setItem(STORE, JSON.stringify(session));
       else localStorage.removeItem(STORE);
@@ -132,9 +135,9 @@
 
     /**
      * Sign up. Supabase is set to require a confirmed email, so this returns
-     * with no session — the estimator has to click the link first. Saying that
-     * plainly is the whole point; a silent "nothing happened" is what makes
-     * people try again three times.
+     * with no session — a six digit code goes to the address instead, and
+     * `verifyOtp` is the next step. Saying that plainly is the whole point; a
+     * silent "nothing happened" is what makes people try again three times.
      */
     async signUp(email, password) {
       const body = await authCall('signup', { email, password });
@@ -143,6 +146,20 @@
         return { verified: true };
       }
       return { verified: false };
+    },
+
+    /**
+     * The code from the signup email. Supabase sends both a link and a token;
+     * the template prints the token, and this is the half that uses it.
+     *
+     * A code beats a link here for a reason worth keeping: a link only works if
+     * Supabase's Site URL is right, and that setting is invisible, defaults to
+     * localhost, and broke this three times. A code depends on no URL at all.
+     */
+    async verifyOtp(email, token) {
+      const body = await authCall('verify', { type: 'signup', email, token: token.trim() });
+      store({ ...body, expires_at: Math.floor(Date.now() / 1000) + (body.expires_in || 3600) });
+      return state.session;
     },
 
     async signIn(email, password) {
@@ -158,6 +175,83 @@
 
     async signOut() {
       store(null);
+    },
+
+    /* ---------- who this is, and until when ---------- */
+
+    /**
+     * The signed-in user's own profile row: when their access runs out, and
+     * whether they are an admin.
+     *
+     * **This is read, not trusted.** The database is what enforces both — the
+     * `jobs` policy carries `has_access()`, so an expired account is refused by
+     * Postgres whatever this screen decides to show. What is fetched here only
+     * decides what to *say*.
+     */
+    async profile() {
+      const rows = await db('profiles?select=id,email,access_until,is_admin&limit=1');
+      state.profile = rows && rows.length ? rows[0] : null;
+      return state.profile;
+    },
+
+    get isAdmin() {
+      return !!(state.profile && state.profile.is_admin);
+    },
+
+    /** Access runs to this moment, or null when nobody has granted any. */
+    get accessUntil() {
+      return state.profile ? state.profile.access_until : null;
+    },
+
+    get hasAccess() {
+      if (!state.profile) return false;
+      if (state.profile.is_admin) return true;
+      const until = state.profile.access_until;
+      return !!until && new Date(until).getTime() > Date.now();
+    },
+
+    /* ---------- admin ---------- */
+
+    /**
+     * Everyone, for the admin screen. An ordinary user asking for this gets
+     * their own row back and nothing else — the policy sees to that, so the
+     * list cannot leak by the screen forgetting to filter.
+     */
+    async listUsers() {
+      return db('profiles?select=id,email,access_until,is_admin&order=access_until.desc');
+    },
+
+    /** Give this account access until `until`, or null to stop it now. */
+    async setAccess(id, until) {
+      await db(`profiles?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: { access_until: until },
+      });
+    },
+
+    /**
+     * Remove an account for good, with everything it saved.
+     *
+     * This one goes through our own server, and it is the only thing here that
+     * does. Deleting a user needs Supabase's service key, which bypasses every
+     * policy — so it can never be in a browser. The server holds it, checks
+     * that the caller really is an admin before using it, and that check is
+     * made against the database rather than taken from the request.
+     */
+    async deleteUser(id) {
+      const session = await fresh();
+      if (!session) throw new Error('Not signed in.');
+      const res = await fetch('/api/admin/user', {
+        method: 'DELETE',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Could not delete (${res.status})`);
     },
 
     /* ---------- the estimator's own jobs ---------- */

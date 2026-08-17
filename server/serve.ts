@@ -307,6 +307,59 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    /*
+     * Remove a user for good. The only route that touches a real secret.
+     *
+     * Deleting an account needs Supabase's **service key**, which bypasses
+     * every row level policy — so it can never reach a browser, and this is
+     * the reason the server exists in the accounts story at all.
+     *
+     * Being an admin is **checked against the database, not believed from the
+     * request**: the caller's own token is used to read their profile, and row
+     * level security means that token can only ever return their own row. A
+     * request that claims to be an admin and is not gets its own row back with
+     * `is_admin` false, and is refused.
+     */
+    if (path === '/api/admin/user' && req.method === 'DELETE') {
+      const url = process.env.SUPABASE_URL ?? '';
+      const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
+      const serviceKey = process.env.SUPABASE_SERVICE_KEY ?? '';
+      if (!url || !anonKey) return json(res, 501, { error: 'Accounts are not configured here.' });
+      if (!serviceKey) {
+        return json(res, 501, {
+          error:
+            'Deleting a user needs SUPABASE_SERVICE_KEY on the server. ' +
+            'Until it is set, use Stop — it ends access and keeps the account.',
+        });
+      }
+
+      const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+      if (!token) return json(res, 401, { error: 'Not signed in.' });
+
+      const who = await fetch(`${url}/rest/v1/profiles?select=id,is_admin&limit=1`, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+      });
+      const rows = who.ok ? ((await who.json()) as Array<{ id: string; is_admin: boolean }>) : [];
+      if (!rows.length || !rows[0].is_admin) {
+        return json(res, 403, { error: 'Only an administrator can delete a user.' });
+      }
+
+      const { id } = JSON.parse(await readBody(req)) as { id?: string };
+      if (!id) return json(res, 400, { error: 'Which user?' });
+      if (id === rows[0].id) {
+        return json(res, 400, { error: 'An administrator cannot delete their own account.' });
+      }
+
+      const gone = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      });
+      if (!gone.ok) {
+        return json(res, 502, { error: `Supabase refused: ${(await gone.text()).slice(0, 200)}` });
+      }
+      return json(res, 200, { ok: true });
+    }
+
     // the pick lists the form offers, straight from core/rules.ts
     if (path === '/api/rules') {
       return json(res, 200, {

@@ -102,6 +102,7 @@ Routes:
 | `POST /api/render` | **the calculator's one call** — a job in; its BOQ, the flashing table, the one-canvas drawing sheet with its clickable cells, every individual drawing, and the 3D model out |
 | `POST /api/dxf` | one drawing of an unsaved job as DXF; `{ sheet: true }` for the whole sheet |
 | `/api/config` | the Supabase project the browser should sign in against, **from the environment** — `null` when it is not configured, and then the calculator works with no accounts |
+| `DELETE /api/admin/user` | removes a user for good. The only route holding a real secret: deleting needs Supabase's service key, which bypasses every policy and can never be in a browser. Being an admin is checked **against the database**, not believed from the request |
 | `/api/rules` | the shop's pick lists — sheet materials, door types, cores and hands, floor build-up, flashing types, and the two thresholds the form has to show: the L cut and the door top |
 | `/api/jobs` | registered jobs and their rooms, for the header's job search |
 | `/api/boq?job=HI-15191` | generated BOQ blocks + totals |

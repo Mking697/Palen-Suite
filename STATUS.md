@@ -410,6 +410,32 @@ are in place, and `SETUP.md` has the SQL that made them.
   replies "Anonymous sign-ins are disabled" — true, and useless to somebody who
   has simply not typed anything yet.
 
+### Phase 9b — a code, a trial, and an administrator (17 August)
+
+- **Signup is verified by a six digit code**, not a link. The email template
+  prints `{{ .Token }}` and the app asks for it. Worth the change on its own
+  merit: a link only works if Supabase's Site URL is right, and that setting is
+  invisible, defaults to `localhost:3000`, and broke this three times. A code
+  depends on no URL at all.
+- **A new account gets 14 days**, granted by the signup trigger. Changing the
+  number is one word in `handle_new_user`.
+- **`nantultiwari697@gmail.com` is the administrator**, set by the SQL in
+  `SETUP.md`. *Manage users* lists everyone with their access, gives 7 / 30 /
+  365 days, **Stop**s an account without losing anything, and **Delete**s one
+  for good.
+- **Access is enforced by the database, not the screen.** The `jobs` policy
+  carries `has_access()`, so an expired account is refused by Postgres whatever
+  the browser does. The screen only decides what to *say*.
+- **Delete is the one thing that needs the server.** Removing a user needs the
+  service key, which bypasses every policy and can never be in a browser. The
+  endpoint checks the caller is an admin *against the database* — using their
+  own token, which row level security limits to their own row — rather than
+  believing the request. Without `SUPABASE_SERVICE_KEY` set, Delete says so and
+  Stop still works.
+- Two SQL functions are `security definer` on purpose: a policy on `profiles`
+  that reads `profiles` sends Postgres into infinite recursion. That is the
+  most common way to get RLS wrong on Supabase, and `SETUP.md` says why.
+
 Everything on the hosting and Supabase side is in place: the environment
 variables (`/api/config` proves it), the Site URL, all three Redirect URLs, and
 `panelsuite.online` authenticated in Brevo. The last step is Brevo's SMTP

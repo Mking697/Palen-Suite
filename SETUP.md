@@ -123,12 +123,124 @@ Ye SQL **aapko hi chalana hai**. Table banane ke liye dashboard login ya databas
 password chahiye — anon key se sirf wahi ho sakta hai jo ek aam browser kar sakta
 hai, jo theek bhi hai.
 
+### A3b. Admin, trial aur access — doosra SQL
+
+Ye pehle wale ke **baad** chalaiye. Isse teen cheezein aati hain: naye user ko
+**14 din ka trial**, ek **admin** jo sabka access badha/ghata sake, aur ye ki
+**access khatam hone par database khud rok de** — sirf screen par nahi.
+
+```sql
+-- kis tareekh tak access hai, kaun admin hai, aur email (admin ko list me
+-- dikhane ke liye — auth.users me hai par wahan se padha nahi ja sakta)
+alter table public.profiles
+  add column if not exists access_until timestamptz,
+  add column if not exists is_admin     boolean not null default false,
+  add column if not exists email        text;
+
+-- naye user ko 14 din. Badalna ho to yahi ek number badliye.
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  insert into public.profiles (id, email, access_until)
+  values (new.id, new.email, now() + interval '14 days');
+  return new;
+end;
+$$;
+
+-- purane user (jo pehle se bane hain) ko bhi email aur trial de dijiye
+update public.profiles p
+   set email = u.email,
+       access_until = coalesce(p.access_until, now() + interval '14 days')
+  from auth.users u
+ where u.id = p.id;
+
+/*
+ * Ye do function `security definer` hain — yaani ye RLS ke bahar chalte hain.
+ * Ye zaroori hai: agar policy khud `profiles` ko padhegi to Postgres usi policy
+ * ko dobara lagayega aur infinite recursion me phans jayega. Ye Supabase ki
+ * sabse aam galti hai.
+ */
+create or replace function public.is_admin()
+returns boolean language sql security definer stable set search_path = '' as $$
+  select coalesce((select p.is_admin from public.profiles p where p.id = auth.uid()), false);
+$$;
+
+create or replace function public.has_access()
+returns boolean language sql security definer stable set search_path = '' as $$
+  select coalesce(
+    (select p.is_admin or (p.access_until is not null and p.access_until > now())
+       from public.profiles p where p.id = auth.uid()),
+    false);
+$$;
+
+-- profiles: apni row hamesha, aur admin ko sabki
+drop policy if exists "apna hi profile" on public.profiles;
+
+create policy "apni profile padho" on public.profiles
+  for select using (auth.uid() = id or public.is_admin());
+
+create policy "apni profile badlo" on public.profiles
+  for update using (auth.uid() = id) with check (auth.uid() = id);
+
+-- sirf admin kisi aur ki row badal sakta hai (access_until yahin se badlega)
+create policy "admin sabki profile badle" on public.profiles
+  for update using (public.is_admin()) with check (public.is_admin());
+
+/*
+ * jobs: apne hi job, AUR access chalu hona chahiye.
+ * Access ki jaanch YAHAN hai, screen par nahi — screen par lagi rok ek
+ * guzarish hoti hai, database ki rok asli hoti hai.
+ */
+drop policy if exists "apne hi job" on public.jobs;
+
+create policy "apne hi job, access rehte hue" on public.jobs
+  for all using (auth.uid() = user_id and public.has_access())
+  with check (auth.uid() = user_id and public.has_access());
+```
+
+Ab **admin banaiye** — ye alag se, taaki naam saaf dikhe:
+
+```sql
+update public.profiles
+   set is_admin = true,
+       access_until = now() + interval '100 years'
+ where email = 'nantultiwari697@gmail.com';
+```
+
+> Ye tabhi chalega jab us email se **ek baar sign up ho chuka ho** — profile row
+> signup par hi banti hai. Pehle us email se account bana lijiye, phir ye chalaiye.
+> Chalne par `UPDATE 1` aana chahiye; `UPDATE 0` aaya matlab wo account abhi hai
+> hi nahi.
+
 ### A4. Email confirmation on kijiye
 
 **Authentication → Providers → Email**:
 
 - **Enable Email provider** — on
 - **Confirm email** — **on** (aapne yahi maanga hai: verify karke hi login)
+
+### A4b. OTP — link ki jagah 6-digit code
+
+Aapne kaha ki verification **OTP se** ho, link se nahi. Supabase ki email me
+dono bheje ja sakte hain; badalna sirf template me hai.
+
+**Authentication → Emails → Templates → Confirm signup** kholiye aur uska
+matn badal kar ye kar dijiye:
+
+```html
+<h2>Panel Suite</h2>
+<p>Aapka verification code:</p>
+<p style="font-size:28px;letter-spacing:6px;font-weight:700">{{ .Token }}</p>
+<p>Ye code 1 ghante me expire ho jayega. Aapne signup nahi kiya to is email ko
+   nazarandaz kar dijiye.</p>
+```
+
+`{{ .Token }}` hi wo 6-digit code hai. `{{ .ConfirmationURL }}` hata dijiye —
+app ab code maangti hai, link nahi.
+
+> **Ek faayda saath me:** link `Site URL` par nirbhar karta hai, jo is setup me
+> teen baar phansa chuka hai. Code kisi URL par nirbhar nahi karta, to wo poori
+> dikkat hi khatam ho jaati hai.
 
 > **Signup test karne se pehle Brevo SMTP laga lijiye (Part B).** Supabase ka
 > apna default mailer **ghante me sirf 3–4 email** bhejta hai aur production ke
@@ -377,8 +489,16 @@ Environment Variables** me:
 | `HOST` | `0.0.0.0` | nahi | pehle se laga hai |
 | `SUPABASE_URL` | `https://kyzexsarilxkzwkntode.supabase.co` | nahi | **ab — login isi se chalega** |
 | `SUPABASE_ANON_KEY` | anon / public key | nahi — browser me jaati hi hai | **ab** |
+| `SUPABASE_SERVICE_KEY` | Supabase ki **service_role** key | **haan — sabse khatarnak** | sirf "user delete" ke liye |
 | `BREVO_API_KEY` | Brevo API key | **haan — kisi ko mat dijiye** | Phase 12 |
 | `MAIL_FROM` |  `info@panelsuite.online` | nahi | Phase 12 |
+
+> **`SUPABASE_SERVICE_KEY` sirf tab daaliye jab admin ko user *delete* karna
+> ho.** Wo key har policy ko bypass karti hai, isliye wo **kabhi browser me
+> nahi jaati** — server use rakhta hai aur use karne se pehle jaanchta hai ki
+> maangne wala sach me admin hai. Na daali jaye to sab kuch chalta hai, bas
+> Delete button keh dega ki wo set nahi hai; **Stop** phir bhi kaam karta hai
+> aur rozana ke liye wahi kaafi hai.
 
 Phir **Save and redeploy**.
 
