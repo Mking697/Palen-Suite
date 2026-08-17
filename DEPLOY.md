@@ -215,7 +215,7 @@ Then in hPanel:
    |---|---|
    | Build command | `npm run build` |
    | Start command | `npm start` |
-   | Entry point | `app.js` |
+   | Entry point | `app.cjs` — or `app.js`, which is one line importing it |
    | Output directory | *empty* — `app.js` finds `dist/` itself, so the host does not need to know about it |
    | Environment | `HOST=0.0.0.0` |
 
@@ -244,8 +244,25 @@ In this order — each one fails differently and tells you something else:
 
 The build log is not the application log. A build that ends `found 0
 vulnerabilities` only means `npm install` ran — it says nothing about whether
-the app started. **Find the application / runtime log**, which is where this
-app's own startup lines go, and read the one that matters:
+the app started.
+
+**If the host's runtime log is empty, read `startup.log` instead.** `app.cjs`
+writes its own startup lines to a file beside itself, precisely because an empty
+runtime log is ambiguous: it can mean the process never started, or only that
+the host does not capture stdout, and those need different fixes. Open the app's
+folder in the host's file manager:
+
+| | What it means |
+|---|---|
+| **`startup.log` is not there** | the host never started this process. The fault is the start command or the entry file, not the app. Try entry `app.cjs` |
+| **it is there** | read it — it states the Node it got, the environment as it arrived, whether `dist/` was found, and the error with its stack if the import threw |
+
+`app.cjs` is CommonJS on purpose. An app server that loads an entry point with
+`require()` cannot load an ES module, and that failure happens before any of our
+code — including any logging — can run. `app.js` is one line importing it, so
+both entry file names work and neither can be the cause.
+
+The host's own runtime log, when it has anything in it, says the same things:
 
 ```
 listening on 0.0.0.0:38412 — PORT came from the platform, so this is behind a proxy

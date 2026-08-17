@@ -9,3 +9,6 @@ build/
 Thumbs.db
 .vscode/
 .idea/
+
+# written by app.cjs at startup, on whatever machine runs it
+startup.log

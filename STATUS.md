@@ -295,11 +295,26 @@ error, no clue, nothing. An empty log was the evidence.
 
 `tools/build.ts` now compiles `core/` and `server/` into `dist/` as plain
 JavaScript, and **still with no dependency**: Node strips the types itself
-through `module.stripTypeScriptTypes`. `app.js` uses `dist/` when it is there
+through `module.stripTypeScriptTypes`. The entry uses `dist/` when it is there
 and the TypeScript when it is not, so one entry point works both ways and
 development is unchanged. The verifier is not shipped in a build — its expected
 sheets are ground truth, not app — and `/api/verify` says so instead of spawning
 something that is not there.
+
+**And the build did not fix it either — the log stayed empty.** So the app was
+never the problem: either the host does not start this process, or it does not
+capture what the process prints, and an empty log cannot tell those apart. So
+the entry now **writes its own `startup.log` beside itself**, readable in any
+file manager, and it is `app.cjs` — CommonJS, because an app server that loads
+an entry with `require()` cannot load an ES module and fails before any logging
+of ours can run. `app.js` is one line importing it, so both entry names work.
+
+**That file is the next step, and it answers it either way:** if `startup.log`
+is not there after a deploy, the host never started this process and the fault
+is the start command or the entry file; if it is there, it states the Node it
+got, the environment as it arrived, whether `dist/` was found, and the error
+with its stack. Hostinger Business also has SSH under *Advanced*, and running
+`node app.cjs` by hand in the app's folder gives the same answer immediately.
 
 **The first two deploys returned 503, and the fix is in the repo.** Hostinger's
 wizard applies its environment variables *during the build process*, so `HOST`
