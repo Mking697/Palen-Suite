@@ -35,6 +35,7 @@ hai — usme koi key kabhi nahi jayegi.
 | Kya | Kaisa dikhta hai | Ye kya hai |
 |---|---|---|
 | **Project URL** | `https://abcdefgh.supabase.co` | secret nahi |
+| **Project ID / ref** | `abcdefgh` | URL ka hi hissa — URL hamesha `https://<project-id>.supabase.co` hota hai, to ek mil jaye to doosra bhi mil gaya |
 | **anon / public key** | lamba `eyJ...` token | **secret nahi** — ye browser me jaana hi hota hai, RLS iski hifazat karta hai |
 | ~~service_role key~~ | lamba `eyJ...` token | **ye kabhi kisi ko mat dijiye** — ye saari security bypass karti hai. Na browser me, na repo me, na chat me |
 
@@ -43,7 +44,11 @@ lagaiye.
 
 ### A3. Tables banaiye — SQL paste kar dijiye
 
-Supabase me **SQL Editor** kholiye, **New query**, ye poora paste karke **Run**:
+Supabase me **SQL Editor** kholiye, **New query**, ye paste karke **Run**.
+
+> **Copy karte waqt ` ``` ` wali lines chhod dijiye.** Wo markdown ka code block
+> dikhane ka nishaan hain, SQL nahi. Galti se aa gayin to Run karte hi syntax
+> error milega — pehli aur aakhri line delete kar dijiye, baaki sab theek hai.
 
 ```sql
 -- har user ka profile: uske Drive/Sheet URLs yahan rahenge
@@ -98,6 +103,13 @@ create trigger on_auth_user_created
 
 **Row Level Security sabse zaroori line hai.** Uske bina har user sabka data
 padh sakta hai, chahe app kitni bhi sahi likhi ho. Isse skip mat kijiyega.
+
+Chalne par neeche `Success. No rows returned` aayega. Phir **Table Editor** me
+`profiles` aur `jobs` dono dikhne chahiye, dono par **RLS enabled** ke saath.
+
+Ye SQL **aapko hi chalana hai**. Table banane ke liye dashboard login ya database
+password chahiye — anon key se sirf wahi ho sakta hai jo ek aam browser kar sakta
+hai, jo theek bhi hai.
 
 ### A4. Email confirmation on kijiye
 
