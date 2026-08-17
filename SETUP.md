@@ -58,9 +58,15 @@ lagaiye.
 
 Supabase me **SQL Editor** kholiye, **New query**, ye paste karke **Run**.
 
-> **Copy karte waqt ` ``` ` wali lines chhod dijiye.** Wo markdown ka code block
-> dikhane ka nishaan hain, SQL nahi. Galti se aa gayin to Run karte hi syntax
-> error milega — pehli aur aakhri line delete kar dijiye, baaki sab theek hai.
+> **Sabse aasan raasta: repo ka `sql/` folder.** Wahan yahi SQL alag files me
+> hai — `01-tables.sql`, `02-access-and-admin.sql`, `03-make-admin.sql` — aur
+> unme **koi fence nahi hai**. File kholiye, sab select kijiye, copy, Run.
+>
+> Yahan neeche se copy karein to ` ``` ` wali pehli aur aakhri line **chhod
+> dijiye** — wo markdown ka nishaan hai, SQL nahi. Ye do baar phansa chuka hai,
+> aur dhyan dene layak baat ye hai: **Postgres poori script pehle padhta hai**,
+> to ek bhi galat line ka matlab hai **kuch bhi nahi chala** — aadha nahi, kuch
+> bhi nahi.
 
 ```sql
 -- har user ka profile: uske Drive/Sheet URLs yahan rahenge
