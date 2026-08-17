@@ -137,6 +137,33 @@ Brevo do kaam karega:
 1. **Supabase ki verification email bhejega** (SMTP ke through)
 2. **BOQ + drawing wali email bhejega** (API ke through, Phase 12 me)
 
+### Brevo se login nahi hota — ye baat pehle saaf kar lijiye
+
+**Brevo ek email bhejne wali service hai, login wali nahi.** Uske paas users ka
+database hai hi nahi — na password, na session, na koi "sign in". Login ke liye
+jo chahiye (user record, password hash, session token, refresh, forgot password)
+wo sab **Supabase Auth** karta hai.
+
+Aur **email pehle se hi Brevo se hi jaati hai** — "Custom SMTP" ka matlab hi
+yahi hai. Naam me Brevo nahi likha, isliye lagta hai Supabase bhej raha hai:
+
+| Kaam | Kaun |
+|---|---|
+| Account, password, session | **Supabase** |
+| Email ka matn banana | Supabase |
+| **Email sach me bhejna** | **Brevo** |
+| Kis pate se | `info@panelsuite.online` — aapka domain |
+| Kiska quota, kiska log | **Brevo ka** |
+
+Estimator ko email aapke apne pate se aati dikhegi; Supabase ka naam kahin nahi
+aata.
+
+> Brevo ka **API** use karna ho (SMTP ke bajaye) to Supabase me **Auth Hooks →
+> Send Email Hook** se ho sakta hai. Bhejta usme bhi Brevo hi hai, quota bhi
+> wahi — faayda sirf template par zyada control. SMTP 5 minute ka kaam hai, wo
+> naya code maangta hai. Isliye SMTP se shuru kijiye; hook baad me bhi lag sakta
+> hai, tab tak login chalu rahega.
+
 ### B0. Is project ka apna Brevo account
 
 **Is project ke liye alag Brevo account banaya gaya hai** (17 August 2026),
