@@ -137,19 +137,39 @@ Brevo do kaam karega:
 1. **Supabase ki verification email bhejega** (SMTP ke through)
 2. **BOQ + drawing wali email bhejega** (API ke through, Phase 12 me)
 
-### B1. Account aur sender
+### B0. Hikom ka apna Brevo account — Admetics wale se alag
 
-1. [brevo.com](https://www.brevo.com) par free account (300 email/din — kaafi hai).
-2. **Senders, Domains & Dedicated IPs → Domains → Add a domain** → `hikom.in`
-3. Brevo teen DNS record dega — **DKIM**, **DMARC**, aur ek verification record.
-   Inhe `hikom.in` ke DNS me daaliye (Hostinger me hi domain ho to
-   **Domains → DNS Zone**).
-4. Verify dabaiye. DNS failne me 15 minute se kuch ghante lag sakte hain.
+**Hikom ke liye alag Brevo account banaya gaya hai** (17 August 2026), Admetics
+wale me domain jodne ke bajaye. Wajah quota hai: free plan ka **300 email/din
+poore account ka saanjha** hota hai, aur Admetics se marketing campaign jaati
+hai. Ek blast quota kha jaata, aur us din **koi estimator login hi nahi kar
+paata** — kyunki confirmation email hi nahi jaati. Login email kisi doosre
+business ki marketing par nahi tik sakti.
 
-> **Domain verify kyun?** Bina iske aapki email spam me jaayegi ya bounce hogi.
-> Jaldi test karna ho to **Senders → Add a sender** se sirf ek email address
-> (jaise `info@hikom.in`) verify kar lijiye — us par ek link aayega. Domain baad
-> me kar lijiyega.
+Register karne ke liye Brevo ko har account ka alag email chahiye — `info@hikom.in`.
+
+### B1. Sender — pehle jaldi wala, phir sahi wala
+
+Do raaste hain. **Dono kar lijiye**: pehla aaj kaam chala dega, doosra asli hai.
+
+**Jaldi wala (2 minute) — single sender:**
+
+1. **Settings → Senders, domains, IPs → Senders** tab → **Add a sender**
+2. Name `Hikom Panel Suite`, Email `info@hikom.in`
+3. Us pate par Brevo ek confirmation email bhejega — **link click kijiye**
+4. Bas. Ab **usi ek address** se email ja sakti hai
+
+**Asli wala (DNS, ghanton me) — poora domain:**
+
+1. **Domains** tab → **Add a new domain** → `hikom.in`
+2. Brevo teen TXT record dega — ek **verification code**, ek **DKIM**
+   (`mail._domainkey`), ek **DMARC** (`_dmarc`)
+3. Inhe `hikom.in` ke DNS me daaliye. Domain Hostinger par hi ho to
+   **hPanel → Domains → DNS Zone**
+4. Brevo me wapas jaakar **Authenticate** dabaiye
+
+> **Domain kyun zaroori hai:** bina iske email spam me jaati hai ya bounce hoti
+> hai. Single sender se kaam chal jaata hai par deliverability kamzor rehti hai.
 
 ### B2. SMTP credentials — Supabase ke liye
 
@@ -165,13 +185,30 @@ Brevo do kaam karega:
 Ab **Supabase → Project Settings → Authentication → SMTP Settings**:
 
 - **Enable Custom SMTP** — on
-- **Sender email** — `info@hikom.in` (wahi jo verify kiya)
+- **Sender email** — `info@hikom.in` (wahi jo Brevo me verify kiya — dusra pata
+  daalne par Brevo bhejne se mana kar dega)
 - **Sender name** — `Hikom Panel Suite`
 - **Host** — `smtp-relay.brevo.com` · **Port** — `587`
 - **Username / Password** — upar wale
 
 Save. Ab signup par verification email Brevo se jayegi, aur limit khatam nahi
 hogi.
+
+### B4. Site URL — ye chhoot jaata hai, aur phir "link kaam nahi karta"
+
+Confirmation email ka link user ko **kahan bhejega**, ye Supabase ki apni setting
+tay karti hai — aur uski default `http://localhost:3000` hoti hai. Theek na ki
+to link click karne par estimator ek marey hue page par pahunchega, aur lagega
+ki signup toota hua hai.
+
+**Supabase → Authentication → URL Configuration**:
+
+| | |
+|---|---|
+| **Site URL** | `https://aqua-finch-257417.hostingersite.com` |
+| **Redirect URLs** | wahi, aur test ke liye `http://127.0.0.1:5173` bhi jod dijiye |
+
+Asli domain lagne par Site URL wahin badalni hogi.
 
 ### B3. API key — app ki apni email ke liye
 
