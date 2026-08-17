@@ -25,7 +25,7 @@ uses.
 | Door (`core/boq.ts`, `core/draw/`) | hand LHS/RHS drives the printed label and the plan's swing; over a 3050 wall the piece above the door is its own panel |
 | Calculator (`server/`, `web/`) | multi-room, connected rooms, rooms of any right-angled shape typed wall by wall, per-wall sheets, doors, the L cut on or off, floor build-up and run direction, flashing |
 | Guide (`/guide`, `web/guide.js`) | `GUIDE.md` rendered in the app, one button in the header, one copy of the instructions |
-| Tests | 149, plus the line-by-line sheet diff |
+| Tests | 156, plus the line-by-line sheet diff |
 
 `npm run check` must print **`ALL ROWS MATCH across 3 jobs`** with 9 documented
 deviations and **1 plan finding** (HI-15191's ante room — see below). It did at
@@ -275,29 +275,45 @@ different-sized rooms actually get drawn?
 
 ## Where it is deployed
 
-Nowhere yet, but it is ready to go and the decision is taken: **Hostinger, on a
-temporary domain first** (17 August 2026), not `hicon.co.in`. The repo is on
-GitHub at **`Mking697/Palen-Suite`** (public, branch `main`, identity
-`Mking697`), and Hostinger deploys what is on GitHub — so **push before
-deploying** or the site is built from the last push, not from this machine.
+**Hostinger, temporary domain `aqua-finch-257417.hostingersite.com`**, deploying
+from GitHub `Mking697/Palen-Suite` (public, branch `main`, identity `Mking697`).
+Hostinger deploys what is on GitHub — so **push before deploying**, or the site
+is built from the last push and not from this machine.
+
+Settings that worked: framework *Other*, branch `main`, **Node 24.x**, root
+`./`, build command *None*, package manager npm, output directory empty, entry
+file `app.js`, and two environment variables — `HOST=0.0.0.0` and
+`NODE_OPTIONS=--experimental-strip-types`. The `NODE_OPTIONS` one is not needed
+on 24.x and is harmless there; it is kept so a change of Node version cannot
+break the deploy.
+
+**The first deploy returned 503, and the fix is in the repo.** Hostinger's
+wizard applies its environment variables *during the build process*, so `HOST`
+never reached the running app; it bound to `127.0.0.1`, the proxy got a refused
+connection, and the site 503'd with nothing in the build log to say why — the
+build log only ever showed `npm install`. `server/config.ts` now decides the
+binding and **treats a platform-supplied `PORT` as proof of a proxy**, so the
+app binds `0.0.0.0` there whether or not `HOST` arrives. The startup log states
+which rule applied, so the next one is readable from the app's own log.
+`core/verify/config.test.ts` holds all three cases.
 
 `DEPLOY.md` now has the wizard step by step and a list of what to open once it
 is up, each check failing differently so the log points somewhere. The short
 version:
 
-- Build command empty, start `npm start`, entry `app.js`, `HOST=0.0.0.0`.
-  Do **not** set `PORT` — the host supplies it, and overriding it is the usual
+- Do **not** set `PORT` — the host supplies it, and overriding it is the usual
   502.
-- **The Node version is still the one thing that can stop this.** 22.18 or newer
-  is the easy case; 22.6–22.17 needs `NODE_OPTIONS=--experimental-strip-types`
-  as well; 18 or 20 will not run the app at all, because there is no build step
-  and Node runs the TypeScript itself. Check the dropdown before anything else.
-- `app.js` now **checks both at startup and prints the fix**, so a failed deploy
-  says which setting is wrong instead of `Unknown file extension ".ts"`.
+- **The Node version is the one thing that can stop this.** 22.18 or newer is
+  the easy case; 22.6–22.17 needs `NODE_OPTIONS=--experimental-strip-types`;
+  18 or 20 will not run the app at all, because there is no build step and Node
+  runs the TypeScript itself. Check the dropdown before anything else.
+- `app.js` **checks the version at startup and prints the fix**, so a failed
+  deploy says which setting is wrong instead of `Unknown file extension ".ts"`.
 - The Hostinger *Import Git repository* button spins forever when Chrome blocks
   its popup — allow pop-ups for `hpanel.hostinger.com`.
-- Checked on this machine in production mode (`node app.js` with `HOST` and
-  `PORT` set): every route answers, including `/guide` and `/api/render`.
+- Checked on this machine in production mode, including the exact case the host
+  produces — `PORT` set, `HOST` absent: it binds `0.0.0.0` and every route
+  answers, `/guide` and `/api/render` included.
 - **There is no login.** A temporary domain is not a secret, only unguessed.
   Accounts are `DESIGN.md` Phase 9; until then put basic auth in front of it
   before any real domain points at it.

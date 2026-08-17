@@ -64,9 +64,13 @@ verify.
 ## Running it locally
 
 ```bash
-npm run dev            # http://127.0.0.1:5173
-PORT=8080 npm run dev  # if 5173 is taken
+npm run dev                          # http://127.0.0.1:5173
+HOST=127.0.0.1 PORT=8080 npm run dev # if 5173 is taken, still local only
 ```
+
+Note the `HOST` there: with only `PORT` set the app takes that as a platform
+handing it a port and binds every interface, which is right on a host and not
+what anyone wants on a desk. See the binding table below.
 
 `server/serve.ts` is `node:http` only — no install, no build, no watch step.
 It binds to `127.0.0.1`, so it is reachable from this machine only; that is
@@ -116,11 +120,31 @@ what to do. A version that is too old, or one that needs the flag, stops with
 the fix printed.
 
 **2. Entry point and binding.** `app.js` at the repo root is there for hosts
-that want a `.js` file to start; it just loads `server/serve.ts`. The host
-supplies `PORT`, and **`HOST=0.0.0.0` must be set** or the app stays on
-localhost and the proxy cannot reach it. That default is deliberate — going
-public should be a decision, not an accident — and `app.js` warns when it is
-unset rather than quietly binding where nothing can reach it.
+that want a `.js` file to start; it just loads `server/serve.ts`.
+
+Where the app listens is decided by `server/config.ts`, in this order:
+
+| | Binds to |
+|---|---|
+| `HOST` is set | that, always — an explicit answer is never overridden |
+| `HOST` unset, `PORT` supplied by the platform | `0.0.0.0` |
+| neither set | `127.0.0.1` — a desk tool, reachable from that machine only |
+
+The middle rule was learnt from a 503 on the first Hostinger deploy (17 August
+2026). Hostinger's wizard says its environment variables are applied *during
+the build process*, and `HOST` never reached the running app; it bound to
+localhost, the proxy got a refused connection, and the site returned 503 with
+nothing anywhere to say why. **A platform that assigns you a port is a platform
+proxying to you**, so binding to localhost there is never what anyone meant.
+
+Setting `HOST=0.0.0.0` is still right and still worth doing — it just is no
+longer the difference between a working site and a 503. The startup log now
+says which rule applied and why, so the next 503 is diagnosable from the app's
+own log:
+
+```
+listening on 0.0.0.0:38412 — PORT came from the platform, so this is behind a proxy
+```
 
 ```
 Entry point   app.js
@@ -184,13 +208,35 @@ In this order — each one fails differently and tells you something else:
 
 | Open | Should give | If it does not |
 |---|---|---|
-| `/` | the calculator, form on the left | 502 → `HOST` is not `0.0.0.0`, or the app did not start |
+| `/` | the calculator, form on the left | 502 / 503 → see below |
 | `/api/rules` | JSON of the shop's pick lists | the server runs but the engine did not load |
 | `/guide` | the guide, rendered | `/api/guide` cannot read `GUIDE.md` — the repo did not ship whole |
 | type `HI-15191` in **Open job no** | the freezer + ante job in the form | `/api/jobs` or `/api/spec` is not reachable |
 | the drawing sheet appears | `POST /api/render` works, which is the whole tool | this is the one that matters |
 
 `/api/verify` is expected to fail on shared hosting and nothing depends on it.
+
+### A 502 or 503 after a successful build
+
+The build log is not the application log. A build that ends `found 0
+vulnerabilities` only means `npm install` ran — it says nothing about whether
+the app started. **Find the application / runtime log**, which is where this
+app's own startup lines go, and read the one that matters:
+
+```
+listening on 0.0.0.0:38412 — PORT came from the platform, so this is behind a proxy
+```
+
+| What the log says | What it means |
+|---|---|
+| `listening on 0.0.0.0:…` | the app is up and the fault is elsewhere — check the host's own port mapping |
+| `listening on 127.0.0.1:…` | it bound to localhost, so the proxy cannot reach it. Set `HOST=0.0.0.0` in the app's **runtime** environment, not just the build one |
+| `Could not listen on …` | the port is taken or not allowed |
+| a Node version message | the version or `NODE_OPTIONS` is wrong; the message says which |
+| nothing at all | the app was never started — check the start command and entry file |
+
+A 503 in the first seconds after a deploy can also just be the container coming
+up. Reload once before hunting.
 
 **After it works, before pointing a real domain at it:** there is no login. Put
 basic auth in front of it or leave it on the temporary domain until Phase 9.

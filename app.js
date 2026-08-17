@@ -43,12 +43,12 @@ if (!stripsTypes && !atLeast(22, 18)) {
   process.exit(1);
 }
 
-if (process.env.HOST === undefined) {
-  // not fatal: it is the right default on a desk, and the wrong one behind a
-  // proxy, so it is said rather than decided
+if (process.env.HOST === undefined && process.env.PORT === undefined) {
+  // neither stated, so this is a desk. Said rather than silent, because on a
+  // host it would mean the proxy cannot reach the app — see server/config.ts
   console.warn(
-    `  HOST is not set, so this binds to 127.0.0.1 and a host's proxy cannot` +
-      ` reach it.\n  Set HOST=0.0.0.0 when deploying.\n`,
+    `  Neither HOST nor PORT is set, so this binds to 127.0.0.1 and is` +
+      ` reachable\n  from this machine only. On a host, set HOST=0.0.0.0.\n`,
   );
 }
 

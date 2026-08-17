@@ -32,6 +32,7 @@ import {
   toSvg,
 } from '../core/draw/index.ts';
 import { compileWalls } from '../core/plan.ts';
+import { binding } from './config.ts';
 import {
   DEFAULT_FLOOR_LAYERS,
   DEFAULT_SKIN,
@@ -52,13 +53,8 @@ import { HI_15279 } from '../core/jobs/hi-15279.ts';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const WEB = join(ROOT, 'web');
-const PORT = Number(process.env.PORT ?? 5173);
-/**
- * Localhost by default: the sheets are job data and this is a desk tool. A
- * host that runs the app behind its own proxy has to be told explicitly —
- * `HOST=0.0.0.0` — so that going public is a decision, never an accident.
- */
-const HOST = process.env.HOST ?? '127.0.0.1';
+/** See server/config.ts — the rule, and why a 503 taught it. */
+const { host: HOST, port: PORT, reason: BIND_REASON } = binding(process.env);
 
 /** Same registry the verifier uses — add a job here when you add it to CASES. */
 const JOBS: JobSpec[] = [HI_15191, HI_15223, HI_15279];
@@ -433,6 +429,13 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`\n  Hikom Panel Suite — http://${HOST}:${PORT}`);
+  // said every time, because when a host returns 503 this line is the answer
+  console.log(`  listening on ${HOST}:${PORT} — ${BIND_REASON}`);
   console.log(`  jobs: ${JOBS.map((j) => j.jobNo).join(', ')}`);
   console.log(`  legacy calculator: http://${HOST}:${PORT}/legacy\n`);
+});
+
+server.on('error', (err) => {
+  console.error(`\n  Could not listen on ${HOST}:${PORT} — ${err.message}\n`);
+  process.exit(1);
 });

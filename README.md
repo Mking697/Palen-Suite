@@ -17,7 +17,7 @@ weight and area — with no BOQ figures fed in as input.
 | HI-15279 | Ambient + Milk 60mm merged block | ⬜ needs BOQ-group merging, partition panels, Door TOP |
 | HI-15252 | Freezer 120 + Chiller 60 + F&V 60, module 1030 | ⬜ not yet |
 
-149 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
+156 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
 (`npm run dev`) renders the generated sheet and its drawings, runs the verifier
 in the browser, and lets you rebuild from an edited input. The two browser
 scripts are covered too — `core/verify/web.test.ts` boots them headless in a
@@ -222,6 +222,8 @@ core/verify/                expected sheets + diff runner + tests
 core/verify/web.test.ts     web/app.js and web/guide.js, booted headless in a
                             node:vm context with a stub DOM
 server/serve.ts             local dev server (node:http, no dependencies)
+server/config.ts            where the server binds, and why — its own file so
+                            it can be tested, since serve.ts listens on import
 web/                        the viewer — plain HTML/CSS/JS, no build step
 web/guide.js                GUIDE.md rendered as the in-app guide page
 tools/chat-backup.ts        exports Claude Code session transcripts
