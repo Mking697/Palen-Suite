@@ -404,19 +404,25 @@ are in place, and `SETUP.md` has the SQL that made them.
   Save and Open want an account, and a server with no Supabase configured says
   so in the panel rather than breaking.
 
-**Two things left before anyone can actually sign in.** The environment
-variables are done — `/api/config` proves it — and `panelsuite.online` is
-authenticated in Brevo. What remains:
+Everything on the hosting and Supabase side is in place: the environment
+variables (`/api/config` proves it), the Site URL, all three Redirect URLs, and
+`panelsuite.online` authenticated in Brevo. The last step is Brevo's SMTP
+credentials going into Supabase, and then the live test — sign up, confirm by
+email, save a job, and check from a second account that it cannot be seen.
 
-1. **Supabase's Site URL is still `http://localhost:3000`.** The Redirect URLs
-   are all three and correct, but Site URL is the field that decides where a
-   confirmation link *sends* people. Left as it is, signup works, the email
-   goes, and the link lands on a machine where nothing is running. One field:
-   `https://panelsuite.online`.
-2. **Brevo's SMTP is not in Supabase yet.** Supabase's built-in mailer sends a
-   handful an hour and is not for production, so without this the confirmation
-   email may never arrive — and without that link the account cannot be used.
-   This is the one part that could not be tested from this side.
+### Rotate the Brevo keys once it is working
+
+Two Brevo keys were pasted into a chat while getting this working, knowingly, to
+get live the same day: an **API key** (`xkeysib-…`, not used by anything yet) and
+the **SMTP key** now in Supabase. Neither is in the repository and neither ever
+should be — they live in Supabase's SMTP settings and, later, in Hostinger's
+environment variables.
+
+**Replace both once signup is confirmed working.** In Brevo, delete and
+regenerate under *SMTP & API*; paste the new SMTP key into Supabase's SMTP
+settings. It takes a minute, and it makes the old ones worthless, which is
+cheaper than reasoning about who might have seen them. This is not urgent — it
+is a loose end, and loose ends are what `STATUS.md` is for.
 
 Also removed on 17 August: the form's **BOQ group** field. It was declared,
 sent, and never read — `buildJob` maps rooms one to one. Merging is Phase 3.
