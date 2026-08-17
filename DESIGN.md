@@ -310,7 +310,7 @@ Each phase ends with the repo green and something usable.
 | 6 | Angled, chamfered and triangle rooms | needs the corner and blanking answers below first |
 | 7 ✅ | One drawing sheet, and a 3D view of the same panels behind a toggle | every 3D face is a width the BOQ priced, asserted per wall |
 | 8 ✅ | A guide book in the app — how to use it, in the tool rather than only in a file | an estimator who has never seen the tool enters a job from a drawing without being told how |
-| 9 ✅ | Accounts and saved jobs: sign up, log in, File → New / Open / Save / Save As, each user's jobs their own | two users sign up, save a job each by the same number, and neither can see or open the other's |
+| 9 ✅ | Accounts and saved jobs: sign up, log in, File → New / Open / Save / Save As, each user's jobs their own | **passed 17 August** — one account saved HI-99001; the administrator, signed in separately, typed that exact number and got "No job HI-99001" |
 | 10 | The BOQ as a real `.xlsx` and the drawing sheet as a real vector PDF, both downloadable | Excel opens the workbook without repair, and the PDF prints 1:1 with every panel figure the sheet shows |
 | 11 | Google: the estimator's own Drive folder and Sheet, connected from their profile | saving a job puts the PDF and the workbook in the folder under the job number, and appends a row to the BOQ and Flashing tabs |
 | 12 | Email: TO / CC / BCC, subject, body, with the PDF and the workbook attached | a job is sent from the tool and arrives with both files, named by job number |

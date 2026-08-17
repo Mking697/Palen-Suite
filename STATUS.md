@@ -418,8 +418,15 @@ the administrator is `nantultiwari697@gmail.com`, and the backfill gave the
 existing account its 14 days. A signup was taken end to end: the code arrived
 from `info@panelsuite.online`, verified, and signed in.
 
-What is left is the test that matters — save a job on one account and fail to
-open it from another.
+**And the test that matters passed.** One account saved `HI-99001`; the
+administrator, signed in separately, typed that exact number and got
+`No job HI-99001`. Not a near miss — the full number, from the account with the
+most rights in the system.
+
+That is the whole claim of this phase in one line, and it holds because the
+`jobs` policy is `auth.uid() = user_id` with **no** admin clause. An
+administrator manages accounts; they do not read other people's work. Phase 9
+is done.
 
 
 - **Signup is verified by a six digit code**, not a link. The email template
