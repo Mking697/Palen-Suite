@@ -2773,13 +2773,16 @@ function noAccessCard() {
     renderAccount();
     renderGate();
   });
+  // a database that has not been set up is not the same thing as an account
+  // that has run out, and saying so sends people to the right place
+  const why = Auth.profileError
+    ? Auth.profileError
+    : until
+      ? `Your access ran out on ${String(until).slice(0, 10)}. Ask the administrator to extend it.`
+      : 'This account has no access yet. Ask the administrator to grant it.';
+
   return el('div', { class: 'auth-form' }, [
-    el('p', {
-      class: 'hint',
-      text: until
-        ? `Your access ran out on ${String(until).slice(0, 10)}. Ask the administrator to extend it.`
-        : 'This account has no access yet. Ask the administrator to grant it.',
-    }),
+    el('p', { class: 'hint', text: why }),
     el('p', { class: 'hint', text: `Signed in as ${Auth.email}.` }),
     out,
   ]);

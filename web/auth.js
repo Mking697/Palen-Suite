@@ -25,6 +25,8 @@
     session: null,
     /** the signed-in user's own profiles row, once fetched */
     profile: null,
+    /** why there is no profile row, when there is none */
+    profileError: '',
   };
 
   const readStored = () => {
@@ -189,9 +191,30 @@
      * decides what to *say*.
      */
     async profile() {
-      const rows = await db('profiles?select=id,email,access_until,is_admin&limit=1');
-      state.profile = rows && rows.length ? rows[0] : null;
+      try {
+        const rows = await db('profiles?select=id,email,access_until,is_admin&limit=1');
+        state.profile = rows && rows.length ? rows[0] : null;
+        state.profileError = '';
+      } catch (err) {
+        /*
+         * A database that has not had the access columns added yet answers
+         * "column profiles.access_until does not exist". Kept apart from an
+         * account that simply has no time left: one is a setup step nobody has
+         * run, the other is a decision an administrator made, and showing the
+         * second for the first sends people looking in the wrong place. It
+         * cost a round of that before this told them apart.
+         */
+        state.profile = null;
+        state.profileError = /does not exist/i.test(err.message)
+          ? 'The database is missing the access columns — the setup SQL has not been run yet.'
+          : err.message;
+      }
       return state.profile;
+    },
+
+    /** Why there is no profile, when there is none. */
+    get profileError() {
+      return state.profileError;
     },
 
     get isAdmin() {
