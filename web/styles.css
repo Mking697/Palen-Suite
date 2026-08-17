@@ -241,6 +241,51 @@ table.flash .fl-typed td:first-child { border-left: 2px solid var(--dev); paddin
 .hint3d { font-size: 10.5px; color: var(--ink-3); }
 .btn.ghost { background: var(--card); color: var(--ink-2); }
 
+/* ---------- the sign-in gate ---------- */
+
+/* Signed out, the tool is not there to be used — so the parts of the header
+   that act on a job are gone too, rather than sitting there doing nothing. */
+body.signed-out .app,
+body.signed-out .job-fields,
+body.signed-out #fileMenu,
+body.signed-out #jobSearch,
+body.signed-out #jobSearchMsg,
+body.signed-out #printBtn,
+body.signed-out #accountMenu { display: none; }
+
+.gate {
+  min-height: calc(100vh - var(--top-h));
+  display: grid; place-items: center; padding: 40px 20px;
+}
+.gate-card {
+  width: 100%; max-width: 380px; text-align: center;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; padding: 34px 30px 28px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 8%);
+}
+.gate-card .brand-mark { width: 46px; height: 46px; font-size: 16px; margin: 0 auto 14px; }
+.gate-card h1 { margin: 0 0 6px; font-size: 21px; letter-spacing: -.2px; }
+.gate-sub { margin: 0 0 22px; font-size: 13px; color: var(--ink-3); }
+
+.auth-form { display: flex; flex-direction: column; gap: 9px; text-align: left; }
+.auth-form input {
+  font: inherit; font-size: 13.5px; padding: 10px 12px;
+  border: 1px solid var(--line-2); border-radius: 9px;
+  background: var(--card); color: var(--ink);
+}
+.auth-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.auth-form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.auth-form .row2 .btn { padding: 9px 13px; }
+.auth-form .hint { margin: 0; }
+
+/* said, not hidden: a server with no Supabase runs unlocked, and should say so */
+.gate-reason:empty { display: none; }
+.gate-reason {
+  grid-column: 1 / -1; margin: 0; padding: 10px 16px;
+  background: #fff8ea; border-bottom: 1px solid #f0d29a;
+  font-size: 12.5px; color: var(--dev);
+}
+
 /* ---------- header menus (File, account) ---------- */
 
 /* details/summary, so a menu opens and closes itself with no script */

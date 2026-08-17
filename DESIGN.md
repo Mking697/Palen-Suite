@@ -521,11 +521,17 @@ Three decisions worth keeping:
   disagree — the same reasoning that keeps `toFixed` out of the browser.
 - **`unique (user_id, job_no)`** makes *Save* an upsert and *Save As* a new row,
   per user, so two estimators may each have their own HI-15191.
-- **Signed out, the calculator is untouched.** Drawings, BOQ, DXF and print all
-  work; only Save and Open need an account. The engine is the product and an
-  account is a convenience on top of it, never a gate in front of it — which is
-  also why a server with no Supabase configured says so in the account panel
-  instead of failing.
+- **Signing in comes first.** This was built the other way round at first — the
+  calculator open, the account a convenience on top — on the reasoning that the
+  engine is the product. The shop overruled it the same day, and they are right
+  about their own tool: it is something people log into, and it may be sold.
+  So the gate is in front.
+
+  The one exception is a server with **no Supabase configured**, which runs
+  unlocked and says so in a banner. Gating there would lock everyone out, the
+  owner included, with no way back in from the screen — and with no Supabase
+  there is no saved job to protect, only the calculator itself. A config
+  mistake should not be unrecoverable.
 
 Not verified here, and it cannot be from this side: that the confirmation email
 actually arrives. Supabase's built-in mailer sends a handful an hour and is not

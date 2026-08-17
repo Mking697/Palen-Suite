@@ -400,9 +400,15 @@ are in place, and `SETUP.md` has the SQL that made them.
   in, reads come back empty and an insert is refused 401.
 - Only the **spec** is saved. The BOQ is always generated — a stored figure is
   how a saved job and a fresh one start to disagree.
-- **Signed out, nothing changes.** Drawings, BOQ, DXF and print all work; only
-  Save and Open want an account, and a server with no Supabase configured says
-  so in the panel rather than breaking.
+- **Signing in comes first** — the calculator is behind the account, not beside
+  it. Built the other way round at first and changed the same day at the shop's
+  word; they are right about their own tool. A server with **no Supabase
+  configured** still runs unlocked and says so, because gating there would lock
+  the owner out with no way back in, and there would be no saved job to protect
+  anyway.
+- **Empty email or password is answered by the form**, not by Supabase, which
+  replies "Anonymous sign-ins are disabled" — true, and useless to somebody who
+  has simply not typed anything yet.
 
 Everything on the hosting and Supabase side is in place: the environment
 variables (`/api/config` proves it), the Site URL, all three Redirect URLs, and

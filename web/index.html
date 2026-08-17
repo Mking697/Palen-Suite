@@ -57,7 +57,20 @@
       </div>
     </header>
 
+    <!-- Sign in first. app.js shows this whenever accounts are configured and
+         nobody is signed in; with no Supabase configured it stays hidden and
+         says so, because gating there would lock everyone out. -->
+    <div class="gate" id="gate" hidden>
+      <div class="gate-card">
+        <span class="brand-mark">PS</span>
+        <h1>Panel Suite</h1>
+        <p class="gate-sub">Sign in to draw a job and build its BOQ.</p>
+        <div id="gateForm"></div>
+      </div>
+    </div>
+
     <div class="app">
+      <p class="gate-reason" id="gateReason"></p>
       <aside class="form" id="form"></aside>
       <main class="out" id="out">
         <p class="muted">Fill in a room to see its drawings and BOQ.</p>

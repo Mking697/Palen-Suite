@@ -48,6 +48,7 @@ class StubEl {
   value: unknown = '';
   checked = false;
   disabled = false;
+  hidden = false;
   ownText = '';
   html = '';
   style: Record<string, unknown> = {};
@@ -406,6 +407,9 @@ const APP_IDS = [
   '#accountMenu',
   '#accountBtn',
   '#accountPanel',
+  '#gate',
+  '#gateForm',
+  '#gateReason',
   '.form',
 ];
 
@@ -555,13 +559,14 @@ await t('the form knows both shop thresholds, and takes them from the engine', (
   assert.ok(read('server/serve.ts').includes('doorTopMinWallHeight: DOOR_TOP_MIN_WALL_HEIGHT'));
 });
 
-await t('with no accounts configured the calculator still works, and says why', () => {
-  // an account is a convenience on top of the engine, never a gate in front
+await t('with no accounts configured the calculator runs, unlocked, and says why', () => {
+  // gating here would lock everyone out, owner included, with no way back in
+  // from the screen — and with no Supabase there is no saved job to protect
+  assert.equal(app.ids.get('#gate')!.hidden, true, 'the gate should be hidden');
   assert.ok(app.ids.get('#form')!.children.length > 0, 'the form is gone');
-  assert.equal(app.ids.get('#accountBtn')!.ownText, 'Sign in');
-  const panel = textOf(app.ids.get('#accountPanel'));
-  assert.ok(panel.includes('SUPABASE_URL'), `the panel should say why: ${panel}`);
-  assert.ok(panel.includes('works without an account'));
+  const said = app.ids.get('#gateReason')!.ownText;
+  assert.ok(said.includes('SUPABASE_URL'), `it should say why: ${said}`);
+  assert.ok(said.includes('Nothing can be saved'));
 });
 
 await t('Save without an account says so instead of failing quietly', async () => {
@@ -597,18 +602,37 @@ const acct = harness(APP_SOURCES, APP_IDS, {
 
 await settle();
 
-/** The account panel's own controls. */
+/** The sign-in form, which lives on the gate while nobody is signed in. */
 const acctInput = (type: string) =>
-  [...walk(acct.ids.get('#accountPanel')!)].find((n) => n.tag === 'input' && n.attrs.type === type);
+  [...walk(acct.ids.get('#gateForm')!)].find((n) => n.tag === 'input' && n.attrs.type === type);
 const acctButton = (label: string) =>
-  [...walk(acct.ids.get('#accountPanel')!)].find(
+  [...walk(acct.ids.get('#gateForm')!)].find(
     (n) => n.tag === 'button' && textOf(n).trim() === label,
   );
 
-await t('signed out, the panel offers sign in and sign up', () => {
+await t('signed out, the gate is up and the calculator is not reachable', () => {
+  assert.equal(acct.ids.get('#gate')!.hidden, false, 'the gate should be showing');
+  assert.equal(
+    (acct.ctx.document as { body: StubEl }).body.className,
+    'signed-out',
+    'the page should be in its signed-out state',
+  );
   assert.ok(acctInput('email'), 'no email field');
   assert.ok(acctInput('password'), 'no password field');
   assert.ok(acctButton('Sign in') && acctButton('Sign up'), 'no buttons');
+});
+
+await t('empty fields are answered here, not by Supabase', async () => {
+  const before = acct.posts.length;
+  acctButton('Sign in')!.fire('click');
+  await settle();
+  // sent empty, Supabase replies "Anonymous sign-ins are disabled" — true, and
+  // useless to somebody who simply has not typed anything yet
+  assert.ok(
+    textOf(acct.ids.get('#gateForm')).includes('Enter your email and a password'),
+    'it should say what is missing',
+  );
+  assert.equal(acct.posts.length, before, 'nothing should have been sent');
 });
 
 await t('signing up says to confirm the email rather than nothing at all', async () => {
@@ -617,17 +641,19 @@ await t('signing up says to confirm the email rather than nothing at all', async
   acctButton('Sign up')!.fire('click');
   await settle();
 
-  const said = textOf(acct.ids.get('#accountPanel'));
+  const said = textOf(acct.ids.get('#gateForm'));
   assert.ok(said.includes('Check your email'), `should say to confirm: ${said}`);
-  assert.equal(acct.ids.get('#accountBtn')!.ownText, 'Sign in', 'not signed in until confirmed');
+  assert.equal(acct.ids.get('#gate')!.hidden, false, 'still locked until confirmed');
 });
 
-await t('signing in shows who it is, and lists their own saved jobs', async () => {
+await t('signing in opens the tool, and lists their own saved jobs', async () => {
   acctInput('email')!.value = 'asha@example.com';
   acctInput('password')!.value = 'a-good-password';
   acctButton('Sign in')!.fire('click');
   await settle();
 
+  assert.equal(acct.ids.get('#gate')!.hidden, true, 'the gate should be down');
+  assert.equal((acct.ctx.document as { body: StubEl }).body.className, '');
   assert.equal(acct.ids.get('#accountBtn')!.ownText, 'asha@example.com');
   const listed = acct.ids.get('#jobList')!.children.map((c) => (c as StubEl).attrs.value);
   assert.deepEqual(listed, ['HI-20001', 'HI-15191'], 'their own first, then the examples');

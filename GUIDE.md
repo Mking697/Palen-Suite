@@ -58,11 +58,18 @@ ki zaroorat nahi.
 
 ### Apna account, apne job
 
-Screen ke upar dayein kone me **Sign in** hai. Account banane ke liye apna email
-aur password daal kar **Sign up** dabaiye — email par ek link aayega, **usse
-click karne ke baad hi** login hoga. Phir **Sign in**.
+**Site kholte hi sabse pehle sign in ka screen aayega.** Calculator uske baad
+khulta hai — bina account ke aage kuch nahi.
 
-Login karne ke baad **File** menu kaam karta hai:
+Pehli baar: apna email aur password daal kar **Sign up** dabaiye. Email par ek
+link aayega, **usse click karne ke baad hi** account chalu hoga. Phir wapas
+aakar **Sign in**.
+
+Ek baar sign in karne ke baad **session bacha rehta hai** — page reload karne
+par ya browser band karke dobara kholne par phir se login nahi karna padta.
+Nikalna ho to upar dayein kone me apne email par click karke **Sign out**.
+
+Sign in ke baad **File** menu kaam karta hai:
 
 | | |
 |---|---|
@@ -79,9 +86,6 @@ sakte hain, dono alag.
 Save **sirf job ka input** karta hai — jo aapne form me bhara. **BOQ save nahi
 hoti**, wo hamesha nayi banti hai. Wajah: bani hui BOQ ko save kar dein to ek
 din purana job aur naya job do alag baat kahenge.
-
-**Bina login ke bhi calculator poora chalta hai** — drawing, BOQ, DXF, print,
-sab. Sirf Save aur Open ke liye account chahiye.
 
 Upar wale **Open job no** box me pehle **aapke apne save kiye job** dhoonde
 jaate hain, phir verified example.

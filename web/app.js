@@ -2484,25 +2484,14 @@ function renderAccount() {
   if (!panel || !button) return;
   panel.replaceChildren();
 
-  if (!window.Auth || !Auth.available) {
-    button.textContent = 'Sign in';
-    panel.append(
-      el('p', { class: 'hint', text: Auth ? Auth.reason : 'Accounts are not available.' }),
-      el('p', {
-        class: 'hint',
-        text: 'The calculator works without an account — only saving jobs needs one.',
-      }),
-    );
-    return;
-  }
-
-  if (Auth.user) {
+  if (window.Auth && Auth.user) {
     button.textContent = Auth.email;
     const out = el('button', { class: 'btn', type: 'button', text: 'Sign out' });
     out.addEventListener('click', async () => {
       await Auth.signOut();
       savedAs = '';
       renderAccount();
+      renderGate();
       refreshJobList();
       closeMenus();
     });
@@ -2514,16 +2503,37 @@ function renderAccount() {
   }
 
   button.textContent = 'Sign in';
+}
+
+/**
+ * The sign in / sign up controls. Built here rather than written into the page
+ * so there is one of them, wherever it is shown.
+ */
+function authForm() {
   const email = el('input', { type: 'email', placeholder: 'your email', autocomplete: 'email' });
-  const pass = el('input', { type: 'password', placeholder: 'password', autocomplete: 'current-password' });
+  const pass = el('input', {
+    type: 'password',
+    placeholder: 'password',
+    autocomplete: 'current-password',
+  });
   const note = el('p', { class: 'hint', text: '' });
 
   const run = async (what) => {
+    /*
+     * Checked here, before Supabase is asked. Sent empty, it answers
+     * "Anonymous sign-ins are disabled" — true, and useless to somebody who
+     * simply has not typed anything yet.
+     */
+    if (!email.value.trim() || !pass.value) {
+      note.textContent = 'Enter your email and a password.';
+      return;
+    }
     note.textContent = 'working…';
     try {
       if (what === 'in') {
         await Auth.signIn(email.value.trim(), pass.value);
         renderAccount();
+        renderGate();
         await refreshJobList();
         closeMenus();
         return;
@@ -2534,6 +2544,7 @@ function renderAccount() {
         : 'Check your email and click the link, then sign in. It may take a minute.';
       if (verified) {
         renderAccount();
+        renderGate();
         await refreshJobList();
       }
     } catch (err) {
@@ -2545,11 +2556,13 @@ function renderAccount() {
   const signUp = el('button', { class: 'btn ghost', type: 'button', text: 'Sign up' });
   signIn.addEventListener('click', () => run('in'));
   signUp.addEventListener('click', () => run('up'));
-  pass.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') run('in');
-  });
+  for (const box of [email, pass]) {
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') run('in');
+    });
+  }
 
-  panel.append(
+  return el('div', { class: 'auth-form' }, [
     email,
     pass,
     el('div', { class: 'row2' }, [signIn, signUp]),
@@ -2558,7 +2571,35 @@ function renderAccount() {
       class: 'hint',
       text: 'Signing up sends a confirmation email; the account works once that link is clicked.',
     }),
-  );
+  ]);
+}
+
+/**
+ * Sign in first, calculator after. The shop asked for this on 17 August: it is
+ * a tool people log into, not a page that happens to offer saving.
+ *
+ * The one exception is a server with no Supabase configured, which shows the
+ * calculator and says so. Gating there would lock everyone out, owner
+ * included, with no way back in from the screen — and with no Supabase there
+ * is no saved job to protect either, only the calculator itself.
+ */
+function renderGate() {
+  const gate = $('#gate');
+  const holder = $('#gateForm');
+  const reason = $('#gateReason');
+  if (!gate || !holder) return;
+
+  const locked = !!(window.Auth && Auth.available) && !Auth.user;
+  document.body.className = locked ? 'signed-out' : '';
+  gate.hidden = !locked;
+
+  if (reason) {
+    reason.textContent =
+      window.Auth && !Auth.available
+        ? `Accounts are not set up on this server — ${Auth.reason} Nothing can be saved.`
+        : '';
+  }
+  if (locked) holder.replaceChildren(authForm());
 }
 
 /** Ask for a job number, offering the one already in the header. */
@@ -2645,10 +2686,11 @@ async function boot() {
     try {
       await Auth.boot();
     } catch {
-      /* renderAccount says why */
+      /* renderGate says why */
     }
   }
   renderAccount();
+  renderGate();
 
   state.rooms = [newRoom()];
   renderForm();

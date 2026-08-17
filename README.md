@@ -194,8 +194,11 @@ go and nothing else to press.
   job_no)` makes Save an upsert — two estimators may each have their own
   HI-15191. Only the job's **spec** is stored; the BOQ is always generated,
   because a stored figure is how a saved job and a fresh one start to disagree.
-  Signed out the calculator is untouched — drawings, BOQ, DXF and print all
-  work, and only saving needs an account. `SETUP.md` has the one-time setup.
+  **Signing in comes first**: the calculator is behind the account, not beside
+  it. The one exception is a server with no Supabase configured, which runs
+  unlocked and says so — gating there would lock everyone out, owner included,
+  with no way back in from the screen, and with no Supabase there is no saved
+  job to protect either. `SETUP.md` has the one-time setup.
 - **Open job no** — type a job number in the header and it opens in the form.
   It is a search box rather than a picker because an estimator reads the number
   off the drawing, and a list stops being a way to find anything past a
