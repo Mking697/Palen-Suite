@@ -6,8 +6,9 @@
  * plainly. Without the check the failure is `Unknown file extension ".ts"` in a
  * host's log, which says nothing about what to do next. See DEPLOY.md.
  *
- * The host must also set HOST=0.0.0.0 for the app to be reachable through its
- * proxy; the server binds to localhost otherwise, on purpose.
+ * Started this way the app binds every interface, which is what a host behind
+ * a proxy needs; `npm run dev` passes `--local` to stay on this machine. See
+ * server/config.ts for the rule and what two failed deploys taught it.
  */
 
 const [major, minor] = process.versions.node.split('.').map(Number);
@@ -43,13 +44,8 @@ if (!stripsTypes && !atLeast(22, 18)) {
   process.exit(1);
 }
 
-if (process.env.HOST === undefined && process.env.PORT === undefined) {
-  // neither stated, so this is a desk. Said rather than silent, because on a
-  // host it would mean the proxy cannot reach the app — see server/config.ts
-  console.warn(
-    `  Neither HOST nor PORT is set, so this binds to 127.0.0.1 and is` +
-      ` reachable\n  from this machine only. On a host, set HOST=0.0.0.0.\n`,
-  );
-}
+// Where it listens is server/config.ts's decision, and it prints that decision
+// together with the environment it actually received. Nothing to warn about
+// here: started this way, without --local, it binds where a proxy can reach it.
 
 await import('./server/serve.ts');

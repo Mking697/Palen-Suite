@@ -25,7 +25,7 @@ uses.
 | Door (`core/boq.ts`, `core/draw/`) | hand LHS/RHS drives the printed label and the plan's swing; over a 3050 wall the piece above the door is its own panel |
 | Calculator (`server/`, `web/`) | multi-room, connected rooms, rooms of any right-angled shape typed wall by wall, per-wall sheets, doors, the L cut on or off, floor build-up and run direction, flashing |
 | Guide (`/guide`, `web/guide.js`) | `GUIDE.md` rendered in the app, one button in the header, one copy of the instructions |
-| Tests | 156, plus the line-by-line sheet diff |
+| Tests | 160, plus the line-by-line sheet diff |
 
 `npm run check` must print **`ALL ROWS MATCH across 3 jobs`** with 9 documented
 deviations and **1 plan finding** (HI-15191's ante room — see below). It did at
@@ -287,15 +287,27 @@ file `app.js`, and two environment variables — `HOST=0.0.0.0` and
 on 24.x and is harmless there; it is kept so a change of Node version cannot
 break the deploy.
 
-**The first deploy returned 503, and the fix is in the repo.** Hostinger's
+**The first two deploys returned 503, and the fix is in the repo.** Hostinger's
 wizard applies its environment variables *during the build process*, so `HOST`
 never reached the running app; it bound to `127.0.0.1`, the proxy got a refused
-connection, and the site 503'd with nothing in the build log to say why — the
-build log only ever showed `npm install`. `server/config.ts` now decides the
-binding and **treats a platform-supplied `PORT` as proof of a proxy**, so the
-app binds `0.0.0.0` there whether or not `HOST` arrives. The startup log states
-which rule applied, so the next one is readable from the app's own log.
-`core/verify/config.test.ts` holds all three cases.
+connection, and the site 503'd with nothing to say why — the build log only ever
+showed `npm install`, which is not the application log.
+
+The first attempt tried to detect a host by looking for a platform-supplied
+`PORT`. That is the same mistake one step further in: **when a deploy fails, the
+environment is exactly the thing that cannot be relied on.** So `server/config.ts`
+now defaults to `0.0.0.0` — what a server behind a proxy needs — and the one
+case we control says so on the command line: `npm run dev` passes `--local`.
+`HOST`, if it arrives, still wins.
+
+The startup log now also prints **the environment as it actually arrived**,
+which is the difference between what a host's panel says it set and what
+reached the process. That block is what makes the next one answerable rather
+than guessable. `core/verify/config.test.ts` holds every case.
+
+What this gave up: a bare `node server/serve.ts` on a laptop now listens on the
+network. Deliberate — a silent deploy failure is the bigger harm, and the
+command `GUIDE.md` tells an estimator to run is `npm run dev`.
 
 `DEPLOY.md` now has the wizard step by step and a list of what to open once it
 is up, each check failing differently so the log points somewhere. The short

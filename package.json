@@ -6,7 +6,7 @@
   "description": "PUF panel wall/ceiling layout + SHEET FABRICATION BOQ engine",
   "scripts": {
     "start": "node app.js",
-    "dev": "node server/serve.ts",
+    "dev": "node server/serve.ts --local",
     "test": "node core/verify/split.test.ts && node core/verify/plan.test.ts && node core/verify/draw.test.ts && node core/verify/checks.test.ts && node core/verify/web.test.ts && node core/verify/config.test.ts",
     "verify": "node core/verify/run.ts",
     "check": "npm run test && npm run verify",

@@ -17,7 +17,7 @@ weight and area — with no BOQ figures fed in as input.
 | HI-15279 | Ambient + Milk 60mm merged block | ⬜ needs BOQ-group merging, partition panels, Door TOP |
 | HI-15252 | Freezer 120 + Chiller 60 + F&V 60, module 1030 | ⬜ not yet |
 
-156 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
+160 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
 (`npm run dev`) renders the generated sheet and its drawings, runs the verifier
 in the browser, and lets you rebuild from an edited input. The two browser
 scripts are covered too — `core/verify/web.test.ts` boots them headless in a

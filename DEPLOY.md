@@ -64,13 +64,13 @@ verify.
 ## Running it locally
 
 ```bash
-npm run dev                          # http://127.0.0.1:5173
-HOST=127.0.0.1 PORT=8080 npm run dev # if 5173 is taken, still local only
+npm run dev                    # http://127.0.0.1:5173
+node server/serve.ts --local   # the same thing
 ```
 
-Note the `HOST` there: with only `PORT` set the app takes that as a platform
-handing it a port and binds every interface, which is right on a host and not
-what anyone wants on a desk. See the binding table below.
+`npm run dev` passes `--local`, which is what keeps the desk server on
+localhost. Started any other way it binds every interface — see the binding
+table below, and the two failed deploys that put it that way round.
 
 `server/serve.ts` is `node:http` only — no install, no build, no watch step.
 It binds to `127.0.0.1`, so it is reachable from this machine only; that is
@@ -126,24 +126,34 @@ Where the app listens is decided by `server/config.ts`, in this order:
 
 | | Binds to |
 |---|---|
+| `--local` on the command line | `127.0.0.1` — this is how `npm run dev` starts |
 | `HOST` is set | that, always — an explicit answer is never overridden |
-| `HOST` unset, `PORT` supplied by the platform | `0.0.0.0` |
-| neither set | `127.0.0.1` — a desk tool, reachable from that machine only |
+| otherwise | `0.0.0.0`, because that is what a server behind a proxy needs |
 
-The middle rule was learnt from a 503 on the first Hostinger deploy (17 August
-2026). Hostinger's wizard says its environment variables are applied *during
-the build process*, and `HOST` never reached the running app; it bound to
-localhost, the proxy got a refused connection, and the site returned 503 with
-nothing anywhere to say why. **A platform that assigns you a port is a platform
-proxying to you**, so binding to localhost there is never what anyone meant.
+**The default used to be the other way round, and it cost two failed deploys**
+(17 August 2026). Hostinger's wizard says its environment variables are applied
+*during the build process*; `HOST` never reached the running app, it bound to
+localhost, and the site returned 503 with nothing anywhere to say why. Trying to
+detect a host from the environment does not work either — when a deploy fails,
+the environment is exactly the thing that cannot be relied on. So the default is
+what is right for a server, and the one case we do control, our own dev script,
+says `--local` on the command line.
 
-Setting `HOST=0.0.0.0` is still right and still worth doing — it just is no
-longer the difference between a working site and a 503. The startup log now
-says which rule applied and why, so the next 503 is diagnosable from the app's
-own log:
+What that gives up: a bare `node server/serve.ts` on a laptop now listens on the
+network. That is a smaller harm than a deploy that fails silently, and
+`npm run dev` — what `GUIDE.md` tells an estimator to run — passes `--local`.
+
+The startup log states the decision and the environment it actually received, so
+the next 503 is answered from the app's own log rather than guessed at:
 
 ```
-listening on 0.0.0.0:38412 — PORT came from the platform, so this is behind a proxy
+listening on 0.0.0.0:38412 — nothing stated — a server should be reachable; use --local for a desk
+node 24.14.0 · cwd /home/u441144416/domains/…
+environment as it arrived:
+    PORT = 38412
+    HOST = (not set)
+    NODE_ENV = (not set)
+    NODE_OPTIONS = --experimental-strip-types
 ```
 
 ```
@@ -229,11 +239,16 @@ listening on 0.0.0.0:38412 — PORT came from the platform, so this is behind a 
 
 | What the log says | What it means |
 |---|---|
-| `listening on 0.0.0.0:…` | the app is up and the fault is elsewhere — check the host's own port mapping |
-| `listening on 127.0.0.1:…` | it bound to localhost, so the proxy cannot reach it. Set `HOST=0.0.0.0` in the app's **runtime** environment, not just the build one |
+| `listening on 0.0.0.0:<the host's PORT>` | the app is up on the right port and the fault is elsewhere |
+| `listening on 0.0.0.0:5173` with `PORT = (not set)` | the host never passed a port, so the app took its own default and the proxy is looking somewhere else. Set `PORT` to whatever the host expects |
+| `listening on 127.0.0.1:…` | `HOST` is set to localhost somewhere — remove it |
 | `Could not listen on …` | the port is taken or not allowed |
 | a Node version message | the version or `NODE_OPTIONS` is wrong; the message says which |
 | nothing at all | the app was never started — check the start command and entry file |
+
+The `environment as it arrived` block under it is the one to read: it shows what
+reached the process, not what the host's panel says it set. Those are different
+things, and the difference is what caused both 503s.
 
 A 503 in the first seconds after a deploy can also just be the container coming
 up. Reload once before hunting.
