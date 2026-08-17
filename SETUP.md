@@ -238,11 +238,16 @@ ki signup toota hua hai.
 
 | | |
 |---|---|
-| **Site URL** | abhi `https://aqua-finch-257417.hostingersite.com`, aur `panelsuite.online` site se judte hi **`https://panelsuite.online`** |
-| **Redirect URLs** | dono, aur test ke liye `http://127.0.0.1:5173` bhi jod dijiye |
+| **Site URL** | **`https://panelsuite.online`** |
+| **Redirect URLs** | wahi, `https://aqua-finch-257417.hostingersite.com`, aur test ke liye `http://127.0.0.1:5173` |
 
 Redirect URLs me ek se zyada rakh sakte hain, to temporary aur asli dono daal
 dijiye — phir domain badalne par link kabhi nahi tootega.
+
+> **Site URL alag cheez hai, aur wahi chhoot jaati hai.** Redirect URLs sahi
+> hone se kaam nahi banta: link *kahan bhejega* ye Site URL tay karti hai, aur
+> uski default `http://localhost:3000` hai. Wo rah gayi to signup hoga, email
+> jayegi, aur link ek aisi machine par jayega jahan kuch chal hi nahi raha.
 
 ### B3. API key — app ki apni email ke liye
 

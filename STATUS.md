@@ -276,21 +276,22 @@ different-sized rooms actually get drawn?
 
 ## Where it is deployed
 
-**Live on Hostinger at `aqua-finch-257417.hostingersite.com`** since 17 August
-2026, deploying from GitHub `Mking697/Palen-Suite` (public, branch `main`,
-identity `Mking697`).
+**Live at `https://panelsuite.online`** since 17 August 2026, on Hostinger,
+deploying from GitHub `Mking697/Palen-Suite` (public, branch `main`, identity
+`Mking697`). SSL and CDN are on; the temporary
+`aqua-finch-257417.hostingersite.com` still answers. The domain is Hostinger's,
+auto-renewing, and expires 2027-08-17.
 
-**`panelsuite.online` was bought for it** on 17 August (Hostinger, auto-renew
-on, expires 2027-08-17) and is not connected yet — its nameservers are still
-Hostinger's parking pair. Two things change when it is: the site's own address,
-and **Supabase's Site URL**, which decides where a signup confirmation link
-sends people. Put both addresses in Supabase's Redirect URLs and the link never
-breaks while the move happens.
+Checked from outside rather than assumed: `/`, `/api/rules` and `/guide` all
+answer 200, the page is the current build, and **`/api/config` hands over the
+Supabase project — so accounts are wired on the live site**.
 
-The product is named after it: **Panel Suite**, with the calculator as the
-screen inside it. There is no company name anywhere in the repo — that was
-removed on 17 August at the shop's request, so the tool can be sold or handed
-on without a rename. Hostinger deploys what is on GitHub — so **push before
+The product is named after the domain: **Panel Suite**, with the calculator as
+the screen inside it. There is no company name anywhere in the repo — removed
+on 17 August at the shop's request, so the tool can be sold or handed on
+without a rename. Job numbers (HI-15191 and its siblings) are untouched: they
+are transcribed off the drawings and are the evidence this engine is proved
+against. Hostinger deploys what is on GitHub — so **push before
 deploying**, or the site is built from the last push and not from this machine.
 
 Settings that work: framework *Other*, branch `main`, **Node 24.x**, root `./`,
@@ -403,14 +404,19 @@ are in place, and `SETUP.md` has the SQL that made them.
   Save and Open want an account, and a server with no Supabase configured says
   so in the panel rather than breaking.
 
-**Two things left before anyone can actually sign in:**
+**Two things left before anyone can actually sign in.** The environment
+variables are done — `/api/config` proves it — and `panelsuite.online` is
+authenticated in Brevo. What remains:
 
-1. **Put `SUPABASE_URL` and `SUPABASE_ANON_KEY` into Hostinger** and redeploy.
-   Until then the live site's account panel will say accounts are not set up.
-2. **Configure Brevo SMTP** (`SETUP.md` Part B). Supabase's built-in mailer
-   sends a handful an hour and is not for production — without Brevo the
-   confirmation email may never arrive, and without that link the account cannot
-   be used. This is the one part that could not be tested from this side.
+1. **Supabase's Site URL is still `http://localhost:3000`.** The Redirect URLs
+   are all three and correct, but Site URL is the field that decides where a
+   confirmation link *sends* people. Left as it is, signup works, the email
+   goes, and the link lands on a machine where nothing is running. One field:
+   `https://panelsuite.online`.
+2. **Brevo's SMTP is not in Supabase yet.** Supabase's built-in mailer sends a
+   handful an hour and is not for production, so without this the confirmation
+   email may never arrive — and without that link the account cannot be used.
+   This is the one part that could not be tested from this side.
 
 Also removed on 17 August: the form's **BOQ group** field. It was declared,
 sent, and never read — `buildJob` maps rooms one to one. Merging is Phase 3.

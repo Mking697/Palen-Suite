@@ -1,7 +1,7 @@
 # Panel Suite
 
-Live at **aqua-finch-257417.hostingersite.com**, a temporary domain, until
-**panelsuite.online** is pointed at it. See `DEPLOY.md`.
+Live at **https://panelsuite.online**. See `DEPLOY.md` for how it is hosted and
+`SETUP.md` for the accounts behind it.
 
 PUF panel wall / ceiling layout and SHEET FABRICATION BOQ engine for cold room
 projects (freezer, chiller, ante, ambient).
