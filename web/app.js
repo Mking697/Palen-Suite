@@ -70,6 +70,13 @@ const lCutOf = (r) => r.lCut ?? (+r.wallTh > RULES.lCutMinWallTh);
  * trip to the server. The engine holds the authoritative one; if these two ever
  * disagree, core/rules.ts is right.
  */
+/**
+ * The layers actually built. The top sheet can be turned off, and a layer
+ * nobody fits must not print on the sheet or take thickness off the core.
+ */
+const activeFloorLayers = (r) =>
+  r.topSheetOn === false ? r.floorLayers.slice(0, 3) : r.floorLayers;
+
 const floorCoreTh = (layers, panelTh) => {
   const sheets = layers
     .filter((l) => l.material !== 'Puf')
@@ -160,6 +167,8 @@ const newRoom = (n = 1) => ({
   floorSplitAxis: 'w',
   /** bottom sheet, puf core, the sheet above it, top sheet */
   floorLayers: RULES.floorLayers.map((l) => ({ ...l })),
+  /** the top sheet is not always fitted; off, it neither prints nor thins the core */
+  topSheetOn: true,
   /** the sheet the flashing is folded from */
   flashingSkin: defaultSkin(),
   /** flashing typed in on top of the three the engine works out */
@@ -432,6 +441,7 @@ function createRoomOn(edgeIndex) {
   r.floorModule = parent.floorModule;
   r.floorSplitAxis = parent.floorSplitAxis;
   r.floorLayers = parent.floorLayers.map((l) => ({ ...l }));
+  r.topSheetOn = parent.topSheetOn;
   r.flashingSkin = { ...parent.flashingSkin };
   // extra flashing is per room and typed off the drawing, so it is not inherited
 
@@ -618,10 +628,10 @@ function roomSpec(r) {
             splitAxis: r.floorSplitAxis,
             // the engine prints the build-up; desc is the fallback for a job
             // that states one instead, which is how the verified jobs are held
-            layers: r.floorLayers.map((l) => ({
+            layers: activeFloorLayers(r).map((l) => ({
               material: l.material,
               // the core is derived from the others, never typed in
-              th: l.material === 'Puf' ? floorCoreTh(r.floorLayers, +r.floorTh) : +l.th,
+              th: l.material === 'Puf' ? floorCoreTh(activeFloorLayers(r), +r.floorTh) : +l.th,
             })),
             desc: 'Bottom PPGI + Puf + 12 mm Ply + 2mm AL. CHQ',
           }
@@ -823,7 +833,7 @@ const FLOOR_LAYER_LABELS = ['Bottom sheet', 'Core', 'Above the core', 'Top sheet
  * sheet ends up disagreeing with itself.
  */
 function floorBuildUp(r) {
-  const core = floorCoreTh(r.floorLayers, +r.floorTh);
+  const core = floorCoreTh(activeFloorLayers(r), +r.floorTh);
   const sheets = Math.round((+r.floorTh - core + Number.EPSILON) * 100) / 100;
   const rows = r.floorLayers.map((layer, i) => {
     if (i === 1) {
@@ -833,6 +843,39 @@ function floorBuildUp(r) {
           class: `derived${core > 0 ? '' : ' is-bad'}`,
           text: `${layer.material} · ${core} mm`,
         }),
+      ]);
+    }
+    /*
+     * The top sheet is not always fitted — HI-15279 has an AL. chequered plate
+     * on top, plenty of floors have nothing. Ticked off it stops printing on
+     * the sheet and stops taking thickness off the core, which is the part that
+     * matters: a layer nobody fits must not thin the foam.
+     */
+    if (i === 3) {
+      const on = r.topSheetOn !== false;
+      return el('div', {}, [
+        toggle('Top sheet', on, (v) => {
+          r.topSheetOn = v;
+          renderForm();
+          refresh();
+        }, 'chq'),
+        on
+          ? el('div', { class: 'row2' }, [
+              select(
+                FLOOR_LAYER_LABELS[i],
+                layer.material,
+                RULES.floorMaterials.map((m) => [m, m]),
+                (v) => {
+                  layer.material = v;
+                  refresh();
+                },
+              ),
+              field('Thickness', layer.th, (v) => {
+                layer.th = v;
+                refresh();
+              }, { unit: 'mm' }),
+            ])
+          : el('p', { class: 'hint', text: 'No top sheet — the core keeps that thickness.' }),
       ]);
     }
     return el('div', { class: 'row2' }, [
@@ -878,9 +921,44 @@ function floorBuildUp(r) {
   ]);
 }
 
+/**
+ * Where a node sits under `root`, as a list of child indexes.
+ *
+ * Used to put the cursor back after the form is rebuilt. Rebuilding is how this
+ * form stays honest — every control is drawn from the state, so nothing on
+ * screen can drift from what will be sent — but it also threw away the caret
+ * and scrolled to the top on every keystroke that redraws. The state is the
+ * same, so the shape is the same, so the same path finds the same field.
+ */
+const pathTo = (root, node) => {
+  const path = [];
+  let n = node;
+  while (n && n !== root && n.parentNode) {
+    path.unshift([...n.parentNode.children].indexOf(n));
+    n = n.parentNode;
+  }
+  return n === root ? path : null;
+};
+
+const nodeAt = (root, path) => path.reduce((n, i) => (n ? n.children[i] : null), root);
+
 function renderForm() {
   const f = $('#form');
   const r = state.rooms[state.active];
+
+  // remember where the estimator was, to put them back at the end
+  const active = document.activeElement;
+  const keep =
+    active && f.contains && f.contains(active) ? { path: pathTo(f, active) } : null;
+  if (keep) {
+    try {
+      keep.start = active.selectionStart;
+      keep.end = active.selectionEnd;
+    } catch {
+      /* a number input has no selection to read; the focus alone is enough */
+    }
+  }
+  const wasScrolled = f.scrollTop;
 
   /* room tabs */
   const tabs = el('div', { class: 'room-tabs' });
@@ -1403,6 +1481,12 @@ function renderForm() {
         d[k] = v;
         refresh();
       };
+      /** For the three that are checked against each other as they are typed. */
+      const setDShown = (k) => (v) => {
+        d[k] = v;
+        renderForm();
+        refresh();
+      };
       card.append(
         el('div', { class: 'door-box' }, [
           field('Door label', d.label, setD('label'), { type: 'text' }),
@@ -1419,33 +1503,35 @@ function renderForm() {
             skinPicker('Door outer', d.skinOuter, refresh),
             skinPicker('Door inner', d.skinInner, refresh),
           ]),
-          // frame + leaf + frame must fill the module, so editing either one
-          // moves the other — otherwise the drawing and the blank size would
-          // describe two different doors
+          /*
+           * All three are typed, none is worked out from the others. The shop
+           * asked for that, and it is the right way round — these come off a
+           * drawing, and a tool that quietly moves the number beside the one
+           * you edited is a tool you stop trusting.
+           *
+           * What the drawing office cares about is that they add up. So the
+           * sum is shown, and when it does not come out the difference is
+           * said, in millimetres. Reported, not corrected — the same rule the
+           * wall chain follows when it does not close.
+           */
           el('div', { class: 'row3' }, [
-            field('Module taken', d.moduleW, (v) => {
-              d.moduleW = v;
-              d.clearW = Math.max(0, Number(v) - 2 * Number(d.frame));
-              renderForm();
-              refresh();
-            }, { unit: 'mm' }),
-            field('Frame each side', d.frame, (v) => {
-              d.frame = v;
-              d.clearW = Math.max(0, Number(d.moduleW) - 2 * Number(v));
-              renderForm();
-              refresh();
-            }, { unit: 'mm' }),
-            field('Leaf / clear width', d.clearW, (v) => {
-              d.clearW = v;
-              d.frame = Math.max(0, Math.round((Number(d.moduleW) - Number(v)) / 2));
-              renderForm();
-              refresh();
-            }, { unit: 'mm' }),
+            field('Module taken', d.moduleW, setDShown('moduleW'), { unit: 'mm' }),
+            field('Frame each side', d.frame, setDShown('frame'), { unit: 'mm' }),
+            field('Leaf / clear width', d.clearW, setDShown('clearW'), { unit: 'mm' }),
           ]),
-          el('p', {
-            class: 'hint',
-            text: `${d.frame} + ${d.clearW} + ${d.frame} = ${Number(d.frame) * 2 + Number(d.clearW)} of ${d.moduleW}. The BOQ blanks the door off the leaf.`,
-          }),
+          (() => {
+            const sum = Number(d.frame) * 2 + Number(d.clearW);
+            const off = sum - Number(d.moduleW);
+            return el('p', {
+              class: off ? 'warn' : 'hint',
+              text: off
+                ? `${d.frame} + ${d.clearW} + ${d.frame} = ${sum}, which is ${Math.abs(off)} mm ` +
+                  `${off > 0 ? 'more' : 'less'} than the ${d.moduleW} module. ` +
+                  `The BOQ blanks the door off the leaf either way.`
+                : `${d.frame} + ${d.clearW} + ${d.frame} = ${sum} of ${d.moduleW}. ` +
+                  `The BOQ blanks the door off the leaf.`,
+            });
+          })(),
           field('Clear height', d.clearH, setD('clearH'), { unit: 'mm' }),
           // the piece over the door is a panel of its own only on a tall wall
           +r.h > RULES.doorTopMinWallHeight
@@ -1538,6 +1624,19 @@ function renderForm() {
 
   parts.push(wallsGroup);
   f.replaceChildren(...parts);
+
+  f.scrollTop = wasScrolled;
+  if (keep && keep.path) {
+    const again = nodeAt(f, keep.path);
+    if (again && again.focus) {
+      again.focus();
+      try {
+        if (keep.start != null) again.setSelectionRange(keep.start, keep.end);
+      } catch {
+        /* number inputs refuse this; being focused is what mattered */
+      }
+    }
+  }
 }
 
 /* ---------- output ---------- */
@@ -2301,7 +2400,12 @@ function loadExample(job) {
     r.floorTh = room.floor.th;
     r.floorModule = room.floor.module ?? 1220;
     r.floorSplitAxis = room.floor.splitAxis ?? 'w';
-    r.floorLayers = (room.floor.layers ?? RULES.floorLayers).map((l) => ({ ...l }));
+    const saved = room.floor.layers ?? RULES.floorLayers;
+    // a job saved with three layers had its top sheet turned off
+    r.topSheetOn = saved.length > 3;
+    r.floorLayers = (saved.length > 3 ? saved : [...saved, RULES.floorLayers[3]]).map((l) => ({
+      ...l,
+    }));
     r.flashingSkin = { ...(room.flashingSkin ?? RULES.defaultSkin) };
     r.extraFlashing = (room.extraFlashing ?? []).map((x) => ({ ...x }));
     r.extraFlashingOn = r.extraFlashing.length > 0;

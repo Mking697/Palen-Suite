@@ -53,6 +53,10 @@ class StubEl {
   html = '';
   dataset: Record<string, string> = {};
   style: Record<string, unknown> = {};
+  parentNode: StubEl | null = null;
+  scrollTop = 0;
+  selectionStart: number | null = null;
+  selectionEnd: number | null = null;
   classList = {
     add: () => {},
     remove: () => {},
@@ -65,20 +69,32 @@ class StubEl {
   }
 
   append(...kids: unknown[]) {
-    for (const k of kids) if (k != null && k !== false) this.children.push(k as Kid);
+    for (const k of kids) {
+      if (k == null || k === false) continue;
+      if (k instanceof StubEl) k.parentNode = this;
+      this.children.push(k as Kid);
+    }
   }
   appendChild(k: Kid) {
-    this.children.push(k);
+    this.append(k);
     return k;
   }
   replaceChildren(...kids: unknown[]) {
     this.children = [];
     this.append(...kids);
   }
+  /** Everything under this one, so the form can tell where the cursor was. */
+  contains(node: unknown): boolean {
+    for (const n of walk(this)) if (n === node) return true;
+    return false;
+  }
+  setSelectionRange() {}
   remove() {}
   scrollTo() {}
   scrollIntoView() {}
-  focus() {}
+  focus() {
+    FOCUSED.node = this;
+  }
   click() {}
   setAttribute(k: string, v: unknown) {
     this.attrs[k] = v;
@@ -133,6 +149,9 @@ class StubEl {
   }
 }
 
+/** Which element has the cursor, so `document.activeElement` can answer. */
+const FOCUSED: { node: StubEl | null } = { node: null };
+
 /** A 2D context that accepts everything and draws nothing. */
 const CANVAS_CTX = new Proxy(
   { canvas: { width: 900, height: 640 } },
@@ -161,6 +180,17 @@ function* walk(n: Kid): Generator<StubEl> {
   yield n;
   for (const k of n.children) yield* walk(k);
 }
+
+/** Where a node sits under a root, as child indexes — the test's own copy. */
+const pathOfNode = (root: StubEl, node: StubEl): number[] | null => {
+  const path: number[] = [];
+  let n: StubEl | null = node;
+  while (n && n !== root && n.parentNode) {
+    path.unshift(n.parentNode.children.indexOf(n));
+    n = n.parentNode;
+  }
+  return n === root ? path : null;
+};
 
 const labelled = (root: StubEl, label: string) =>
   [...walk(root)].find((n) => n.tag === 'label' && textOf(n).trim() === label);
@@ -233,6 +263,9 @@ function harness(
     addEventListener: () => {},
     body: new StubEl('body'),
     documentElement: new StubEl('html'),
+    get activeElement() {
+      return FOCUSED.node;
+    },
   };
 
   /** What the estimator types into a prompt, and whether they confirm. */
@@ -528,6 +561,28 @@ await t('the verified jobs are not offered to an estimator', () => {
   // they are proof the engine is right, not somebody's work — three jobs the
   // estimator never made, sitting among the ones they did
   assert.equal(app.ids.get('#jobList')!.children.length, 0);
+});
+
+await t('a redraw keeps the cursor where it was, and the form where it was', async () => {
+  /*
+   * The form is rebuilt from the state on every change, which is what stops
+   * anything on screen drifting from what will be sent — but it used to throw
+   * away the caret and scroll to the top while somebody was still typing.
+   */
+  const form = app.ids.get('#form')!;
+  const box = [...walk(form)].find((n) => n.tag === 'input' && n.attrs.type === 'number')!;
+  const where = pathOfNode(form, box);
+  box.focus();
+  form.scrollTop = 420;
+
+  box.value = '3200';
+  box.fire('input');
+  await settle();
+
+  assert.equal(form.scrollTop, 420, 'the form jumped back to the top');
+  const now = (app.ctx.document as { activeElement: StubEl | null }).activeElement;
+  assert.ok(now, 'the cursor was dropped');
+  assert.deepEqual(pathOfNode(form, now!), where, 'the cursor moved to a different field');
 });
 
 await t('signed out, opening a job asks for a sign in rather than failing', async () => {

@@ -83,6 +83,10 @@ go and nothing else to press.
   owns it, exactly as HI-15191 prints it.
 - **Doors** — on any wall the room owns, including a partition. Type, core,
   clear opening, both leaf sheets, and an optional position from either end.
+  The module, the frame and the leaf are **all typed and none is derived**; when
+  `frame + leaf + frame` does not equal the module the difference is stated in
+  millimetres rather than one of them being moved, the same way a wall chain
+  that does not close is reported and never absorbed.
   Left blank, the drawing centres the door; the BOQ is unaffected either way.
   A door can also state **which hand it is hung on**, LHS or RHS: that drives
   the `(LHS)`/`(RHS)` token in its own printed label and draws the leaf and its
@@ -146,7 +150,9 @@ go and nothing else to press.
   it covers is identical, which `core/verify/split.test.ts` asserts.
 - **Floor build-up** — a panelised floor states its four layers bottom up: the
   bottom sheet, the puf core, the sheet above it and the top sheet, each with
-  its own material and thickness. The ply is not fixed; the shop also builds
+  its own material and thickness. **The top sheet is optional**: turned off it
+  neither prints on the sheet nor thins the core, because a layer nobody fits
+  must not eat foam. The ply is not fixed; the shop also builds
   inner ply + chequered sheet, or outer ply + SS. **The panel never grows**: the
   floor thickness is the whole build-up, so a 12mm ply and a 2mm chequered plate
   on a 100mm floor leave an 85.6mm core, not a 114mm panel. The core is

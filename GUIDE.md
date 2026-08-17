@@ -1,5 +1,69 @@
 # Guide
 
+**Ye tool kya karta hai, ek line me:** aap drawing dekh kar room ke naap type
+karte hain, aur ye khud **drawings aur SHEET FABRICATION (BOQ)** bana deta hai —
+kaun sa panel kitna bada, kitne panel, kitni PPGI, kitna chemical, kitna area.
+
+**Aapko BOQ ka koi number type nahi karna.** Sirf wo naap daaliye jo drawing par
+likhe hain. Baaki sab tool nikaalta hai. Ye hi is tool ka poora matlab hai.
+
+---
+
+## Pehli baar? Ye 6 step kaafi hain
+
+Ek asli room banate hain — **3050 × 4575 × 2590 mm ka freezer, 100mm panel, ek
+door**. Screen kholiye aur saath-saath kariye.
+
+**1. Sign in kijiye.** Site kholte hi login ka screen aata hai. Naya account ho
+to email + password daal kar **Sign up** — email par **6 digit ka code** aayega,
+wo daaliye, ho gaya.
+
+**2. Job No likhiye.** Upar `Job No` me apne job ka number, jaise `HI-15191`.
+Ye baad me isi naam se save aur khulega.
+
+**3. Room ka naap daaliye.** Bayein taraf sabse upar:
+
+| Field | Kya daalein | Example |
+|---|---|---|
+| Width | room ki chaudai, **bahar se** | `3050` |
+| Length | room ki lambai, **bahar se** | `4575` |
+| Height | room ki oonchai | `2590` |
+
+> **"Bahar se" ka matlab:** drawing par jo poora bahari naap likha hai wahi.
+> Andar ka naap tool khud nikaal leta hai — walls ki motai ghata kar.
+
+**4. Panel ki motai daaliye.** *BUILD-UP* me **Wall thickness** aur **Ceiling
+thickness** — dono `100`. Baaki (panel module 1180, corner leg 300) aam taur par
+waise hi rehne dijiye.
+
+**5. Door lagaiye.** Neeche scroll kijiye — har wall ka apna card hai (`N`, `E`,
+`S`, `W`). Jis wall par door hai, uske card me **Door** tick kar dijiye. Phir
+clear opening bhar dijiye, jaise `860` chaudai aur `1980` oonchai.
+
+**6. Bas.** Dayein taraf dekhiye — **drawing sheet aur BOQ pehle se ban chuki
+hai.** Aapne kuch dabaya bhi nahi. Upar chaar aankde dikhte hain: kitne panel,
+kitni PPGI, kitna chemical (kg), kitna area (m²).
+
+**Save karna hai?** Upar **File → Save**. Wo job aapke naam se save ho jayega,
+aur `Open job no` me number likh kar kabhi bhi wapas khul jayega.
+
+**Kagaz par chahiye?** **Print** — usse PDF bhi ban jaati hai.
+
+---
+
+## Do baatein jo is tool ko samajhne me sabse zyada madad karti hain
+
+**1. Ye kabhi chupke se koi number nahi badalta.** Agar aapka naap kahin mel
+nahi kha raha, to ye **peele box me bata dega** — theek nahi karega. Wajah saaf
+hai: agar tool chupchap number badal de, to factory ko galat cheez chali jayegi
+aur kisi ko pata bhi nahi chalega. Peela box dikhe to drawing dobara dekhiye.
+
+**2. Drawing aur BOQ hamesha ek hi baat kehte hain.** Drawing me jo panel dikh
+raha hai, wahi BOQ me gina gaya hai — dono ek hi hisaab se bante hain. Isliye
+drawing dekh kar order de sakte hain.
+
+---
+
 Ye guide draftsman / estimator ke liye hai. Engine ko drawing ke dimensions
 chahiye, BOQ ka koi number nahi — BOQ khud generate hoti hai.
 
@@ -9,6 +73,7 @@ tab chahiye jab kisi purane job ko verify karna ho.
 
 | Chahiye | Kahan |
 |---|---|
+| **Pehli baar chala rahe hain** | [Pehli baar? Ye 6 step kaafi hain](#pehli-baar-ye-6-step-kaafi-hain) |
 | Screen kaise chalti hai | [Sabse aasan raasta](#sabse-aasan-raasta--panel-calculator) |
 | Saari drawings ek canvas par | [Drawing sheet](#drawing-sheet--sab-kuch-ek-canvas-par) |
 | 3D me dekhna | [2D / 3D](#2d--3d) |
@@ -30,13 +95,13 @@ tab chahiye jab kisi purane job ko verify karna ho.
 
 ## Sabse aasan raasta — Panel Calculator
 
-```
-npm run dev
-```
+**`panelsuite.online`** kholiye aur sign in kijiye. Ek hi screen hai: bayein
+taraf values bharein, dayein taraf drawing aur SHEET FABRICATION **apne aap**
+banti jayegi. Koi "Calculate" ka button nahi hai — zaroorat hi nahi.
 
-`http://127.0.0.1:5173` par ek hi screen milegi. Bayein taraf values bharein,
-dayein taraf drawing aur SHEET FABRICATION apne aap banti jayegi. Code chhune
-ki zaroorat nahi.
+Phone par bhi chalta hai — wahan form upar aur drawing neeche aa jaati hai.
+
+*(Apne computer par chalana ho to `npm run dev`, phir `http://127.0.0.1:5173`.)*
 
 | Form me | Kya karta hai |
 |---|---|
@@ -323,7 +388,10 @@ layers, neeche se upar:
 | Bottom sheet | PPGI 0.4 mm | material + thickness |
 | Core | Puf | nahi — ye khud nikalta hai, neeche dekho |
 | Above the core | Ply 12 mm | material + thickness |
-| Top sheet | AL. CHQ 2 mm | material + thickness |
+| **Top sheet** | AL. CHQ 2 mm | **tick se on/off**, phir material + thickness |
+
+**Top sheet lagti hi na ho** to uska tick hata dijiye. Phir wo na sheet par
+chhapegi, na core ko patla karegi — jo layer lagti hi nahi, wo foam kyun khaaye.
 
 Ply fixed nahi hai — shop inner Ply + chequered sheet, ya outer Ply + SS bhi
 banati hai. Jo bhi chunenge wo BOQ ki description me poora chhapega, thickness
@@ -661,10 +729,12 @@ SLAB, aur beech me door.
 | AL. CHQ. sheet | toggle + neeche se kitna upar (600) |
 | Door lift | toggle + puf slab se kitna upar (150), aur ground se kitna upar |
 
-**Zaroori:** `frame + leaf + frame = module` hamesha barabar rehta hai. Teeno me
-se koi ek badloge toh baaki khud adjust ho jate hain. Aisa isliye kiya hai ki
-BOQ door ka blank size **leaf** se nikalta hai — agar frame aur leaf alag-alag
-ho jaate toh drawing kuch dikhati aur sheet kuch aur.
+**Teeno aap khud bharte hain** — koi apne aap nahi badalta. Drawing par jo likha
+hai wahi daaliye.
+
+Neeche jod dikhta rehta hai: `115 + 950 + 115 = 1180 of 1180`. **Jod na mile to
+peela box** bata dega kitne mm ka farak hai — theek nahi karega, sirf batayega.
+BOQ dono soorat me door ka blank **leaf** se hi nikalta hai.
 
 Door lift ke **do figure alag** hain — puf slab se aur ground se. Ek se doosra
 nikala nahi jata, kyunki drawing me dono alag likhe hote hain.

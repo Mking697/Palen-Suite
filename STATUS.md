@@ -462,6 +462,24 @@ is done.
   does not read as an overwrite. **File → Delete this job** removes one.
 - The administrator can type **any number of days**, not only 7 / 30 / 365.
 
+### What the shop asked for after using it (17 August)
+
+- **The form no longer jumps.** It is rebuilt from the state on every change —
+  that is what keeps the screen and the payload identical — but it was throwing
+  away the caret and scrolling to the top mid-typing. `renderForm` now restores
+  the focused field and the scroll position.
+- **The door's module, frame and leaf are all typed**, none worked out from the
+  others. When they do not add up the difference is *stated* in millimetres
+  rather than one of them being moved: these come off a drawing, and a tool that
+  shifts the number beside the one you edited is a tool nobody checks.
+- **The floor's top sheet is optional**, behind a tick. Off, it neither prints
+  on the sheet nor thins the core — a layer nobody fits must not eat foam.
+- **A phone works.** One column, thumb-sized controls, 16px inputs so iOS does
+  not zoom, menus that open inwards, and the drawing sheet scrolling inside its
+  own box rather than dragging the page sideways.
+- **`GUIDE.md` opens with a worked example** — a real 3050 × 4575 freezer in six
+  steps, written for somebody who has never seen the tool.
+
 **One thing to watch, found the hard way twice:** widening a policy can break an
 assumption the app never wrote down. `profiles?…&limit=1` was correct while
 every user could read exactly one row, and quietly wrong the moment an admin

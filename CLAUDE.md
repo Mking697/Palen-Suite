@@ -104,6 +104,26 @@ code runs. Nothing in development should need it: run the source.
   from `/api/rules` rather than repeating them — `web/app.js` holds fallbacks
   only for when that call cannot be made, and they say so.
 - A rule derived from a single sample must say so in its comment.
+- **The form is rebuilt from the state on every change, and must not lose the
+  estimator's place.** Redrawing is what stops anything on screen drifting from
+  what will be sent — but it also throws away the caret and scrolls to the top
+  while somebody is still typing. `renderForm` records the focused node's index
+  path and the form's `scrollTop`, and puts both back. Any new redraw path has
+  to go through it.
+- **A typed figure is never quietly corrected.** The door's module, frame and
+  leaf are all typed, and when `frame + leaf + frame` does not equal the module
+  the difference is *stated in millimetres* rather than one of them being moved.
+  Same rule as the wall chain that does not close. A tool that silently adjusts
+  the number next to the one you edited is a tool nobody can check.
+- **Nothing may push the page sideways.** A drawing sheet is metres wide and a
+  phone is not, so wide content scrolls inside its own box (`.draw-svg`,
+  `.scroller`) and `body` keeps `overflow-x: hidden`. On a phone every control
+  is at least 40px and inputs are 16px, because anything smaller means a missed
+  tap or an iOS zoom on focus.
+- **CSS can defeat an attribute, and no test here will catch it.** `.gate {
+  display: grid }` outranked the browser's own `[hidden] { display: none }` and
+  put an empty card on the live site while all the tests passed. Presentation is
+  checked by looking at it; the harness checks behaviour.
 - **The browser scripts are tested by running them, in
   `core/verify/web.test.ts`.** `web/app.js` and `web/guide.js` are plain scripts
   with no imports, so they cannot be imported — they are executed in a `node:vm`
