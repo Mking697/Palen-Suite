@@ -412,6 +412,16 @@ are in place, and `SETUP.md` has the SQL that made them.
 
 ### Phase 9b — a code, a trial, and an administrator (17 August)
 
+**The setup is done and checked against the live project.** All three columns
+and both functions exist, an anonymous request still sees `[]` for both tables,
+the administrator is `nantultiwari697@gmail.com`, and the backfill gave the
+existing account its 14 days. A signup was taken end to end: the code arrived
+from `info@panelsuite.online`, verified, and signed in.
+
+What is left is the test that matters — save a job on one account and fail to
+open it from another.
+
+
 - **Signup is verified by a six digit code**, not a link. The email template
   prints `{{ .Token }}` and the app asks for it. Worth the change on its own
   merit: a link only works if Supabase's Site URL is right, and that setting is
