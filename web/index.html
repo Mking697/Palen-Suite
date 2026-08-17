@@ -22,9 +22,20 @@
       </div>
 
       <div class="top-actions">
-        <select id="exampleSel" title="Load a verified job into the form">
-          <option value="">Load example…</option>
-        </select>
+        <!-- type a job number, or click for the list. The datalist is the
+             browser's own, so this needs no library and no dropdown of ours. -->
+        <input
+          id="jobSearch"
+          list="jobList"
+          type="search"
+          autocomplete="off"
+          placeholder="Open job no…"
+          title="Type a job number and press Enter"
+        />
+        <datalist id="jobList"></datalist>
+        <span id="jobSearchMsg" class="top-msg"></span>
+        <!-- a new tab, so a job half typed into the form is not lost -->
+        <a class="btn" id="guideBtn" href="/guide" target="_blank" rel="noopener">Guide</a>
         <button class="btn" id="printBtn">Print</button>
       </div>
     </header>

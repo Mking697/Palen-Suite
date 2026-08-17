@@ -35,9 +35,12 @@ let RULES = {
   defaultSkin: { material: 'PPGI', thickness: 0.4 },
   doorTypes: [],
   doorCores: ['Puf'],
-  // mirrors L_CUT_MIN_WALL_TH in core/rules.ts, and is replaced by the real
-  // value at boot — the fallback only matters if /api/rules cannot be reached
+  doorHands: ['LHS', 'RHS'],
+  // mirror L_CUT_MIN_WALL_TH and DOOR_TOP_MIN_WALL_HEIGHT in core/rules.ts, and
+  // are replaced by the real values at boot — these fallbacks only matter if
+  // /api/rules cannot be reached
   lCutMinWallTh: 50,
+  doorTopMinWallHeight: 3050,
   floorMaterials: ['PPGI', 'Ply', 'AL. CHQ'],
   flashingTypes: ['U Flashing', 'L Inner Flashing', 'L Outer Flashing'],
   floorLayers: [
@@ -78,6 +81,9 @@ const newDoor = () => ({
   frame: 160,
   fromLeft: '',
   fromRight: '',
+  /** off until the estimator says which way it is hung — see doorLabel */
+  handOn: false,
+  hand: 'LHS',
   chqOn: true,
   chqHeight: 600,
   liftOn: true,
@@ -517,6 +523,7 @@ function roomSpec(r) {
         label: e.door.label,
         type: e.door.type,
         core: e.door.core,
+        hand: e.door.handOn ? e.door.hand : undefined,
         clearW: Number(e.door.clearW),
         clearH: Number(e.door.clearH),
         moduleW: Number(e.door.moduleW),
@@ -1431,6 +1438,21 @@ function renderForm() {
             text: `${d.frame} + ${d.clearW} + ${d.frame} = ${Number(d.frame) * 2 + Number(d.clearW)} of ${d.moduleW}. The BOQ blanks the door off the leaf.`,
           }),
           field('Clear height', d.clearH, setD('clearH'), { unit: 'mm' }),
+          // the piece over the door is a panel of its own only on a tall wall
+          +r.h > RULES.doorTopMinWallHeight
+            ? el('p', {
+                class: 'hint',
+                text:
+                  `Wall is over ${RULES.doorTopMinWallHeight}mm, so a Door Top Panel of ` +
+                  `${d.moduleW} x ${Math.max(0, +r.h - +d.clearH)} mm is made over the door ` +
+                  `and priced on its own row.`,
+              })
+            : el('p', {
+                class: 'hint',
+                text:
+                  `Up to ${RULES.doorTopMinWallHeight}mm of wall the door assembly is the ` +
+                  `full height and there is no separate top panel.`,
+              }),
 
           el('div', { class: 'row2' }, [
             field('From left', d.fromLeft, setD('fromLeft'), { unit: 'mm', placeholder: 'auto' }),
@@ -1440,6 +1462,32 @@ function renderForm() {
             class: 'hint',
             text: 'Leave both blank and the drawing centres the door. The BOQ is the same either way.',
           }),
+
+          // which hand the door is hung on. Off, the label is printed exactly
+          // as typed and the plan draws no swing — a swing nobody stated would
+          // be the drawing inventing a fact about the building.
+          toggle('Door opens from', d.handOn, (v) => {
+            d.handOn = v;
+            renderForm();
+            refresh();
+          }, 'chq'),
+          d.handOn
+            ? select(
+                'Hand',
+                d.hand,
+                RULES.doorHands.map((h) => [
+                  h,
+                  h === 'LHS' ? 'LHS — Left hand side' : 'RHS — Right hand side',
+                ]),
+                setD('hand'),
+              )
+            : null,
+          d.handOn
+            ? el('p', {
+                class: 'hint',
+                text: 'The label\'s own (LHS)/(RHS) follows this, and the plan draws the leaf swinging into the room from that end.',
+              })
+            : null,
 
           // chequered sheet up the leaf
           toggle('AL. CHQ. sheet', d.chqOn, (v) => {
@@ -2293,6 +2341,8 @@ function loadExample(job) {
               frame: e.door.frame ?? Math.round((e.door.moduleW - e.door.clearW) / 2),
               fromLeft: e.door.fromLeft ?? '',
               fromRight: e.door.fromRight ?? '',
+              handOn: e.door.hand != null,
+              hand: e.door.hand ?? 'LHS',
               chqOn: e.door.chqHeight != null,
               chqHeight: e.door.chqHeight ?? 600,
               liftOn: e.door.liftAboveFloor != null || e.door.liftAboveGround != null,
@@ -2313,17 +2363,55 @@ function loadExample(job) {
   refresh();
 }
 
-async function initExamples() {
-  const jobs = await (await fetch('/api/jobs')).json();
-  const sel = $('#exampleSel');
-  for (const j of jobs) {
-    sel.append(el('option', { value: j.jobNo, text: `${j.jobNo} — ${j.rooms.map((r) => r.name).join(', ')}` }));
+/**
+ * Open a job by its number.
+ *
+ * The list comes from `/api/jobs`, which today is the three verified jobs the
+ * engine was proved against. It is deliberately a search box and not a picker:
+ * an estimator knows the job number off the drawing, and a list stops being a
+ * way to find anything once there are more than a screenful.
+ */
+async function initJobSearch() {
+  const box = $('#jobSearch');
+  const msg = $('#jobSearchMsg');
+  const list = $('#jobList');
+
+  let jobs = [];
+  try {
+    jobs = await (await fetch('/api/jobs')).json();
+  } catch {
+    msg.textContent = 'job list unavailable';
+    return;
   }
-  sel.addEventListener('change', async () => {
-    if (!sel.value) return;
-    const job = await (await fetch(`/api/spec?job=${encodeURIComponent(sel.value)}`)).json();
-    loadExample(job);
-    sel.value = '';
+
+  // clicking the box offers every job it knows; typing narrows it
+  for (const j of jobs) {
+    list.append(
+      el('option', { value: j.jobNo, label: j.rooms.map((r) => r.name).join(', ') }),
+    );
+  }
+
+  const open = async () => {
+    const wanted = String(box.value ?? '').trim();
+    if (!wanted) return;
+    // typed by hand, so match on case and stray spaces the estimator did not mean
+    const hit = jobs.find((j) => j.jobNo.toLowerCase() === wanted.toLowerCase());
+    if (!hit) {
+      msg.textContent = `No job ${wanted}`;
+      return;
+    }
+    msg.textContent = '';
+    const spec = await (await fetch(`/api/spec?job=${encodeURIComponent(hit.jobNo)}`)).json();
+    loadExample(spec);
+    box.value = '';
+  };
+
+  box.addEventListener('change', open); //  picking from the list fires this
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') open();
+  });
+  box.addEventListener('input', () => {
+    msg.textContent = '';
   });
 }
 
@@ -2348,7 +2436,7 @@ async function boot() {
   }
   state.rooms = [newRoom()];
   renderForm();
-  initExamples();
+  initJobSearch();
   render();
 }
 

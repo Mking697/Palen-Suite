@@ -36,6 +36,8 @@ import {
   DEFAULT_FLOOR_LAYERS,
   DEFAULT_SKIN,
   DOOR_CORES,
+  DOOR_HANDS,
+  DOOR_TOP_MIN_WALL_HEIGHT,
   DOOR_TYPES,
   FLASHING_TYPES,
   FLOOR_LAYER_MATERIALS,
@@ -276,8 +278,11 @@ const server = createServer(async (req, res) => {
         defaultSkin: DEFAULT_SKIN,
         doorTypes: Object.entries(DOOR_TYPES).map(([k, v]) => ({ key: k, ...v })),
         doorCores: DOOR_CORES,
+        doorHands: DOOR_HANDS,
         // so the form can show the L cut default without knowing the threshold
         lCutMinWallTh: L_CUT_MIN_WALL_TH,
+        // and say when a door top panel starts being made, for the same reason
+        doorTopMinWallHeight: DOOR_TOP_MIN_WALL_HEIGHT,
         floorMaterials: FLOOR_LAYER_MATERIALS,
         floorLayers: DEFAULT_FLOOR_LAYERS,
         flashingTypes: FLASHING_TYPES,
@@ -396,6 +401,23 @@ const server = createServer(async (req, res) => {
         'content-disposition': `attachment; filename="${name}.dxf"`,
       });
       return res.end(toDxf(drawing));
+    }
+
+    /*
+     * The guide, and the file it is. `GUIDE.md` is the only copy — the page
+     * renders it rather than repeating it, because two sets of instructions
+     * drift apart and the one that gets read is the one on the screen.
+     */
+    if (path === '/guide' || path === '/guide/') {
+      return serveStatic(res, WEB, 'guide.html');
+    }
+    if (path === '/api/guide') {
+      try {
+        const md = await readFile(join(ROOT, 'GUIDE.md'), 'utf8');
+        return send(res, 200, md, 'text/markdown; charset=utf-8');
+      } catch {
+        return send(res, 404, 'GUIDE.md is not there', 'text/plain');
+      }
     }
 
     // the old single-file calculator, kept for reference
