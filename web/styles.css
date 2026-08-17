@@ -253,9 +253,16 @@ body.signed-out #jobSearchMsg,
 body.signed-out #printBtn,
 body.signed-out #accountMenu { display: none; }
 
-.gate {
-  min-height: calc(100vh - var(--top-h));
-  display: grid; place-items: center; padding: 40px 20px;
+/* Shown by the body class, not by the `hidden` attribute alone.
+   `.gate { display: grid }` outranks the browser's own `[hidden] {
+   display: none }`, so the card stayed on screen — empty, because the form is
+   only built when the page is actually locked. Both are set here so neither
+   can win by accident. */
+.gate { display: none; }
+.gate[hidden] { display: none; }
+body.signed-out .gate {
+  display: grid; place-items: center;
+  min-height: calc(100vh - var(--top-h)); padding: 40px 20px;
 }
 .gate-card {
   width: 100%; max-width: 380px; text-align: center;
