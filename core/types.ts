@@ -297,6 +297,12 @@ export interface RoomSpec {
   /**
    * Rooms that share a boqGroup are printed as one SHEET FABRICATION block.
    * In the source sheets this happens when attached rooms share a thickness.
+   *
+   * **Not implemented.** `buildJob` maps rooms one to one and never reads this;
+   * merging is Phase 3 in DESIGN.md, and it is what HI-15279's Ambient + Milk
+   * block is waiting for. The field is kept because job files may carry it and
+   * because Phase 3 will use it — but nothing acts on it today, which is why
+   * the calculator no longer offers it.
    */
   boqGroup?: string;
 }

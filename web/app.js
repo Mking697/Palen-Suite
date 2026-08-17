@@ -942,14 +942,14 @@ function renderForm() {
           ? 'External envelope, read off the wall chain below. The ceiling and floor are built to it.'
           : 'External envelope. Walls are worked out from this.',
     }),
-    field('BOQ group', r.boqGroup ?? '', setRedraw('boqGroup'), {
-      type: 'text',
-      placeholder: 'blank — its own block',
-    }),
-    el('p', {
-      class: 'hint',
-      text: 'Rooms sharing a BOQ group print as one SHEET FABRICATION block, the way an attached pair of the same thickness does.',
-    }),
+    /*
+     * There was a "BOQ group" field here. It is gone because it did nothing:
+     * `RoomSpec.boqGroup` is declared and the form sent it, but `buildJob` in
+     * core/boq.ts maps rooms one to one and never reads it. Merging two rooms
+     * into one printed block is Phase 3 work — see DESIGN.md — and a control
+     * that quietly does nothing is worse than no control. A job file that
+     * carries the field still round trips through the form untouched.
+     */
   ]);
   if (state.rooms.length > 1) {
     const del = el('button', { class: 'link-del', type: 'button', text: 'Remove this room' });

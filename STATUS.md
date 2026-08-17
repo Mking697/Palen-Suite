@@ -369,6 +369,25 @@ version:
   Accounts are `DESIGN.md` Phase 9; until then put basic auth in front of it
   before any real domain points at it.
 
+## Waiting on the shop before Phase 9 can start
+
+`SETUP.md` is written: Supabase, Brevo and the Google Apps Script, step by step,
+with the SQL to paste and the script to deploy. Two things unblock the code:
+
+1. **Supabase Project URL and anon key.** Neither is a secret — the anon key is
+   meant to be in the browser, and row level security is what protects the data.
+2. Nothing else. Brevo's API key and the Apps Script URL are Phase 11–12, and
+   **no key ever needs to reach this repo or a chat** — they go into Hostinger's
+   environment variables and the code reads them from there.
+
+The one thing worth starting today is **Brevo's domain verification**, because
+DNS takes hours and that wait can run alongside everything else.
+
+Also removed on 17 August: the form's **BOQ group** field. It was declared,
+sent, and never read — `buildJob` maps rooms one to one. Merging is Phase 3.
+`RoomSpec.boqGroup` stays in the types, marked as not implemented, because job
+files may carry it and Phase 3 will use it.
+
 ## Agreed on 17 August, written up but not started
 
 **Accounts, saved jobs, Google and email** — `DESIGN.md` Phases 9–12, written
