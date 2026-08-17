@@ -204,12 +204,19 @@ go and nothing else to press.
   unlocked and says so — gating there would lock everyone out, owner included,
   with no way back in from the screen, and with no Supabase there is no saved
   job to protect either. `SETUP.md` has the one-time setup.
-- **Open job no** — type a job number in the header and it opens in the form.
-  It is a search box rather than a picker because an estimator reads the number
-  off the drawing, and a list stops being a way to find anything past a
-  screenful; clicking it still offers everything it knows. Today that is the
-  three verified jobs, so it doubles as the way to inspect the numbers the
-  engine was proved against.
+- **Open job no** — type a job number in the header and one of **your own**
+  saved jobs opens in the form. A search box rather than a picker because an
+  estimator reads the number off the drawing, and a list stops being a way to
+  find anything past a screenful; clicking it still lists what you have saved.
+  The three verified jobs are deliberately *not* offered here — they are proof
+  the engine is right, not somebody's work, and on an estimator's screen they
+  were three jobs they never made sitting among the ones they did. They stay
+  reachable while developing, through `/api/jobs`.
+- **A different number is a different job.** Open a job, change the Job No in
+  the header, and Save: a new job is written and the one you opened is left
+  exactly as it was, which the message says out loud. `unique (user_id, job_no)`
+  is what makes that true rather than a convention. **File → Delete this job**
+  removes one for good, after asking.
 - **Guide** — a button in the header opens `GUIDE.md` as a page, in a new tab so
   a half-typed job is not lost. The page renders the file itself rather than
   repeating it: two sets of the same instructions drift apart, and the one that

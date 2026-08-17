@@ -2380,77 +2380,58 @@ function loadExample(job) {
  * an estimator knows the job number off the drawing, and a list stops being a
  * way to find anything once there are more than a screenful.
  */
-/** The verified examples, from /api/jobs. Loaded once at boot. */
-let EXAMPLES = [];
-
 /**
- * Fill the datalist: the estimator's own saved jobs first, then the examples.
- * Their own work is what they are usually looking for.
+ * Fill the datalist with the estimator's own saved jobs.
+ *
+ * The three verified jobs used to be listed here too. They are proof the
+ * engine is right, not somebody's work, and on an estimator's screen they were
+ * three jobs they never made sitting among the ones they did. They are still
+ * reachable while developing, through `/api/jobs` and `npm run dev`.
  */
 async function refreshJobList() {
   const list = $('#jobList');
   list.replaceChildren();
-
-  if (window.Auth && Auth.user) {
-    try {
-      for (const row of await Auth.listJobs()) {
-        list.append(
-          el('option', { value: row.job_no, label: `saved ${row.updated_at.slice(0, 10)}` }),
-        );
-      }
-    } catch {
-      /* the list is a convenience; the box still opens a job by name */
+  if (!(window.Auth && Auth.user)) return;
+  try {
+    for (const row of await Auth.listJobs()) {
+      list.append(
+        el('option', { value: row.job_no, label: `saved ${row.updated_at.slice(0, 10)}` }),
+      );
     }
-  }
-  for (const j of EXAMPLES) {
-    list.append(el('option', { value: j.jobNo, label: j.rooms.map((r) => r.name).join(', ') }));
+  } catch {
+    /* the list is a convenience; the box still opens a job by name */
   }
 }
 
-/**
- * Open a job by its number: the estimator's own saved jobs first, then the
- * verified examples. Their own is what they mean when the two share a number.
- */
+/** Open one of the estimator's own saved jobs by its number. */
 async function openJobNo(wanted) {
   const msg = $('#jobSearchMsg');
   const name = String(wanted ?? '').trim();
   if (!name) return false;
-
-  if (window.Auth && Auth.user) {
-    try {
-      const spec = await Auth.loadJob(name);
-      if (spec) {
-        loadExample(spec);
-        msg.textContent = `opened ${name}`;
-        return true;
-      }
-    } catch (err) {
-      msg.textContent = err.message;
-      return false;
-    }
-  }
-
-  // typed by hand, so match on case and stray spaces the estimator did not mean
-  const hit = EXAMPLES.find((j) => j.jobNo.toLowerCase() === name.toLowerCase());
-  if (!hit) {
-    msg.textContent = `No job ${name}`;
+  if (!(window.Auth && Auth.user)) {
+    msg.textContent = 'Sign in to open a job';
     return false;
   }
-  const spec = await (await fetch(`/api/spec?job=${encodeURIComponent(hit.jobNo)}`)).json();
-  loadExample(spec);
-  msg.textContent = '';
-  return true;
+
+  try {
+    const spec = await Auth.loadJob(name);
+    if (!spec) {
+      msg.textContent = `No job ${name}`;
+      return false;
+    }
+    loadExample(spec);
+    // remember what is open, so Save knows whether the number has been changed
+    savedAs = name;
+    msg.textContent = `opened ${name}`;
+    return true;
+  } catch (err) {
+    msg.textContent = err.message;
+    return false;
+  }
 }
 
 async function initJobSearch() {
   const box = $('#jobSearch');
-  const msg = $('#jobSearchMsg');
-
-  try {
-    EXAMPLES = await (await fetch('/api/jobs')).json();
-  } catch {
-    msg.textContent = 'job list unavailable';
-  }
   await refreshJobList();
 
   const open = async () => {
@@ -2589,6 +2570,28 @@ async function openAdmin() {
       return b;
     };
 
+    // any number of days, for the times the three buttons do not fit
+    const days = el('input', {
+      type: 'number',
+      min: 1,
+      max: 3650,
+      class: 'days',
+      placeholder: 'days',
+    });
+    const giveDays = el('button', { class: 'btn', type: 'button', text: 'Give' });
+    const grantTyped = () => {
+      const n = Math.floor(Number(days.value));
+      if (!(n > 0)) {
+        body.append(el('p', { class: 'error', text: 'How many days?' }));
+        return;
+      }
+      apply(() => Auth.setAccess(u.id, dayStamp(n)));
+    };
+    giveDays.addEventListener('click', grantTyped);
+    days.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') grantTyped();
+    });
+
     const stop = el('button', { class: 'btn ghost', type: 'button', text: 'Stop' });
     stop.addEventListener('click', () =>
       apply(
@@ -2613,7 +2616,7 @@ async function openAdmin() {
         {},
         u.is_admin
           ? [el('span', { class: 'muted', text: '—' })]
-          : [give(7), give(30), give(365), stop, del],
+          : [give(7), give(30), give(365), days, giveDays, stop, del],
       ),
     ]);
   });
@@ -2877,21 +2880,49 @@ async function fileAction(what) {
     return;
   }
 
-  const jobNo = what === 'saveAs' ? askJobNo(state.jobNo) : savedAs || state.jobNo;
+  if (what === 'delete') {
+    const gone = savedAs || String(state.jobNo ?? '').trim();
+    if (!gone) {
+      msg.textContent = 'No saved job open';
+      return;
+    }
+    if (!window.confirm(`Delete ${gone} for good? This cannot be undone.`)) return;
+    try {
+      await Auth.deleteJob(gone);
+      savedAs = '';
+      msg.textContent = `deleted ${gone}`;
+      await refreshJobList();
+    } catch (err) {
+      msg.textContent = err.message;
+    }
+    return;
+  }
+
+  /*
+   * The job number in the header is the one that is saved to — both here and
+   * for Save As, which only differs by asking first.
+   *
+   * That is what makes "open an old job, change its number, save" produce a
+   * *new* job rather than overwriting the old one: `unique (user_id, job_no)`
+   * means a different number is a different row. The old job is left exactly
+   * as it was, which is the point of doing it.
+   */
+  const jobNo = what === 'saveAs' ? askJobNo(state.jobNo) : String(state.jobNo ?? '').trim();
   if (!jobNo) return;
   if (jobNo === 'HI-' || !jobNo.trim()) {
     msg.textContent = 'Give the job a number first';
     return;
   }
 
+  const forked = !!savedAs && savedAs !== jobNo;
   try {
     // the spec is what is saved, never the BOQ — that is generated, and a
     // stored figure is how a saved job and a fresh one start to disagree
     await Auth.saveJob(jobNo, jobSpec());
+    msg.textContent = forked ? `saved as a new job ${jobNo}` : `saved ${jobNo}`;
     savedAs = jobNo;
     state.jobNo = jobNo;
     $('#jobNo').value = jobNo;
-    msg.textContent = `saved ${jobNo}`;
     await refreshJobList();
     refresh();
   } catch (err) {

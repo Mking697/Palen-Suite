@@ -445,6 +445,21 @@ open it from another.
 - Two SQL functions are `security definer` on purpose: a policy on `profiles`
   that reads `profiles` sends Postgres into infinite recursion. That is the
   most common way to get RLS wrong on Supabase, and `SETUP.md` says why.
+- **The three verified jobs are no longer offered in the app.** They are proof
+  the engine is right, not somebody's work, and on an estimator's screen they
+  were three jobs they never made sitting among the ones they did. Still
+  reachable while developing through `/api/jobs` and `/api/spec`.
+- **A different job number is a different job.** Save writes to whatever the
+  header says, so opening a job, changing its number and saving forks it and
+  leaves the original alone — and the message says "saved as a new job" so it
+  does not read as an overwrite. **File → Delete this job** removes one.
+- The administrator can type **any number of days**, not only 7 / 30 / 365.
+
+**One thing to watch, found the hard way twice:** widening a policy can break an
+assumption the app never wrote down. `profiles?…&limit=1` was correct while
+every user could read exactly one row, and quietly wrong the moment an admin
+could read all of them — it handed the administrator somebody else's profile.
+Anything that reads a single row should name it.
 
 Everything on the hosting and Supabase side is in place: the environment
 variables (`/api/config` proves it), the Site URL, all three Redirect URLs, and

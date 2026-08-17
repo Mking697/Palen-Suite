@@ -213,7 +213,7 @@ function harness(
   for (const id of idList) ids.set(id, new StubEl('div'));
 
   /** The File menu's buttons, which the page's own HTML provides. */
-  const fileButtons = ['new', 'open', 'save', 'saveAs'].map((what) => {
+  const fileButtons = ['new', 'open', 'save', 'saveAs', 'delete'].map((what) => {
     const b = new StubEl('button');
     b.attrs['data-file'] = what;
     return b;
@@ -524,37 +524,22 @@ await t('the hand control appears, and stating it sends the hand', () => {
   assert.equal(postedDoors()[0].hand, 'LHS', 'the default hand should go through');
 });
 
-await t('the job list offers every job it knows, to search against', () => {
-  const list = app.ids.get('#jobList')!;
-  assert.deepEqual(
-    list.children.map((c) => (c as StubEl).attrs.value),
-    ['HI-15191', 'HI-15279'],
-  );
+await t('the verified jobs are not offered to an estimator', () => {
+  // they are proof the engine is right, not somebody's work — three jobs the
+  // estimator never made, sitting among the ones they did
+  assert.equal(app.ids.get('#jobList')!.children.length, 0);
 });
 
-await t('a job number opens that job, whatever case it is typed in', async () => {
-  const box = app.ids.get('#jobSearch')!;
-  box.value = '  hi-15191 '; //  as an estimator would type it, off the drawing
-  box.fire('change');
-  await settle();
-
-  assert.equal(app.ids.get('#jobSearchMsg')!.ownText, '', 'it should have been found');
-  assert.equal(box.value, '', 'the box clears once the job is open');
-  const last = app.posts.at(-1)!.body as { jobNo: string; rooms: Array<{ wallTh: number }> };
-  assert.equal(last.jobNo, 'HI-15191', 'the opened job is the one now being built');
-  assert.equal(last.rooms[0].wallTh, 120);
-});
-
-await t('a job number that is not there says so, and changes nothing', async () => {
+await t('signed out, opening a job asks for a sign in rather than failing', async () => {
   const before = app.posts.length;
   const box = app.ids.get('#jobSearch')!;
-  box.value = 'HI-99999';
+  box.value = 'HI-15191';
   box.fire('change');
   await settle();
 
-  assert.equal(app.ids.get('#jobSearchMsg')!.ownText, 'No job HI-99999');
+  assert.equal(app.ids.get('#jobSearchMsg')!.ownText, 'Sign in to open a job');
   assert.equal(app.posts.length, before, 'nothing was rebuilt');
-  assert.equal(box.value, 'HI-99999', 'what was typed is left there to correct');
+  assert.equal(box.value, 'HI-15191', 'what was typed is left there');
 });
 
 await t('the form knows both shop thresholds, and takes them from the engine', () => {
@@ -595,6 +580,30 @@ const SESSION = {
 /** What the estimator has saved, as the database would hand it back. */
 const SAVED = [{ job_no: 'HI-20001', updated_at: '2026-08-17T10:00:00Z' }];
 
+/** And the spec inside it, for when that job is opened. */
+const SAVED_SPEC = {
+  jobNo: 'HI-20001',
+  density: 40,
+  rooms: [
+    {
+      name: 'Room 1',
+      ext: { w: 3050, l: 4575, h: 2590 },
+      wallTh: 100,
+      ceilTh: 100,
+      module: 1180,
+      cornerLeg: 300,
+      minPanelWidth: 150,
+      maxSplitPieces: 2,
+      floor: { kind: 'pufSlab', th: 100, desc: 'slab' },
+      ceiling: { splitAxis: 'l', wEnds: ['own', 'own'], lEnds: ['own', 'own'] },
+      outline: {
+        points: [[0, 0], [3050, 0], [3050, 4575], [0, 4575]],
+        edges: { 0: { id: 'N' }, 1: { id: 'E' }, 2: { id: 'S' }, 3: { id: 'W' } },
+      },
+    },
+  ],
+};
+
 /** The signed-in user's own profile row, with access well into the future. */
 const PROFILE = {
   id: 'user-asha',
@@ -612,8 +621,10 @@ const acct = harness(APP_SOURCES, [...APP_IDS, '#admin', '#adminBody', '#adminBa
   [`${SUPA}/auth/v1/signup`]: { user: { id: 'new', email: 'newcomer@example.com' } }, // no token: a code goes out
   [`${SUPA}/auth/v1/verify`]: SESSION,
   [`${SUPA}/rest/v1/profiles`]: [PROFILE],
-  [`${SUPA}/rest/v1/jobs`]: (url: string, init?: { method?: string }) =>
-    init?.method === 'POST' ? null : url.includes('select=spec') ? [] : SAVED,
+  [`${SUPA}/rest/v1/jobs`]: (url: string, init?: { method?: string }) => {
+    if (init?.method && init.method !== 'GET') return null; //  saved or deleted
+    return url.includes('select=spec') ? [{ spec: SAVED_SPEC }] : SAVED;
+  },
 });
 
 await settle();
@@ -699,7 +710,7 @@ await t('signing in opens the tool, and lists their own saved jobs', async () =>
   assert.equal((acct.ctx.document as { body: StubEl }).body.className, '');
   assert.equal(acct.ids.get('#accountBtn')!.ownText, 'asha@example.com');
   const listed = acct.ids.get('#jobList')!.children.map((c) => (c as StubEl).attrs.value);
-  assert.deepEqual(listed, ['HI-20001', 'HI-15191'], 'their own first, then the examples');
+  assert.deepEqual(listed, ['HI-20001'], 'their own saved jobs, and only those');
 });
 
 await t('Save stores the spec under the job number, as that user', async () => {
@@ -734,6 +745,49 @@ await t('Save As asks for a number, and saves under that one', async () => {
   assert.equal((saved!.body as Array<Record<string, unknown>>)[0].job_no, 'HI-20003');
 });
 
+await t('opening a job, changing its number and saving makes a new job', async () => {
+  // `unique (user_id, job_no)` means a different number is a different row, so
+  // the job that was opened is left exactly as it was — which is the point
+  const box = acct.ids.get('#jobSearch')!;
+  box.value = 'HI-20001';
+  box.fire('change');
+  await settle();
+  assert.equal(acct.ids.get('#jobSearchMsg')!.ownText, 'opened HI-20001');
+
+  acct.ids.get('#jobNo')!.value = 'HI-20009';
+  acct.ids.get('#jobNo')!.fire('input');
+  await settle();
+
+  const before = acct.posts.length;
+  acct.fileButtons.find((b) => b.attrs['data-file'] === 'save')!.fire('click');
+  await settle();
+
+  const saved = acct.posts.slice(before).find((p) => p.url.includes('/rest/v1/jobs'));
+  assert.equal((saved!.body as Array<{ job_no: string }>)[0].job_no, 'HI-20009');
+  assert.equal(
+    acct.ids.get('#jobSearchMsg')!.ownText,
+    'saved as a new job HI-20009',
+    'and it says so, rather than looking like an overwrite',
+  );
+});
+
+await t('an estimator can delete their own job, after being asked', async () => {
+  acct.confirmWith(false);
+  const before = acct.posts.length;
+  const del = acct.fileButtons.find((b) => b.attrs['data-file'] === 'delete')!;
+  del.fire('click');
+  await settle();
+  assert.equal(acct.posts.length, before, 'declining the warning must delete nothing');
+
+  acct.confirmWith(true);
+  del.fire('click');
+  await settle();
+  const gone = acct.posts.slice(before).find((p) => p.url.includes('/rest/v1/jobs'));
+  assert.ok(gone, 'nothing was deleted');
+  assert.ok(gone!.url.includes('job_no=eq.HI-20009'), `the open job: ${gone!.url}`);
+  assert.equal(acct.ids.get('#jobSearchMsg')!.ownText, 'deleted HI-20009');
+});
+
 await t('New warns first, and does nothing when the warning is declined', async () => {
   acct.confirmWith(false);
   const rooms = () => (acct.ctx as { state?: unknown }) && acct.ids.get('#form')!.children.length;
@@ -741,7 +795,7 @@ await t('New warns first, and does nothing when the warning is declined', async 
   acct.fileButtons.find((b) => b.attrs['data-file'] === 'new')!.fire('click');
   await settle();
   assert.equal(rooms(), before, 'the form was cleared despite the warning being declined');
-  assert.equal(acct.ids.get('#jobNo')!.value, 'HI-20003', 'the job number survived');
+  assert.equal(acct.ids.get('#jobNo')!.value, 'HI-20009', 'the job number survived');
 });
 
 await t('a session is kept, so a reload does not sign the estimator out', () => {
@@ -851,6 +905,35 @@ await t('the users screen lists everyone, and giving days writes a date', async 
   const until = (patch!.body as { access_until: string }).access_until;
   const days = (new Date(until).getTime() - Date.now()) / 86400000;
   assert.ok(days > 29 && days < 31, `should be about 30 days, was ${days}`);
+});
+
+await t('any number of days can be typed, for when the three buttons do not fit', async () => {
+  const admin = signedInAs({ ...PROFILE, is_admin: true }, [
+    { id: 'user-ben', email: 'ben@example.com', access_until: null, is_admin: false },
+  ]);
+  await settle();
+  [...walk(admin.ids.get('#accountPanel')!)]
+    .find((n) => n.tag === 'button' && textOf(n).trim() === 'Manage users')!
+    .fire('click');
+  await settle();
+
+  // `el()` puts class on className, not into attributes
+  const box = [...walk(admin.ids.get('#adminBody')!)].find((n) => n.className === 'days');
+  assert.ok(box, 'no way to type a number of days');
+  box!.value = '90';
+
+  const before = admin.posts.length;
+  [...walk(admin.ids.get('#adminBody')!)]
+    .find((n) => n.tag === 'button' && textOf(n).trim() === 'Give')!
+    .fire('click');
+  await settle();
+
+  const patch = admin.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  assert.ok(patch, 'nothing was written');
+  const days =
+    (new Date((patch!.body as { access_until: string }).access_until).getTime() - Date.now()) /
+    86400000;
+  assert.ok(days > 89 && days < 91, `should be about 90 days, was ${days}`);
 });
 
 console.log(`\n  ${passed} passed\n`);

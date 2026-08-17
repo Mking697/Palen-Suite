@@ -305,6 +305,10 @@ body.signed-out .gate {
 .admin td, .admin th { text-align: left; white-space: nowrap; }
 .admin td:last-child { display: flex; gap: 6px; flex-wrap: wrap; }
 .admin .btn { padding: 4px 10px; font-size: 12px; }
+.admin input.days {
+  width: 74px; font: inherit; font-size: 12px; padding: 4px 8px;
+  border: 1px solid var(--line-2); border-radius: 7px; background: var(--card); color: var(--ink);
+}
 .ok-tag, .dev-tag {
   font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
 }
@@ -329,6 +333,8 @@ body.signed-out .gate {
   background: none; border: 0; border-radius: 7px; padding: 8px 10px; cursor: pointer;
 }
 .menu-items > button:hover { background: var(--bg); }
+/* set apart because it cannot be undone, unlike everything above it */
+.menu-items > button.danger { color: var(--bad); border-top: 1px solid var(--line); margin-top: 4px; }
 
 .menu-items.account { min-width: 250px; gap: 8px; padding: 12px; }
 .menu-items.account input {

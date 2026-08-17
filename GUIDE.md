@@ -80,8 +80,21 @@ Sign in ke baad **File** menu kaam karta hai:
 |---|---|
 | **New** | khaali job — pehle poochega, kyunki screen par jo hai wo chala jayega |
 | **Open…** | job number poochega aur wo job khol dega |
-| **Save** | isi job number par save — dobara save karne par purana badal jaata hai |
-| **Save As…** | naya job number poochega aur uspar save karega |
+| **Save** | upar likhe **Job No** par save karta hai |
+| **Save As…** | naya job number poochta hai aur uspar save karta hai |
+| **Delete this job…** | ye job hamesha ke liye mita deta hai. Pehle poochta hai |
+
+### Purane job se naya job banana
+
+Ye seedha hai: **purana job kholiye → upar Job No badal dijiye → Save**.
+
+Wo **naya job ban kar save hoga**, aur **purana jaisa tha waisa hi rahega**.
+Screen par likha bhi aayega — *"saved as a new job HI-XXXXX"* — taaki bharam na
+rahe ki purana badal gaya.
+
+Wajah saaf hai: job number hi uski pehchaan hai, to naya number = naya job. Isi
+liye Save hamesha **upar wale Job No** par save karta hai, us naam par nahi jo
+aapne khola tha.
 
 **Aapka data sirf aapka hai.** Ye app ka vaada nahi, **database khud rokta
 hai** — doosre account se aapke job na dikhte hain, na khulte hain, chahe koi
@@ -92,8 +105,8 @@ Save **sirf job ka input** karta hai — jo aapne form me bhara. **BOQ save nahi
 hoti**, wo hamesha nayi banti hai. Wajah: bani hui BOQ ko save kar dein to ek
 din purana job aur naya job do alag baat kahenge.
 
-Upar wale **Open job no** box me pehle **aapke apne save kiye job** dhoonde
-jaate hain, phir verified example.
+Upar wale **Open job no** box me **sirf aapke apne save kiye job** milte hain.
+Box par click karne par unki list bhi dikh jaati hai.
 
 ### Admin ke liye
 
@@ -103,6 +116,7 @@ hai. Wahan har user ki list hai — email, uska access kab tak hai, aur do kaam:
 | | Kya karta hai |
 |---|---|
 | **+7d / +30d / +365d** | Aaj se utne din ka access de deta hai |
+| **days + Give** | Jitne din chahiye wo khud likh kar dijiye — 45, 90, jo bhi |
 | **Stop** | Access abhi band. Account aur uske saare job bache rehte hain — dobara din dekar chalu kiya ja sakta hai |
 | **Delete** | Account aur uske **saare saved job hamesha ke liye mit jate hain**. Wapas nahi aata |
 
