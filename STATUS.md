@@ -165,6 +165,42 @@ is null in any case. The anon key cannot test it. The real test is a `PATCH`
 from a signed-in **non-admin** browser session, it is written up in `SETUP.md`
 A4, and it was made on 18 August.
 
+### Brevo is proved, and email is one Hostinger setting away
+
+The domain question is closed. Brevo shows `panelsuite.online` **Authenticated
+and Branded**, and the DNS says the same independently — `brevo-code:e519fb23…`
+on the apex, `brevo1`/`brevo2._domainkey` CNAMEd to Brevo's DKIM hosts,
+`v=DMARC1` pointing at `rua@dmarc.brevo.com`, and `send.panelsuite.online`
+CNAMEd to `brand.brevosend.com`. So `MAIL_FROM=info@panelsuite.online` needs
+nothing further.
+
+**The two keys were nearly confused, and `SETUP.md` had already warned about
+it.** The SMTP key named *Panel Suite* was made on 17 August and last used on
+19 August — it is Supabase's signup and OTP mail and it is working. The Email
+button cannot use it: `server/mail.ts` posts to `api.brevo.com/v3/smtp/email`
+with an `api-key` header, which wants the `xkeysib-…` **API key** from the
+separate *API keys & MCP* tab. That key now exists.
+
+**Checked by asking Brevo rather than by reading the file.** The key was never
+printed: the server was started with `--env-file=.env` and `/api/config`
+answered `mail: ready`, then `GET /v3/account` answered **200** — Personal,
+free plan, 300 sends a day.
+
+**Then one real send, through `sendMail` itself** rather than a curl of its
+own, with the workbook and the drawing PDF built by `core/export` exactly as
+`/api/export` builds them: 13,080 and 45,505 bytes, accepted by Brevo as
+`<202608210804.67854497583@smtp-relay.mailin.fr>`. The test job carries two
+corners at 450 and two at 300, so the new per-corner rule is on the sheet that
+went out.
+
+**What that send did not cover, and still wants a browser:** the Supabase
+sign-in gate, the Reply-To being read from Supabase with the caller's own
+token, and the Email form itself. The script passed `replyTo` by hand and never
+went through `/api/mail`.
+
+**Still to do: `BREVO_API_KEY` and `MAIL_FROM` in Hostinger's environment**, then
+redeploy. Everything else is proved. Until they are set the live button says so.
+
 ### The guide now describes every control
 
 The shop asked for it after using the screen: a layman has to be able to read

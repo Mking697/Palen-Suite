@@ -472,6 +472,30 @@ dijiye — phir domain badalne par link kabhi nahi tootega.
 
 ### B3. API key — app ki apni email ke liye
 
+> ✅ **Ye ho chuka hai — 21 August 2026.** Domain authenticated hai (DNS se bhi
+> khud check kiya gaya), API key ban chuki hai, aur uske se ek asli email bhej
+> kar dekh liya gaya — attachment ke saath, Brevo ne accept kiya. Ab bas
+> Hostinger me `BREVO_API_KEY` aur `MAIL_FROM` daalna baaki hai (Part D).
+>
+> **Do key ko aapas me mat milaiye** — ye galti sabse aam hai:
+>
+> | Key | Kis tab par | Kiske liye |
+> |---|---|---|
+> | **SMTP key** | `SMTP` | Supabase ki signup / OTP email — pehle se chal rahi hai |
+> | **API key** `xkeysib-…` | **`API keys & MCP`** | App ka **Email button** |
+>
+> SMTP key ko `BREVO_API_KEY` me daalne par Brevo `401` deta hai.
+>
+> **Key ko file me dekhe bina check karne ka tareeka**, jo yahan use hua:
+>
+> ```
+> PORT=5199 node --env-file=.env server/serve.ts --local
+> curl -s http://127.0.0.1:5199/api/config      # mail: true aana chahiye
+> ```
+>
+> Phir `GET https://api.brevo.com/v3/account` par `api-key` header ke saath —
+> 200 aaye to key valid hai, aur abhi tak kuch bheja nahi gaya.
+
 **Brevo → SMTP & API → API Keys → Generate a new API key**. Naam `panel-suite`.
 Key ek hi baar dikhegi — copy karke rakhiye.
 
