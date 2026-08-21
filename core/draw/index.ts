@@ -21,7 +21,7 @@ export { jobPlan, drawableRooms } from './jobplan.ts';
 export { wallElevations } from './elevation.ts';
 export { ceilingPlan, floorPlan } from './ceiling.ts';
 export { doorElevations, doorElevation, defaultFrame } from './door.ts';
-export { composeSheet, type Sheet, type SheetCell, type SheetOptions } from './sheet.ts';
+export { composeSheet, boundsOf, type Box, type Sheet, type SheetCell, type SheetOptions } from './sheet.ts';
 export { model3d, type Face3, type FaceKind, type Model3, type Pt3 } from './model3d.ts';
 
 /**

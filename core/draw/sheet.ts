@@ -56,7 +56,7 @@ export interface Sheet {
   cells: SheetCell[];
 }
 
-interface Box {
+export interface Box {
   x0: Mm;
   y0: Mm;
   x1: Mm;
@@ -69,8 +69,12 @@ interface Box {
  * caption sits below it, so sizing a cell to `w` and `l` puts the chain through
  * the neighbouring view. This walks every element instead, text included, and
  * is why a view stays inside its own frame.
+ *
+ * Exported because `core/export/pdf.ts` needs the same answer for the same
+ * reason: a page sized to `w` and `l` would crop the dimension chain, and one
+ * sized to a guessed margin wastes most of the paper.
  */
-function boundsOf(d: Drawing): Box {
+export function boundsOf(d: Drawing): Box {
   const fs = viewFs(d);
   const b: Box = { x0: 0, y0: 0, x1: d.w, y1: d.l };
   const grow = (x: Mm, y: Mm) => {
