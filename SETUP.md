@@ -643,9 +643,13 @@ package nahi chahiye.
 4. ✅ **`04-profile-fields.sql`** — 18 August ko live project par chal chuki
    hai. Profile ke naye columns aa gaye aur wo trigger lag gaya jo access/admin
    ko apne aap badalne se rokta hai. Part A4 ke check se pakka kiya gaya.
-5. **`BREVO_API_KEY` aur `MAIL_FROM` Hostinger me daaliye** — Email button ban
-   chuka hai (18 August) aur bas inhi do ka intezaar hai. Inke bina button khud
-   keh dega ki wo band hai.
+5. ✅ **`BREVO_API_KEY` aur `MAIL_FROM` Hostinger me daal diye gaye** — 21
+   August 2026. Live site par `/api/config` ab `mail: true` bolta hai aur
+   `/api/mail` **501 ki jagah 401** deta hai, yaani dono variable mil gaye.
+   **Dhyan:** 401 sirf itna kehta hai ki variable *set* hain — key sahi likhi
+   hai ya nahi ye tab pata chalega jab sign in karke Email button dabaya
+   jayega, kyunki sign-in gate pehle aata hai aur Brevo tak baat pahunchti hi
+   nahi.
 6. Phir **My settings** kholiye aur do link daal dijiye — Drive folder aur
    Google Sheet. Ye Phase 11 ke liye hain, jo abhi bana nahi hai (Part C ka
    warning padh lijiye).

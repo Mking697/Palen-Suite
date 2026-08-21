@@ -198,8 +198,17 @@ sign-in gate, the Reply-To being read from Supabase with the caller's own
 token, and the Email form itself. The script passed `replyTo` by hand and never
 went through `/api/mail`.
 
-**Still to do: `BREVO_API_KEY` and `MAIL_FROM` in Hostinger's environment**, then
-redeploy. Everything else is proved. Until they are set the live button says so.
+**Both variables went into Hostinger the same day and the site was redeployed.**
+`/api/config` on `panelsuite.online` now answers `mail: ready`, and `/api/mail`
+answers **401 "Sign in to send an email."** where it answered 501 before. That
+501 → 401 is the whole proof that the server found them: the two gates fire in
+the right order.
+
+**What that does not prove, and must not be read as proof:** that the key was
+pasted correctly. A key with a stray space would give the same 401, because the
+sign-in gate comes first and Brevo is never reached. The only thing that settles
+it is a signed-in send from the live site — the Email button, which also covers
+the Reply-To read from Supabase and the form itself.
 
 ### The guide now describes every control
 
