@@ -4,7 +4,7 @@ Read this first if you are picking the project up — on this machine or another
 `README.md` says what the engine does, `DESIGN.md` says where it is going, this
 file says what has actually happened and what is next.
 
-Last updated: 21 August 2026 — the 18 August work was committed on 21 August, unpushed.
+Last updated: 21 August 2026.
 
 ## What exists and works
 
@@ -17,7 +17,7 @@ uses.
 | | State |
 |---|---|
 | BOQ engine (`core/`) | verified line by line on HI-15191, HI-15223, HI-15279 |
-| Plan geometry (`core/plan.ts`) | rooms are polygons; walls, corners, butts and partitions compile from the outline. `rect`, `notched` and `chain` build it — any number of walls, any right-angled shape |
+| Plan geometry (`core/plan.ts`) | rooms are polygons; walls, corners, butts and partitions compile from the outline. `rect`, `notched` and `chain` build it — any number of walls, any right-angled shape. Each corner may state its own leg |
 | Cross-room checks (`core/checks.ts`) | a wall handed to a neighbour that is not there to take it is reported, in mm |
 | Drawings (`core/draw/`) | job layout, wall elevations, ceiling, floor, door elevation — SVG + DXF. All of it on **one sheet** (`sheet.ts`), any view clickable to open full size |
 | 3D (`core/draw/model3d.ts`) | the same panels stood up, behind a 2D/3D toggle. Orbit, standard views, click a panel for its size. No library |
@@ -26,7 +26,7 @@ uses.
 | Calculator (`server/`, `web/`) | multi-room, connected rooms, rooms of any right-angled shape typed wall by wall, per-wall sheets, doors, the L cut on or off, floor build-up and run direction, flashing |
 | Guide (`/guide`, `web/guide.js`) | `GUIDE.md` rendered in the app, one button in the header, one copy of the instructions |
 | Accounts (`web/auth.js`, `/api/config`) | sign up with email confirmation, sign in, File → New / Open / Save / Save As. Each estimator's jobs their own, enforced by the database |
-| Tests | 229, plus the line-by-line sheet diff |
+| Tests | 244, plus the line-by-line sheet diff |
 
 `npm run check` must print **`ALL ROWS MATCH across 3 jobs`** with 9 documented
 deviations and **1 plan finding** (HI-15191's ante room — see below). It did at
@@ -40,6 +40,81 @@ next step 1 since 14 August — an undefined identifier once survived a whole
 session in `web/app.js` because nothing in the repo ever ran the file. The stub
 DOM is deliberately small; extend it when the form needs something it lacks.
 The 3D maths in the browser is still only exercised from a throwaway harness.
+
+## What landed on 21 August
+
+The 18 August work was **committed** — it had been sitting uncommitted in the
+working tree for three days, which meant it was also undeployed, because a push
+to `main` is the deploy. Three commits, nothing pushed yet. Then two things the
+shop reported from the live site.
+
+### A width typed 10476 arrived as 67401 — and it was live
+
+The exact reverse of the string, which is only ever a caret pinned at 0: each
+keystroke landed in front of the one before it.
+
+`field` in `web/app.js` built every dimension as `type="number"`, and **Chrome
+refuses `selectionStart` and `setSelectionRange` on a number input**. The
+form's caret restore was already there and already wrapped in a try/catch — the
+comment said *"number inputs refuse this; being focused is what mattered"*, and
+that was the wrong lesson. Focused at index 0 is worse than not focused. It
+only showed on **Width and Length** because those are the two boxes that redraw
+the whole form; Room name redraws too but is `type="text"`, and Corner leg does
+not redraw at all.
+
+Every dimension is now `type="text"` with `inputmode="decimal"`. A phone still
+gets the numeric keypad; a scroll wheel over a box can no longer change a
+dimension; and the browser can no longer hand back an empty string for
+something it disliked instead of what was typed.
+
+**Swept the rest of the page for the same thing, because the shop asked.** Two
+more number inputs, neither of which reversed — they are not rebuilt while
+being typed into — but both carried the scroll-wheel hazard: the header's
+**Density**, which multiplies into every chemical weight on the sheet, and the
+admin panel's **days** box, whose `min`/`max` were decorative anyway since the
+count is checked in code. Both changed. There is no `type="number"` left in
+`web/`, and a test walks the built form and the page's own HTML to keep it that
+way.
+
+**The harness could not have caught this, and that is now fixed too.** The stub
+DOM carried `selectionStart` as a plain field that always answered and
+`setSelectionRange` as a no-op — so it certified a form the browser breaks. It
+now throws where Chrome throws, and a test types a width one character at a
+time into whatever holds the caret. Reverting `field` makes it fail with *"the
+digits came back reversed"*; the old test asserted only **which field** had the
+cursor and never **where in it**, which is the half the bug lived in.
+
+### Every corner can have its own leg
+
+Asked for by the shop on 21 August: a room's corners are not all the same size.
+
+`cornerLeg` stays the room's figure and covers every junction that says
+nothing; a junction that states one takes it instead. **The leg is read off the
+vertex, never off either wall** — a corner panel is one piece shared by two
+walls, so both are handed the same figure by `compileWalls` and cannot describe
+one panel two ways. The box appears on both wall cards and changing either
+moves both.
+
+- **Corners of different sizes print a row each.** `layoutRoom` returns
+  `cornerLegs` — one entry per panel, widest first — and `boq.ts` prints a row
+  pair per distinct leg with the quantity at that leg. Two at 450 and two at
+  300 give `900 × H qty 2` and `600 × H qty 2`. **All one size still prints one
+  row with a quantity**, which is why no verified sheet moved.
+- **A leg with an odd tally is said, not halved.** Each corner shows up exactly
+  twice, once per wall end. An odd count means two walls were handed different
+  figures for one piece — unreachable from the form, so it can only come from a
+  job file that writes `walls` itself — and it throws rather than printing a
+  fraction of a panel.
+- **The drawing takes each corner's own leg**, through `runBounds`. This nearly
+  went untested: `wallSegments` lays panels out from 0 along the clear run, so
+  a wrong leg there changes no width at all — it slides the whole run along the
+  wall. Reverting `runBounds` left every width test green. There are now two
+  tests that do fail, on `runBounds` itself and on the 3D model's corner legs.
+- A blank box is the room's figure and **not zero** — 0 would print a corner
+  panel with no width. The placeholder shows what will be used.
+
+`npm run check` prints `ALL ROWS MATCH across 3 jobs` with the same **9
+deviations and 1 plan finding** across **244 tests**.
 
 ## What landed on 18 August
 
@@ -708,7 +783,12 @@ three stand on.
 
 ## What to do next
 
-**First, and asked for by the shop: finish getting a job out of the tool.**
+**Nothing is pushed.** Six commits sit on local `main` — the three from 18
+August and the three from 21 August — and a push to `main` is the deploy, so
+`panelsuite.online` is still the 17 August build. The reversed-digits fix and
+the per-corner leg are not on the live site until somebody pushes.
+
+**Then, asked for by the shop: finish getting a job out of the tool.**
 Five things were asked for on 18 August; the first is built, the rest are not.
 In dependency order, because each needs the one before it:
 

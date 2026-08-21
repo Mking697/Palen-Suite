@@ -121,7 +121,13 @@ go and nothing else to press.
   never describe two different doors.
 - **Corners and butt joints** — a corner panel at each outside corner by
   default, and each one can be turned off per junction, because the shop does
-  not always fit one. **Where a butt joint lands there is no corner panel**: at
+  not always fit one. **Each one can also be given its own leg** (the shop, 21
+  August 2026): the room's `cornerLeg` covers every junction that states
+  nothing, and a junction that states one takes it instead. The leg is read off
+  the *vertex*, not off either wall, so the two walls meeting at a corner are
+  handed the same figure and can never describe one panel two ways. Corners of
+  different sizes print a BOQ row each; corners all one size print one row with
+  a quantity, exactly as before. **Where a butt joint lands there is no corner panel**: at
   a corner-less junction one wall runs straight through and the other butts into
   its face, losing a wall thickness where a corner would have taken a leg. The
   two can never share an end — `compileWalls` takes one branch or the other, and
@@ -313,7 +319,7 @@ ceilingSpan       = ext - wallThickness/2 per own wall end (0 at a partition)
 floorCore         = floor thickness - every sheet in the build-up
 floorSpan         = internal clear, slab and panelised alike — a wall never
                     stands on the floor
-cornerOuterWidth  = 2 x cornerLeg
+cornerOuterWidth  = 2 x leg      leg = the vertex's own, else room cornerLeg
 cornerInnerWidth  = cornerOuter - 2 x wallThickness + 5
 buttJointOuter    = blank +100 (not +40); inner skin is 50 narrower than outer
 buttEndRun        = wall length - one wall thickness at that end
@@ -338,7 +344,7 @@ A door consumes one module off its wall and is listed as a separate assembly.
 ### Panel splitting
 
 ```
-run = wall length - corner legs - door module
+run = wall length - the leg of each corner at its ends - door module
 n   = floor(run / module)
 bal = run - n * module
 if bal < minPanelWidth:  give one module back and split the balance equally

@@ -16,7 +16,8 @@ import { HI_15279 } from '../jobs/hi-15279.ts';
 import { round2 } from '../format.ts';
 import { DOOR_TOP_MIN_WALL_HEIGHT, floorCoreTh, lCutDefault } from '../rules.ts';
 import { junctions, roomFlashing } from '../flashing.ts';
-import { chain, notched, toChain } from '../plan.ts';
+import { chain, compileWalls, notched, toChain } from '../plan.ts';
+import type { Mm, RoomSpec } from '../types.ts';
 
 let passed = 0;
 function t(name: string, fn: () => void) {
@@ -568,6 +569,93 @@ t('corner leg 300 -> 250 changes both corner skins', () => {
   const inner = b.rows.find((x) => x.desc === 'Corner Panel (Inner)');
   assert.equal(outer?.panelW, 500, 'outer should be 2 x leg');
   assert.equal(inner?.panelW, 500 - 240 + 5, 'inner should be outer - 2*th + 5');
+});
+
+/*
+ * A corner of its own size. The shop said on 21 August 2026 that a room's
+ * corners are not all the same, so the leg is stated per junction and the
+ * room's `cornerLeg` covers the ones that say nothing.
+ */
+const cornerRoom = (vertices: Record<number, { leg: Mm }> = {}) => {
+  const outline = {
+    points: [
+      [0, 0],
+      [6000, 0],
+      [6000, 4000],
+      [0, 4000],
+    ] as [number, number][],
+    vertices,
+  };
+  return {
+    ...structuredClone(HI_15191.rooms[0]),
+    ext: { w: 6000, l: 4000, h: 2590 },
+    cornerLeg: 300,
+    outline,
+    walls: compileWalls(outline),
+    ceiling: { wEnds: ['own', 'own'], lEnds: ['own', 'own'], splitAxis: 'l' },
+  } as RoomSpec;
+};
+
+t('a vertex states one leg and both walls meeting there are handed it', () => {
+  // a corner panel is one piece; two walls being told different figures for it
+  // would print a size the drawing does not show
+  const walls = compileWalls({
+    points: [
+      [0, 0],
+      [6000, 0],
+      [6000, 4000],
+      [0, 4000],
+    ],
+    vertices: { 1: { leg: 450 } },
+  });
+  assert.equal(walls[0].cornerEndLeg, 450, 'the wall arriving at vertex 1');
+  assert.equal(walls[1].cornerStartLeg, 450, 'the wall leaving vertex 1');
+  assert.equal(walls[2].cornerStartLeg, undefined, 'an unstated corner takes the room figure');
+});
+
+t('a corner of its own size comes off its two walls and nothing else', () => {
+  const L = layoutRoom(cornerRoom({ 1: { leg: 450 }, 2: { leg: 450 } }));
+  const run = (id: string) => L.wallRuns.find((r) => r.wallId === id)!.clearRun;
+  assert.equal(run('E0'), 6000 - 300 - 450, 'one room leg and one stated leg');
+  assert.equal(run('E1'), 4000 - 450 - 450, 'both ends stated');
+  assert.equal(run('E3'), 4000 - 300 - 300, 'neither end stated');
+  assert.deepEqual(L.cornerLegs, [450, 450, 300, 300], 'four corners, widest first');
+  assert.equal(L.cornerCount, 4, 'a leg per corner must not change how many there are');
+});
+
+t('corners of two sizes print as two rows, not one with a quantity', () => {
+  const rows = buildRoomBlock(cornerRoom({ 1: { leg: 450 }, 2: { leg: 450 } }), 40).rows.filter(
+    (r) => r.desc === 'Corner Panel (Outer)',
+  );
+  assert.equal(rows.length, 2, 'two sizes cannot share one row');
+  assert.deepEqual(
+    rows.map((r) => [r.panelW, r.panelQty]),
+    [
+      [900, 2],
+      [600, 2],
+    ],
+    'each row is 2 x its own leg, widest first',
+  );
+});
+
+t('corners all one size still print as one row, exactly as before', () => {
+  // the whole of the guarantee that no verified sheet moved: the per-corner
+  // leg is a statement, and a room that makes none is the room it always was
+  const rows = buildRoomBlock(cornerRoom(), 40).rows.filter(
+    (r) => r.desc === 'Corner Panel (Outer)',
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].panelW, 600);
+  assert.equal(rows[0].panelQty, 4);
+});
+
+t('two walls claiming different legs for one corner is said, not halved', () => {
+  // only reachable from a job file that writes `walls` itself — the form
+  // writes both ends from the one vertex — and a fraction of a panel is not a
+  // thing that can be printed
+  const room = cornerRoom();
+  room.walls[0].cornerEndLeg = 450;
+  assert.throws(() => layoutRoom(room), /is claimed by 1 wall end/);
 });
 
 t('density 40 -> 42 raises chemical weight by exactly 5%', () => {

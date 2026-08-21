@@ -104,6 +104,16 @@ code runs. Nothing in development should need it: run the source.
   from `/api/rules` rather than repeating them — `web/app.js` holds fallbacks
   only for when that call cannot be made, and they say so.
 - A rule derived from a single sample must say so in its comment.
+- **Nothing anybody types a figure into is `type="number"`.** Chrome refuses
+  `selectionStart` and `setSelectionRange` on a number input, so the redraw
+  below could neither read the caret nor put it back — it focused the rebuilt
+  box and left the caret at 0, and every keystroke landed in front of the one
+  before it. A width typed 10476 arrived as 67401, and it was live. `field` in
+  `web/app.js` builds `type="text"` with `inputmode="decimal"` instead, which
+  also stops a scroll wheel over a box changing a dimension and stops the
+  browser handing back an empty string for something it did not like. A test
+  in `core/verify/web.test.ts` types a width one character at a time and walks
+  the whole page for a number input.
 - **The form is rebuilt from the state on every change, and must not lose the
   estimator's place.** Redrawing is what stops anything on screen drifting from
   what will be sent — but it also throws away the caret and scrolls to the top

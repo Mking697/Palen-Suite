@@ -26,6 +26,14 @@ export interface RoomLayout {
   buttJointWidths: Mm[];
   /** number of corner panels (each one eats a leg off two walls) */
   cornerCount: number;
+  /**
+   * The leg of every corner panel in the room, one entry per panel, widest
+   * first. Corners need not all be the same size — the shop said so on 21
+   * August 2026 — so the BOQ prints a row per distinct leg rather than one row
+   * with a quantity. A room whose corners are all the room's own `cornerLeg`
+   * gives one repeated value here and one row, exactly as before.
+   */
+  cornerLegs: Mm[];
   ceiling: { panelLength: Mm; widths: Mm[]; w: Mm; l: Mm };
   floor: { w: Mm; l: Mm; panelLength: Mm; widths: Mm[] | null };
   /**
@@ -88,15 +96,26 @@ export function layoutRoom(room: RoomSpec): RoomLayout {
   const split = { module, minPanelWidth, maxSplitPieces, balancePieces };
 
   const wallRuns: WallPanelRun[] = [];
-  let cornerEnds = 0;
+
+  /*
+   * Corner ends counted by the leg they take, because a corner is no longer
+   * one size per room. Every corner shows up exactly twice — once as a wall's
+   * start and once as the next wall's end — and `compileWalls` hands both ends
+   * the vertex's own figure, so each tally is even and half of it is the
+   * number of panels at that leg.
+   */
+  const endsByLeg = new Map<Mm, number>();
+  const take = (leg: Mm) => endsByLeg.set(leg, (endsByLeg.get(leg) ?? 0) + 1);
 
   for (const wall of room.walls) {
-    if (wall.cornerStart) cornerEnds++;
-    if (wall.cornerEnd) cornerEnds++;
+    const startLeg = wall.cornerStartLeg ?? cornerLeg;
+    const endLeg = wall.cornerEndLeg ?? cornerLeg;
+    if (wall.cornerStart) take(startLeg);
+    if (wall.cornerEnd) take(endLeg);
 
     let clearRun = wall.length;
-    if (wall.cornerStart) clearRun -= cornerLeg;
-    if (wall.cornerEnd) clearRun -= cornerLeg;
+    if (wall.cornerStart) clearRun -= startLeg;
+    if (wall.cornerEnd) clearRun -= endLeg;
     // a butt end runs into the face of the next wall, losing one thickness
     if (wall.buttStart) clearRun -= room.wallTh;
     if (wall.buttEnd) clearRun -= room.wallTh;
@@ -113,8 +132,25 @@ export function layoutRoom(room: RoomSpec): RoomLayout {
     });
   }
 
-  // each corner panel is shared by the two walls meeting there
-  const cornerCount = cornerEnds / 2;
+  /*
+   * Each corner panel is shared by the two walls meeting there, so a leg with
+   * an odd tally means those two walls were handed different figures for one
+   * piece. The form cannot produce that — it writes both ends from one vertex
+   * — so it can only come from a job file that states `walls` itself, and it
+   * is said rather than halved into a fraction and printed.
+   */
+  const cornerLegs: Mm[] = [];
+  for (const [leg, ends] of [...endsByLeg].sort((a, b) => b[0] - a[0])) {
+    if (ends % 2 !== 0) {
+      throw new Error(
+        `A corner panel of ${leg}mm is claimed by ${ends} wall end(s). A corner ` +
+          `is one piece shared by two walls, so both must state the same leg — ` +
+          `set it on the vertex in the outline rather than on each wall.`,
+      );
+    }
+    for (let i = 0; i < ends / 2; i++) cornerLegs.push(leg);
+  }
+  const cornerCount = cornerLegs.length;
 
   const lCut = room.lCut ?? lCutDefault(room.wallTh);
   const cw = ceilingSpan(room.ext.w, room.wallTh, room.ceiling.wEnds, lCut);
@@ -162,6 +198,7 @@ export function layoutRoom(room: RoomSpec): RoomLayout {
       .filter((w) => w.buttJoint)
       .flatMap((w) => wallRuns.find((r) => r.wallId === w.id)!.widths),
     cornerCount,
+    cornerLegs,
     ceiling: {
       panelLength,
       widths: splitRun(splitAlong, split),

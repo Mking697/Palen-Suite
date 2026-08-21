@@ -456,8 +456,14 @@ body.signed-out .gate {
 
 .corners {
   margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line);
-  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px;
 }
+/* one end of the wall: its tick, its corner leg and the note under both. A
+   column each, so the two ends stay side by side and nothing interleaves. */
+.corner-end { min-width: 0; }
+.corner-end .f { margin: 4px 0 2px; }
+.corner-end .f > span { font-size: 10.5px; }
+.corner-end .f input { font-size: 12px; padding: 5px 7px; }
 .chk.corner input { accent-color: #b4651a; }
 .chk.chq { margin: 8px 0 6px; font-weight: 600; color: var(--ink-2); }
 .chk.chq input { accent-color: #e3a008; }
@@ -685,9 +691,15 @@ tr.total td.desc { text-transform: uppercase; letter-spacing: .5px; font-size: 1
   .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .summary .card { min-width: 0; }
 
-  /* a form control has to be thumb-sized, and 16px stops iOS zooming on focus */
+  /* a form control has to be thumb-sized, and 16px stops iOS zooming on focus.
+     .corner-end wins on specificity off the phone, so it is named again here —
+     without it the corner leg box would be the one control iOS zooms into. */
   .f input, .f select, .auth-form input,
-  .settings-field input { min-height: 42px; font-size: 16px; }
+  .settings-field input,
+  .corner-end .f input { min-height: 42px; font-size: 16px; }
+
+  /* two corner ends side by side leaves nothing to type in — one per row */
+  .corners { grid-template-columns: 1fr; }
   .settings-actions .btn.primary { min-height: 42px; width: 100%; }
   .chk { min-height: 40px; display: flex; align-items: center; }
   .chk input { width: 20px; height: 20px; }

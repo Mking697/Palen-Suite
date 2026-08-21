@@ -156,7 +156,12 @@ export const doorPositionAssumed = (walls: WallSpec[]) =>
 
 /**
  * Where a wall's clear run starts and ends along its edge: a corner panel eats
- * `cornerLeg` off that end, a butt end eats one wall thickness.
+ * its leg off that end, a butt end eats one wall thickness.
+ *
+ * `cornerLeg` is the room's figure and each end may state its own — the same
+ * fallback `layoutRoom` applies, and deliberately the same expression, because
+ * a drawing that took a different leg from the sheet would put the first panel
+ * somewhere the factory does not cut it.
  */
 export function runBounds(
   wall: WallSpec,
@@ -164,7 +169,11 @@ export function runBounds(
   cornerLeg: Mm,
   wallTh: Mm,
 ): { start: Mm; end: Mm } {
-  const start = wall.cornerStart ? cornerLeg : wall.buttStart ? wallTh : 0;
-  const end = wall.cornerEnd ? cornerLeg : wall.buttEnd ? wallTh : 0;
+  const start = wall.cornerStart
+    ? (wall.cornerStartLeg ?? cornerLeg)
+    : wall.buttStart
+      ? wallTh
+      : 0;
+  const end = wall.cornerEnd ? (wall.cornerEndLeg ?? cornerLeg) : wall.buttEnd ? wallTh : 0;
   return { start, end: edgeLen - end };
 }

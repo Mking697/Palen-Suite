@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { layoutRoom } from '../layout.ts';
 import { compileWalls } from '../plan.ts';
-import { offsetPolygon, wallSegments } from '../draw/geom.ts';
+import { offsetPolygon, runBounds, wallSegments } from '../draw/geom.ts';
 import {
   ceilingPlan,
   composeSheet,
@@ -28,7 +28,7 @@ import {
 import { doorLabel } from '../rules.ts';
 import { toDxf } from '../draw/dxf.ts';
 import { toSvg } from '../draw/svg.ts';
-import type { RoomSpec } from '../types.ts';
+import type { RoomOutline, RoomSpec } from '../types.ts';
 import { HI_15191 } from '../jobs/hi-15191.ts';
 import { HI_15223 } from '../jobs/hi-15223.ts';
 import { HI_15279 } from '../jobs/hi-15279.ts';
@@ -51,11 +51,89 @@ const DRAWABLE: Array<[string, RoomSpec]> = [
   ['HI-15191 ante', HI_15191.rooms[1]],
   ['HI-15279 freezer', HI_15279.rooms[0]],
   ['HI-15279 chiller', HI_15279.rooms[1]],
+  /*
+   * Not a job — a room whose four corners are two different sizes, which no
+   * printed sheet has yet. It is here because the three checks below are what
+   * hold "a drawing never counts anything": the drawing takes each corner's own
+   * leg through `runBounds`, and if it took the room's figure instead the
+   * segments would no longer fill the clear run.
+   */
+  ['a room with corners of two sizes', mixedCornerRoom()],
 ];
+
+function mixedCornerRoom(): RoomSpec {
+  const outline: RoomOutline = {
+    points: [
+      [0, 0],
+      [6000, 0],
+      [6000, 4000],
+      [0, 4000],
+    ],
+    vertices: { 1: { leg: 450 }, 2: { leg: 450 } },
+  };
+  return {
+    ...structuredClone(HI_15191.rooms[0]),
+    name: 'Mixed corners',
+    ext: { w: 6000, l: 4000, h: 2590 },
+    cornerLeg: 300,
+    outline,
+    walls: compileWalls(outline),
+    ceiling: { wEnds: ['own', 'own'], lEnds: ['own', 'own'], splitAxis: 'l' },
+  } as RoomSpec;
+}
 
 const sorted = (ns: number[]) => [...ns].sort((a, b) => a - b);
 
 console.log('\n  the drawing shows exactly the panels the BOQ prices\n');
+
+t("a wall run starts and ends at each corner's own leg, not the room's", () => {
+  /*
+   * `wallSegments` lays the panels out from 0 along the clear run, so a wrong
+   * leg there does not change a single width — it slides the whole run along
+   * the wall, and the first panel is drawn where the corner panel belongs.
+   * That is a drawing disagreeing with the sheet about where a piece of steel
+   * goes, so it is checked at the place it happens rather than through the
+   * widths, which cannot see it.
+   */
+  const room = mixedCornerRoom();
+  const walls = compileWalls(room.outline!);
+  const at = (id: string) => {
+    const w = walls.find((x) => x.id === id)!;
+    return runBounds(w, w.length, room.cornerLeg, room.wallTh);
+  };
+
+  assert.deepEqual(at('E0'), { start: 300, end: 6000 - 450 }, 'room leg one end, stated the other');
+  assert.deepEqual(at('E1'), { start: 450, end: 4000 - 450 }, 'both ends stated');
+  assert.deepEqual(at('E3'), { start: 300, end: 4000 - 300 }, 'neither end stated');
+});
+
+t('the 3D model stands up a corner panel of each stated size', () => {
+  /*
+   * Two faces per corner panel, because a corner panel is an L: one leg runs
+   * down each of the two walls meeting there, and the model stands both up.
+   * Four corners, so eight legs — four of them 450 from the two vertices that
+   * state it, four of them the room's 300.
+   */
+  const room = mixedCornerRoom();
+  const legs = model3d({ jobNo: 'X', density: 40, rooms: [room] })
+    .faces.filter((f) => f.kind === 'corner')
+    .map((f) => f.detail?.[0])
+    .sort();
+  assert.deepEqual(
+    legs,
+    [
+      'leg 300 mm',
+      'leg 300 mm',
+      'leg 300 mm',
+      'leg 300 mm',
+      'leg 450 mm',
+      'leg 450 mm',
+      'leg 450 mm',
+      'leg 450 mm',
+    ],
+    'the model must show the legs the sheet prices, not the room figure eight times',
+  );
+});
 
 for (const [name, room] of DRAWABLE) {
   t(`${name} — every wall panel on the drawing is a priced panel`, () => {

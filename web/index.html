@@ -18,7 +18,11 @@
 
       <div class="job-fields">
         <label>Job No<input id="jobNo" type="text" value="HI-" /></label>
-        <label>Density<span class="unit-tag">kg/m&sup3;</span><input id="density" type="number" value="40" /></label>
+        <!-- text + inputmode rather than type="number", the same as every
+             dimension in the form: a scroll wheel over a number input changes
+             it silently, and this one multiplies into every chemical weight on
+             the sheet. See the note on `field` in app.js. -->
+        <label>Density<span class="unit-tag">kg/m&sup3;</span><input id="density" type="text" inputmode="decimal" value="40" /></label>
       </div>
 
       <div class="top-actions">

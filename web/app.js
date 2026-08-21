@@ -189,6 +189,13 @@ const newRoom = (n = 1) => ({
    * same indexing as `corners`.
    */
   through: ['prev', 'prev', 'prev', 'prev'],
+  /**
+   * A corner that is not the room's `cornerLeg`, per vertex, same indexing as
+   * `corners`. Blank means the room's figure, so a room whose corners are all
+   * one size stays one number typed once. The shop asked for this on 21 August
+   * 2026: a room's corners are not all the same size.
+   */
+  cornerLegs: ['', '', '', ''],
   /** 'rect' | 'notch' | 'chain' — see "room outline" below */
   shape: 'rect',
   /** a rectangular bite out of one corner, used when shape is 'notch' */
@@ -390,6 +397,7 @@ function syncShape(r) {
   r.edges = g.ids.map((id) => had.find((e) => e.id === id) ?? newEdge(id));
   r.corners = g.points.map((_, v) => r.corners[v] ?? true);
   r.through = g.points.map((_, v) => r.through?.[v] ?? 'prev');
+  r.cornerLegs = g.points.map((_, v) => r.cornerLegs?.[v] ?? '');
 }
 
 /** A room joined to another one — its shape cannot be edited freely yet. */
@@ -434,6 +442,9 @@ function createRoomOn(edgeIndex) {
   r.lCut = parent.lCut;
   r.module = parent.module;
   r.cornerLeg = parent.cornerLeg;
+  // the room's figure carries over; the parent's per-corner statements do not,
+  // because they are about that room's junctions and not this one's
+  r.cornerLegs = [];
   r.minPanelWidth = parent.minPanelWidth;
   r.splitAxis = parent.splitAxis;
   r.floorKind = parent.floorKind;
@@ -589,6 +600,16 @@ function roomSpec(r) {
     const through = r.through?.[v] ?? 'prev';
     if (g.reentrant.has(v)) vertices[v] = { through };
     else if (!r.corners[v]) vertices[v] = { corner: false, through };
+
+    /*
+     * A corner of its own size. Only sent where there is a corner panel to
+     * size and a figure has actually been typed — a blank box means the room's
+     * `cornerLeg`, and sending it as 0 would print a corner panel of nothing.
+     */
+    const leg = legAtVertex(r, v);
+    if (leg != null && r.corners[v] && !g.reentrant.has(v)) {
+      vertices[v] = { ...(vertices[v] ?? {}), leg };
+    }
   });
 
   return {
@@ -663,6 +684,19 @@ function parsePanels(text) {
     .filter((n) => n > 0);
 }
 
+/**
+ * What a vertex's corner panel measures down each wall, when it is not the
+ * room's own `cornerLeg`. Null for a blank box — blank is not zero, it is "the
+ * room's figure", and the two must never be confused: a 0 here would print a
+ * corner panel with no width at all.
+ */
+const legAtVertex = (r, v) => {
+  const typed = String(r.cornerLegs?.[v] ?? '').trim();
+  if (!typed) return null;
+  const n = Number(typed);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
 const jobSpec = () => ({
   jobNo: state.jobNo || 'JOB',
   density: +state.density,
@@ -671,9 +705,28 @@ const jobSpec = () => ({
 
 /* ---------- form ---------- */
 
+/**
+ * A labelled box. `opts.type` names the kind; unstated means a dimension.
+ *
+ * **A dimension is not `type="number"`, and that is deliberate.** Chrome
+ * refuses `selectionStart` and `setSelectionRange` on a number input, so
+ * `renderForm` could neither read the caret before a redraw nor put it back
+ * after one: it focused the rebuilt field and the caret sat at 0, so every
+ * keystroke landed in front of the one before it. A width typed 10476 arrived
+ * as 67401. It only showed on Width and Length because they are the two
+ * dimensions that redraw the form, and it was live on panelsuite.online.
+ *
+ * `inputmode` gives a phone the same numeric keypad without that refusal. Two
+ * other things go with it: a scroll wheel over the field can no longer change
+ * a dimension, and the browser can no longer hand back an empty string for
+ * something it did not like the look of — what was typed is what is read.
+ */
 function field(label, value, onInput, opts = {}) {
+  const kind = opts.type ?? 'number';
+  const dimension = kind === 'number';
   const input = el('input', {
-    type: opts.type ?? 'number',
+    type: dimension ? 'text' : kind,
+    ...(dimension ? { inputmode: 'decimal' } : {}),
     value: value ?? '',
     ...(opts.placeholder ? { placeholder: opts.placeholder } : {}),
   });
@@ -955,7 +1008,14 @@ function renderForm() {
       keep.start = active.selectionStart;
       keep.end = active.selectionEnd;
     } catch {
-      /* a number input has no selection to read; the focus alone is enough */
+      /*
+       * A checkbox or a select has no caret to read, and being focused is the
+       * whole of what has to come back for those. This must never again be
+       * the case for a box somebody types a dimension into: Chrome throws
+       * here for `type="number"`, the caret was then restored to 0, and every
+       * width typed came out backwards. `field` builds those as text for that
+       * reason — see the note there before changing it back.
+       */
     }
   }
   const wasScrolled = f.scrollTop;
@@ -1330,9 +1390,19 @@ function renderForm() {
 
       for (const [v, where] of ends) {
         const square = !shape.reentrant.has(v);
+        const leg = legAtVertex(r, v) ?? +r.cornerLeg;
+
+        /*
+         * One column per end. `.corners` is a two-column grid, so each end's
+         * controls have to arrive as one child or the tick, the leg and the
+         * note interleave with the other end's across the rows.
+         */
+        const end = el('div', { class: 'corner-end' });
+        junctions.append(end);
+
         if (square) {
-          junctions.append(
-            toggle(`Corner at ${where} · ${r.cornerLeg}`, r.corners[v], (on) => {
+          end.append(
+            toggle(`Corner at ${where} · ${leg}`, r.corners[v], (on) => {
               r.corners[v] = on;
               renderForm();
               refresh();
@@ -1340,8 +1410,33 @@ function renderForm() {
           );
         }
         if (square && r.corners[v]) {
-          junctions.append(
-            endNote(`Corner panel at the ${where} — ${e.id} gives up ${r.cornerLeg} mm here.`),
+          /*
+           * This corner's own leg. It is keyed on the vertex, not the wall, so
+           * the box on the other wall's card is the same corner and shows the
+           * same figure — one panel cannot be two sizes. Typing here redraws
+           * the form for that reason: the other card has to move with it, and
+           * a number on screen that is not what will be sent is the thing the
+           * redraw exists to prevent.
+           */
+          end.append(
+            field(
+              `Leg at ${where}`,
+              r.cornerLegs?.[v] ?? '',
+              (val) => {
+                if (!Array.isArray(r.cornerLegs)) r.cornerLegs = [];
+                r.cornerLegs[v] = val;
+                renderForm();
+                refresh();
+              },
+              { unit: 'mm', placeholder: String(r.cornerLeg) },
+            ),
+          );
+          end.append(
+            endNote(
+              legAtVertex(r, v) == null
+                ? `Corner panel at the ${where} — ${e.id} gives up ${leg} mm here, the room's figure. Type one to give this corner its own.`
+                : `Corner panel at the ${where} — ${e.id} gives up ${leg} mm here, this corner's own. The panel is ${leg * 2} mm wide.`,
+            ),
           );
           continue;
         }
@@ -1349,7 +1444,7 @@ function renderForm() {
         // no corner panel here: name the wall that runs through
         const prevWall = shape.ids[(v - 1 + n) % n];
         const nextWall = shape.ids[v];
-        junctions.append(
+        end.append(
           select(
             square
               ? `No corner at ${where} — the wall running through is`
@@ -1371,7 +1466,7 @@ function renderForm() {
         // share an end, so the card says which one this is
         const through = r.through?.[v] ?? 'prev';
         const butts = where === 'start' ? through === 'prev' : through === 'next';
-        junctions.append(
+        end.append(
           endNote(
             butts
               ? `Butt joint at the ${where}, no corner panel — ${e.id} gives up ${r.wallTh} mm here.`
@@ -1633,7 +1728,7 @@ function renderForm() {
       try {
         if (keep.start != null) again.setSelectionRange(keep.start, keep.end);
       } catch {
-        /* number inputs refuse this; being focused is what mattered */
+        /* nothing was read above, so there is nothing to put back */
       }
     }
   }
@@ -2480,6 +2575,7 @@ function loadExample(job) {
     const verts = room.outline?.vertices ?? {};
     r.corners = points.map((_, v) => verts[v]?.corner !== false);
     r.through = points.map((_, v) => verts[v]?.through ?? 'prev');
+    r.cornerLegs = points.map((_, v) => (verts[v]?.leg == null ? '' : String(verts[v].leg)));
 
     const edges = room.outline?.edges ?? {};
     const sides = edgeSides(points);
@@ -3057,11 +3153,14 @@ async function openAdmin() {
       return b;
     };
 
-    // any number of days, for the times the three buttons do not fit
+    // Any number of days, for the times the three buttons do not fit. Text
+    // and not `type="number"` for the reason set out on `field`: `min` and
+    // `max` were doing nothing here anyway — the count is checked below with
+    // Math.floor and n > 0 — and a scroll wheel over a number input changes
+    // it without being asked, which here is somebody's access.
     const days = el('input', {
-      type: 'number',
-      min: 1,
-      max: 3650,
+      type: 'text',
+      inputmode: 'numeric',
       class: 'days',
       placeholder: 'days',
     });

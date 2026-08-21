@@ -55,8 +55,42 @@ class StubEl {
   style: Record<string, unknown> = {};
   parentNode: StubEl | null = null;
   scrollTop = 0;
-  selectionStart: number | null = null;
-  selectionEnd: number | null = null;
+
+  /*
+   * The caret, and it refuses to be read on a number input — because Chrome
+   * refuses. This stub used to carry `selectionStart` as a plain field that
+   * always answered, and that is why it could not see the bug it now holds:
+   * `renderForm` reads the caret before a rebuild and puts it back after,
+   * both inside a try/catch, so on `type="number"` both silently did nothing
+   * and the caret came back at 0. Every dimension then typed backwards —
+   * 10476 arrived as 67401, on the live site. A stub that answers where the
+   * browser throws is a stub that certifies a broken form.
+   */
+  #selStart = 0;
+  #selEnd = 0;
+  #noSelection() {
+    if (this.tag === 'input' && (this.attrs.type === 'number' || this.attrs.type === 'checkbox')) {
+      throw new Error(
+        `The input element's type ('${this.attrs.type}') does not support selection.`,
+      );
+    }
+  }
+  get selectionStart(): number {
+    this.#noSelection();
+    return this.#selStart;
+  }
+  set selectionStart(v: number) {
+    this.#noSelection();
+    this.#selStart = v;
+  }
+  get selectionEnd(): number {
+    this.#noSelection();
+    return this.#selEnd;
+  }
+  set selectionEnd(v: number) {
+    this.#noSelection();
+    this.#selEnd = v;
+  }
   classList = {
     add: () => {},
     remove: () => {},
@@ -88,7 +122,11 @@ class StubEl {
     for (const n of walk(this)) if (n === node) return true;
     return false;
   }
-  setSelectionRange() {}
+  setSelectionRange(start: number, end: number) {
+    this.#noSelection();
+    this.#selStart = start;
+    this.#selEnd = end;
+  }
   remove() {}
   scrollTo() {}
   scrollIntoView() {}
@@ -564,19 +602,127 @@ await t('the verified jobs are not offered to an estimator', () => {
   assert.equal(app.ids.get('#jobList')!.children.length, 0);
 });
 
+/** The box inside a `field()`, found by the label the estimator reads. */
+const dimension = (root: StubEl, label: string) => {
+  const lab = [...walk(root)].find(
+    (n) =>
+      n.tag === 'label' &&
+      n.className === 'f' &&
+      [...walk(n)].some((k) => k.tag === 'span' && textOf(k).trim() === label),
+  );
+  assert.ok(lab, `no "${label}" box on the form`);
+  const box = [...walk(lab!)].find((n) => n.tag === 'input');
+  assert.ok(box, `the "${label}" label has no input`);
+  return box!;
+};
+
+/**
+ * Type the way a person does: one character at a time, at the caret, into
+ * whatever is holding the caret — because the form rebuilds itself between
+ * keystrokes, and the node typed into is not the node typed into next.
+ *
+ * Setting `.value` in one go, which is how the rest of this file drives a
+ * field, cannot see the bug this exists for: it never asks where the caret
+ * came back to. When the browser refuses to say — which is what it does on a
+ * number input — the caret is at 0 and the next character lands in front of
+ * the last one.
+ */
+const typeInto = async (start: StubEl, text: string) => {
+  const focused = () =>
+    (app.ctx.document as { activeElement: StubEl | null }).activeElement ?? start;
+  let node = start;
+  node.focus();
+  const caret = (n: StubEl) => {
+    try {
+      return n.selectionStart;
+    } catch {
+      return 0; // the browser will not say, so it is wherever focus left it
+    }
+  };
+  const putCaret = (n: StubEl, at: number) => {
+    try {
+      n.selectionStart = at;
+      n.selectionEnd = at;
+    } catch {
+      /* nothing to put back; that is the bug, not a workaround for it */
+    }
+  };
+  putCaret(node, String(node.value ?? '').length);
+
+  for (const ch of text) {
+    const at = caret(node);
+    const was = String(node.value ?? '');
+    node.value = was.slice(0, at) + ch + was.slice(at);
+    putCaret(node, at + 1);
+    node.fire('input');
+    await settle();
+    node = focused();
+  }
+  return String(node.value ?? '');
+};
+
+await t('a width typed digit by digit arrives the way it was typed', async () => {
+  /*
+   * The one that was live. Width and Length redraw the whole form, the caret
+   * came back at 0 because `type="number"` refuses to say where it was, and
+   * every keystroke landed in front of the one before it: 10476 arrived as
+   * 67401. Driving the field one character at a time is the only way to see
+   * it — setting `.value` whole never asks where the caret went.
+   */
+  const box = dimension(form(), 'Width');
+  box.value = '';
+  const typed = await typeInto(box, '10476');
+  assert.equal(typed, '10476', 'the digits came back reversed');
+
+  const posted = app.posts.at(-1)!.body as { rooms: Array<{ ext: { w: number } }> };
+  assert.equal(posted.rooms[0].ext.w, 10476, 'what was typed is not what was sent');
+});
+
+await t('and so does a length', async () => {
+  const box = dimension(form(), 'Length');
+  box.value = '';
+  assert.equal(await typeInto(box, '12168'), '12168');
+});
+
+await t('no box anyone types a figure into is a number input', () => {
+  /*
+   * The rule the bug above bought. Chrome throws on `selectionStart` and
+   * `setSelectionRange` for `type="number"`, so `renderForm` cannot put the
+   * caret back and leaves it at 0. It also lets a scroll wheel over the box
+   * change a dimension without being asked, and hands back an empty string
+   * for anything it dislikes rather than what was typed.
+   */
+  // the form as it actually stands, which no grep can be fooled about
+  for (const n of walk(form())) {
+    assert.notEqual(n.attrs.type, 'number', `a ${n.tag} on the form is a number input`);
+  }
+
+  // and the parts of the page this harness does not build: the header's own
+  // boxes, and the panels that are only drawn once somebody opens them
+  for (const file of ['web/app.js', 'web/auth.js']) {
+    assert.ok(!/type:\s*'number'/.test(read(file)), `${file} still builds a number input`);
+  }
+  const html = read('web/index.html').replace(/<!--[\s\S]*?-->/g, '');
+  assert.ok(!/type="number"/.test(html), 'web/index.html still has a number input');
+});
+
 await t('a redraw keeps the cursor where it was, and the form where it was', async () => {
   /*
    * The form is rebuilt from the state on every change, which is what stops
    * anything on screen drifting from what will be sent — but it used to throw
    * away the caret and scroll to the top while somebody was still typing.
+   *
+   * This asserted only which field held the cursor, never where in it the
+   * cursor was, which is exactly the half the reversal hid in.
    */
   const form = app.ids.get('#form')!;
-  const box = [...walk(form)].find((n) => n.tag === 'input' && n.attrs.type === 'number')!;
+  const box = dimension(form, 'Height');
   const where = pathOfNode(form, box);
   box.focus();
+  box.value = '3200';
+  box.setSelectionRange(2, 2);
   form.scrollTop = 420;
 
-  box.value = '3200';
   box.fire('input');
   await settle();
 
@@ -584,6 +730,71 @@ await t('a redraw keeps the cursor where it was, and the form where it was', asy
   const now = (app.ctx.document as { activeElement: StubEl | null }).activeElement;
   assert.ok(now, 'the cursor was dropped');
   assert.deepEqual(pathOfNode(form, now!), where, 'the cursor moved to a different field');
+  assert.equal(now!.selectionStart, 2, 'the cursor moved inside the field');
+});
+
+/** Every `field()` box whose label reads like this, in the order drawn. */
+const dimensionsLike = (root: StubEl, starts: string) =>
+  [...walk(root)]
+    .filter(
+      (n) =>
+        n.tag === 'label' &&
+        n.className === 'f' &&
+        [...walk(n)].some((k) => k.tag === 'span' && textOf(k).trim().startsWith(starts)),
+    )
+    .map((lab) => [...walk(lab)].find((k) => k.tag === 'input')!);
+
+await t('every corner offers its own leg, on both of the walls that share it', async () => {
+  /*
+   * The shop, 21 August 2026: a room's corners are not all the same size. A
+   * corner panel is one piece shared by two walls, so it is keyed on the
+   * vertex — the box appears on both wall cards and both must read the same,
+   * or the sheet and the drawing would be told different sizes for one panel.
+   */
+  const boxes = dimensionsLike(form(), 'Leg at');
+  assert.equal(boxes.length, 8, 'four corners, each on two wall cards');
+
+  const posted = () =>
+    (app.posts.at(-1)!.body as {
+      rooms: Array<{ outline: { vertices?: Record<number, { leg?: number }> } }>;
+    }).rooms[0].outline.vertices ?? {};
+
+  assert.equal(
+    Object.values(posted()).some((v) => v.leg != null),
+    false,
+    'an untouched room states no leg at all — blank means the room figure',
+  );
+
+  boxes[0].value = '450';
+  boxes[0].fire('input');
+  await settle();
+
+  const legs = Object.entries(posted())
+    .filter(([, v]) => v.leg != null)
+    .map(([v, o]) => [Number(v), o.leg]);
+  assert.deepEqual(legs, [[0, 450]], 'one vertex, and only the one that was typed');
+
+  const showing = dimensionsLike(form(), 'Leg at')
+    .map((b) => String(b.value))
+    .filter((v) => v === '450');
+  assert.equal(showing.length, 2, 'the same corner must read 450 on both its wall cards');
+});
+
+await t('a leg of nothing is the room figure, not a corner panel of zero', async () => {
+  const boxes = dimensionsLike(form(), 'Leg at');
+  boxes[0].value = '';
+  boxes[0].fire('input');
+  await settle();
+
+  const vertices =
+    (app.posts.at(-1)!.body as {
+      rooms: Array<{ outline: { vertices?: Record<number, { leg?: number }> } }>;
+    }).rooms[0].outline.vertices ?? {};
+  assert.equal(
+    Object.values(vertices).some((v) => v.leg != null),
+    false,
+    'a blank box must send no leg — 0 would print a corner panel with no width',
+  );
 });
 
 await t('signed out, opening a job asks for a sign in rather than failing', async () => {

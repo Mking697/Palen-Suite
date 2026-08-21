@@ -7,7 +7,8 @@
  *   blankW      = panelW + 40
  *   blankL      = panelL
  *   wall inner skin length = wall height - ceilTh        (the L cut)
- *   corner outer = 2 * cornerLeg ; corner inner = outer - 2*wallTh + 5
+ *   corner outer = 2 * leg ; corner inner = outer - 2*wallTh + 5
+ *     (leg is the room's cornerLeg unless the vertex states its own)
  *   both of those hold only while the L cut is fitted — without it the inner
  *   skins run the full height and the full corner width. See rules.ts.
  *   Every source sheet has wallTh === ceilTh, so none of them distinguishes
@@ -229,19 +230,27 @@ export function buildRoomBlock(
   }
 
   // ---- corner panels -----------------------------------------------------
-  if (L.cornerCount > 0) {
-    const outerW = room.cornerLeg * 2;
+  /*
+   * A row pair per distinct corner leg, widest first, because a room's corners
+   * need not all be the same size (the shop, 21 August 2026). Two corners of
+   * one size still print as one row with a quantity of 2 — which is why a room
+   * that states no per-corner leg comes out exactly as it did before this
+   * existed, and every verified sheet is untouched.
+   */
+  for (const leg of [...new Set(L.cornerLegs)]) {
+    const qty = L.cornerLegs.filter((x) => x === leg).length;
+    const outerW = leg * 2;
     // no L cut, no set-back: the inner skin wraps the same width as the outer
     const innerW = lCut ? outerW - 2 * room.wallTh + CORNER_INNER_BEND : outerW;
-    const a = area(outerW, H, L.cornerCount);
+    const a = area(outerW, H, qty);
     rows.push({
       desc: lbl.cornerOuter,
       panelW: outerW,
       panelL: H,
       blankW: blank(outerW),
       blankL: H,
-      panelQty: L.cornerCount,
-      ppgiQty: L.cornerCount,
+      panelQty: qty,
+      ppgiQty: qty,
       thk: room.wallTh,
       areaSqmt: a,
       chemWeight: weight(a, room.wallTh, density),
@@ -253,7 +262,7 @@ export function buildRoomBlock(
       panelL: innerH,
       blankW: blank(innerW),
       blankL: innerH,
-      ppgiQty: L.cornerCount,
+      ppgiQty: qty,
       thk: room.wallTh,
       areaSqmt: 0,
       chemWeight: 0,

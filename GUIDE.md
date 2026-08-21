@@ -82,6 +82,7 @@ tab chahiye jab kisi purane job ko verify karna ho.
 | L cut | [L cut](#l-cut) |
 | Floor ki layers | [Floor ki build-up](#floor-ki-build-up) |
 | Corner ya butt joint | [Corner ya butt joint](#corner-ya-butt-joint--dono-ek-jagah-nahi) |
+| Ek corner ka alag naap | [Har corner ka apna leg](#har-corner-ka-apna-leg) |
 | Account, aur job save karna | [Apna account, apne job](#apna-account-apne-job) |
 | Door kis taraf khulega | [Door ka hand](#door-ka-hand--lhs--rhs) |
 | Door ke upar ka panel | [Door top panel](#door-top-panel--3050-se-oonchi-wall-par) |
@@ -109,7 +110,7 @@ Phone par bhi chalta hai — wahan form upar aur drawing neeche aa jaati hai.
 | **Room shape** | Rectangle, Notch (L), ya Custom — wall by wall (koi bhi 90° shape) |
 | Wall / Ceiling thickness | Panel ki motai |
 | Panel module | Standard panel width (1180, 1030 …) |
-| Corner leg | Corner panel ka ek leg (300 default) |
+| Corner leg | Corner panel ka ek leg (300 default) — **poore room ke liye**. Kisi ek corner ka alag ho to us corner ka apna box bharein, neeche dekhein |
 | Min panel | Isse chhota balance allowed nahi |
 | Ceiling panels run along | Ceiling kis direction me kate |
 | **L cut** | Rebate lagega ya nahi — 50mm se moti wall par by default on |
@@ -429,6 +430,25 @@ chhodna pad raha hai:
 
 > Corner panel at the start — S gives up 300 mm here.
 > **Butt joint at the end, no corner panel — S gives up 100 mm here.**
+
+### Har corner ka apna leg
+
+Ek room ke saare corner ek naap ke nahi hote. BUILD-UP wala **Corner leg** poore
+room ke liye hai; kisi ek corner ko alag naap dena ho to us corner ke tick ke
+neeche **Leg at start / Leg at end** box hai — wahan seedha number likh dijiye.
+
+- **Box khaali chhodna = room wala figure.** Khaali ka matlab zero nahi hai.
+  Placeholder me room ki value dikhti rehti hai, taaki pata rahe kya lagega.
+- **Ek corner do walls ka hota hai**, isliye wahi box dono walls ke card par
+  dikhta hai aur dono jagah **ek hi number** rehta hai. Kisi bhi ek me badlo,
+  doosra apne aap badal jaata hai — ek panel ke do naap ho hi nahi sakte.
+- Neeche note bata deta hai ki figure room ka hai ya us corner ka apna, aur
+  panel kitna chauda banega (`leg × 2`).
+
+Sheet par iska asar: **alag-alag naap ke corner alag row me chhapte hain.** Do
+corner 450 ke aur do 300 ke hon to `Corner Panel (Outer) 900 × H  qty 2` aur
+`600 × H  qty 2` — do rows. Saare corner ek naap ke hon to pehle ki tarah ek hi
+row banti hai quantity ke saath, kuch nahi badalta.
 
 Corner 300 (corner leg) khaata hai, butt sirf ek **wall thickness** — isliye
 butt karne par us wall ka clear run **badh** jaata hai.

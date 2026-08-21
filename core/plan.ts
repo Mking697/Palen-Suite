@@ -184,11 +184,25 @@ export function compileWalls(outline: RoomOutline): WallSpec[] {
     if (!owned(i)) continue;
     const o = edges[i] ?? {};
 
+    /*
+     * A corner panel is one piece shared by the two walls meeting at the
+     * vertex, so its leg is read off the vertex and handed to both ends. Read
+     * per wall instead, the two walls could be told different figures for the
+     * same panel — and the sheet would print a size the drawing does not show.
+     */
+    const legAt = (v: number) => vertices[v]?.leg;
+
     walls.push({
       id: o.id ?? `E${i}`,
       length: Math.round(lengths[i]),
       cornerStart: corners[startVertex(i)],
       cornerEnd: corners[endVertex(i)],
+      ...(corners[startVertex(i)] && legAt(startVertex(i)) != null
+        ? { cornerStartLeg: legAt(startVertex(i)) }
+        : {}),
+      ...(corners[endVertex(i)] && legAt(endVertex(i)) != null
+        ? { cornerEndLeg: legAt(endVertex(i)) }
+        : {}),
       ...(buttStart[i] ? { buttStart: true } : {}),
       ...(buttEnd[i] ? { buttEnd: true } : {}),
       ...(o.door ? { door: o.door } : {}),

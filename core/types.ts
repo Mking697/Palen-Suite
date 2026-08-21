@@ -54,6 +54,19 @@ export interface VertexOverride {
    * a wall thickness into it, exactly as at a re-entrant corner.
    */
   corner?: false;
+  /**
+   * How far this corner panel reaches down each of the two walls meeting
+   * here, when it is not the room's `cornerLeg`. One value, not two: a corner
+   * panel is one piece, so the leg is the same on both sides of it and the
+   * panel is `2 * leg` wide — which is what `cornerLeg` already means at the
+   * room level. Stated here it applies to this junction only, and the room's
+   * figure goes on covering every junction that does not state one.
+   *
+   * The shop asked for this on 21 August 2026: a room's corners are not all
+   * the same size, and one figure for the room could only ever be right for
+   * the commonest of them.
+   */
+  leg?: Mm;
 }
 
 /**
@@ -138,6 +151,14 @@ export interface WallSpec {
   /** corner panel present at the start / end of this wall */
   cornerStart: boolean;
   cornerEnd: boolean;
+  /**
+   * What that corner panel takes off this wall, when it is not the room's
+   * `cornerLeg`. `compileWalls` stamps these from the vertex the end sits on,
+   * so the two walls meeting at one corner are handed the same figure and can
+   * never disagree about the size of a panel they share.
+   */
+  cornerStartLeg?: Mm;
+  cornerEndLeg?: Mm;
   /**
    * This end butts into the face of another wall rather than meeting it at a
    * corner panel, so one wall thickness comes off the run. Used by the
