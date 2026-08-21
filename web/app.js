@@ -1715,6 +1715,11 @@ async function render() {
     const dxf = el('button', { class: 'btn', type: 'button', text: 'DXF — whole sheet' });
     dxf.addEventListener('click', () => downloadSheetDxf(data.jobNo));
 
+    // The DXF is the 1:1 artefact the machine cuts from; the PDF is the one
+    // that goes to a customer, fitted to a sheet with its scale printed on it.
+    const pdf = el('button', { class: 'btn', type: 'button', text: 'PDF — whole sheet' });
+    pdf.addEventListener('click', () => downloadExport('pdf'));
+
     // 2D is the default and stays the drawing of record; 3D is for reading the
     // job, not for issuing it, so nothing exports from there
     const seg = el('div', { class: 'seg' });
@@ -1768,6 +1773,7 @@ async function render() {
             !view3d.on && open ? back : null,
             seg,
             view3d.on ? null : dxf,
+            view3d.on ? null : pdf,
           ]),
         ]),
         view3d.on ? viewer3d(data) : holder,
@@ -1792,7 +1798,14 @@ async function render() {
   }
 
   // then every room's BOQ together, the way the production sheet prints it
-  parts.push(el('h2', { class: 'room-head boq-head', text: 'SHEET FABRICATION' }));
+  const xlsx = el('button', { class: 'btn', type: 'button', text: 'Excel — whole BOQ' });
+  xlsx.addEventListener('click', () => downloadExport('xlsx'));
+  parts.push(
+    el('div', { class: 'boq-head-row' }, [
+      el('h2', { class: 'room-head boq-head', text: 'SHEET FABRICATION' }),
+      data.blocks.length ? xlsx : null,
+    ]),
+  );
   data.blocks.forEach((block, i) => {
     parts.push(boqBlock(block, data.drawings[i]?.name));
   });
@@ -1973,6 +1986,42 @@ async function saveDxf(body, name) {
     href: URL.createObjectURL(blob),
     download: name.replace(/[^a-z0-9]+/gi, '-') + '.dxf',
   });
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/**
+ * The BOQ workbook or the drawing sheet PDF, built by the server from the job
+ * on screen.
+ *
+ * The file is named by the server rather than here. That name is the one the
+ * job is filed under in Drive and attached to an email as — three places
+ * choosing their own name is three names for one document.
+ */
+async function downloadExport(kind) {
+  const spec = jobSpec();
+  const msg = $('#jobSearchMsg');
+  let res;
+  try {
+    res = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ job: spec, kind }),
+    });
+  } catch {
+    if (msg) msg.textContent = 'Could not reach the server';
+    return;
+  }
+  if (!res.ok) {
+    // say what went wrong rather than producing a file that is an error message
+    const why = await res.json().catch(() => ({}));
+    if (msg) msg.textContent = why.error || `Could not build the ${kind}`;
+    return;
+  }
+  const blob = await res.blob();
+  const said = res.headers?.get('content-disposition') || '';
+  const name = (said.match(/filename="([^"]+)"/) || [])[1] || `${spec.jobNo || 'JOB'}.${kind}`;
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -2594,6 +2643,13 @@ function renderAccount() {
       }),
     );
 
+    const settings = el('button', { class: 'btn', type: 'button', text: 'My settings' });
+    settings.addEventListener('click', () => {
+      closeMenus();
+      openSettings();
+    });
+    panel.append(settings);
+
     if (Auth.isAdmin) {
       const admin = el('button', { class: 'btn', type: 'button', text: 'Manage users' });
       admin.addEventListener('click', () => {
@@ -2607,6 +2663,333 @@ function renderAccount() {
   }
 
   button.textContent = 'Sign in';
+}
+
+/* ---------- the estimator's own settings ---------- */
+
+/**
+ * Where this estimator's paperwork goes.
+ *
+ * Three of these are Google links and none of them is interchangeable, which is
+ * the whole reason each carries a shape and a hint. A folder link cannot be
+ * written to — anyone with it can *read* the folder, and nobody can put a file
+ * in it without an authenticated call — so the Apps Script Web App is the only
+ * one of the three that does any work. Pasting the folder link into the script
+ * box is the mistake this screen exists to make obvious.
+ *
+ * `looksLike` is checked and **said**, never enforced: what is typed is what is
+ * saved, exactly as the wall chain that does not close is reported rather than
+ * nudged shut. A link this file has never seen may still be right.
+ */
+const SETTINGS_FIELDS = [
+  {
+    key: 'displayName',
+    label: 'Your name',
+    placeholder: 'as it should sign the email',
+    hint: 'Optional. It signs the email that goes out. Nothing on the BOQ uses it.',
+  },
+  {
+    key: 'driveFolderUrl',
+    label: 'Google Drive folder link',
+    placeholder: 'https://drive.google.com/drive/folders/…',
+    hint:
+      'The drawing PDF and the BOQ workbook are filed here, in a sub-folder named after the ' +
+      'job number. Open the folder in Drive and copy what is in the address bar. Change it ' +
+      'whenever you like — the script does not need redeploying for a new folder.',
+    looksLike: /drive\.google\.com\/drive\/folders\//i,
+    shape: 'a Drive folder link (…/drive/folders/…)',
+  },
+  {
+    key: 'sheetUrl',
+    label: 'Google Sheet link',
+    placeholder: 'https://docs.google.com/spreadsheets/d/…',
+    hint:
+      'The BOQ is appended here — one row per BOQ line, with the timestamp and the job number ' +
+      'on every row, so a job can always be found again.',
+    looksLike: /docs\.google\.com\/spreadsheets\/d\//i,
+    shape: 'a Google Sheet link (…/spreadsheets/d/…)',
+  },
+  /*
+   * There was an "Apps Script Web App link" box here. It is gone, not because
+   * the field was wrong but because the design under it changed on 18 August:
+   * the shop asked for two links and one shared ID rather than a script each
+   * estimator deploys, and Phase 11 became "Sign in with Google" instead. A
+   * **Connect Google** button belongs here once that is built.
+   *
+   * Taken off the form the same day the decision was taken, on this repo's own
+   * rule that a control which silently does nothing is worse than no control —
+   * the same reason the BOQ group field came off on 17 August. The columns stay
+   * in `profiles`, and this screen no longer writes them, so anything already
+   * typed is left alone rather than blanked.
+   */
+  {
+    key: 'mailFrom',
+    label: 'Send email from',
+    placeholder: 'you@example.com',
+    hint:
+      'Left blank, email is sent from info@panelsuite.online. Any other address has to be ' +
+      'verified as a sender in Brevo first or the send is refused — the mail service will not ' +
+      'send as an address it cannot prove you own. Either way your own address is the ' +
+      'Reply-To, so the customer replies to you.',
+    looksLike: /^[^@\s]+@[^@\s]+\.[^@\s]+$/,
+    shape: 'an email address',
+  },
+];
+
+/**
+ * The settings screen: read the profile, show the five, save them back.
+ *
+ * Modelled on `openAdmin` — same panel shape, same "read it back rather than
+ * guess what it became" after a write.
+ */
+async function openSettings() {
+  const back = $('#settingsBack');
+  const body = $('#settingsBody');
+  const panel = $('#settings');
+  if (!panel || !body) return;
+
+  panel.hidden = false;
+  body.replaceChildren(el('p', { class: 'muted', text: 'Loading…' }));
+  if (back && !back.dataset.wired) {
+    back.dataset.wired = '1';
+    back.addEventListener('click', () => {
+      panel.hidden = true;
+    });
+  }
+
+  if (!window.Auth || !Auth.user) {
+    body.replaceChildren(el('p', { class: 'error', text: 'Sign in first.' }));
+    return;
+  }
+
+  await Auth.profile();
+  if (Auth.profileError) {
+    body.replaceChildren(el('p', { class: 'error', text: Auth.profileError }));
+    return;
+  }
+
+  const saved = Auth.settings;
+  const inputs = {};
+  const form = el('div', { class: 'settings-form' });
+
+  for (const f of SETTINGS_FIELDS) {
+    const input = el('input', {
+      type: 'text',
+      value: saved[f.key] || '',
+      placeholder: f.placeholder,
+      spellcheck: 'false',
+    });
+    inputs[f.key] = input;
+    form.append(
+      el('label', { class: 'settings-field' }, [
+        el('span', { class: 'settings-label', text: f.label }),
+        input,
+        el('span', { class: 'hint', text: f.hint }),
+      ]),
+    );
+  }
+
+  const msg = el('p', { class: 'settings-msg' });
+  const save = el('button', { class: 'btn primary', type: 'button', text: 'Save settings' });
+
+  save.addEventListener('click', async () => {
+    const fields = {};
+    for (const f of SETTINGS_FIELDS) fields[f.key] = inputs[f.key].value;
+
+    save.disabled = true;
+    msg.className = 'settings-msg';
+    msg.textContent = 'Saving…';
+    try {
+      await Auth.saveSettings(fields);
+      /*
+       * Said, not corrected. What was typed has already been saved by the time
+       * this runs; anything that does not look like the link it is standing in
+       * for is pointed at, and left alone. A shape this file has not seen may
+       * still be a working link, and refusing it would be the app overruling
+       * the estimator about their own Google account.
+       */
+      const odd = SETTINGS_FIELDS.filter(
+        (f) => f.looksLike && fields[f.key].trim() && !f.looksLike.test(fields[f.key].trim()),
+      );
+      if (odd.length) {
+        msg.className = 'settings-msg warn';
+        msg.textContent =
+          'Saved. Worth a look though — ' +
+          odd.map((f) => `${f.label} does not look like ${f.shape}`).join('; ') + '.';
+      } else {
+        msg.className = 'settings-msg ok';
+        msg.textContent = 'Saved.';
+      }
+    } catch (err) {
+      msg.className = 'settings-msg error';
+      msg.textContent = err.message;
+    } finally {
+      save.disabled = false;
+    }
+  });
+
+  body.replaceChildren(
+    el('p', {
+      class: 'hint',
+      text:
+        'Filled in once, these are what send a job out of the calculator: the drawing and ' +
+        'workbook into your Drive folder, the BOQ onto your sheet, and the email to the ' +
+        'customer. Nothing here is shared with anybody else.',
+    }),
+    form,
+    el('div', { class: 'settings-actions' }, [save]),
+    msg,
+  );
+}
+
+/* ---------- email ---------- */
+
+/** Set by boot() from /api/config: whether the server can send at all. */
+let MAIL = { on: false, reason: '' };
+
+/**
+ * The boxes on the email form.
+ *
+ * `To` is the only one that has to be filled in. CC and BCC take several
+ * addresses separated by commas or newlines — the server splits them the same
+ * way, so what is typed here and what is sent cannot drift.
+ */
+const MAIL_FIELDS = [
+  { key: 'to', label: 'To', hint: 'One address, or several separated by commas.', rows: 1 },
+  { key: 'cc', label: 'CC', hint: '', rows: 1 },
+  { key: 'bcc', label: 'BCC', hint: '', rows: 1 },
+  { key: 'subject', label: 'Subject', hint: 'Filled in with the job number. Change it if you like.', rows: 1 },
+  { key: 'text', label: 'Message', hint: 'Sent as plain text, exactly as typed.', rows: 8 },
+];
+
+/** What is in the boxes, kept so that going Back and returning does not lose it. */
+const mailDraft = { to: '', cc: '', bcc: '', subject: '', text: '' };
+
+/**
+ * The email screen.
+ *
+ * The two attachments are not chosen here and cannot be unticked: a job goes
+ * out as its BOQ and its drawings or it does not go out. They are built by the
+ * server from the job on screen, by the same calls the download buttons make,
+ * so what the customer opens is what the estimator saw.
+ */
+function openMail() {
+  const back = $('#mailBack');
+  const body = $('#mailBody');
+  const panel = $('#mail');
+  if (!panel || !body) return;
+
+  panel.hidden = false;
+  if (back && !back.dataset.wired) {
+    back.dataset.wired = '1';
+    back.addEventListener('click', () => {
+      panel.hidden = true;
+    });
+  }
+
+  if (!MAIL.on) {
+    // a button that opens a form which cannot post anywhere is worse than a
+    // button that says why
+    body.replaceChildren(
+      el('p', { class: 'error', text: `Email is not set up on this server. ${MAIL.reason}` }),
+      el('p', {
+        class: 'hint',
+        text:
+          'BREVO_API_KEY and MAIL_FROM go in the host environment — SETUP.md Part B and Part D. ' +
+          'Until they are set, use the Excel and PDF buttons and attach them yourself.',
+      }),
+    );
+    return;
+  }
+
+  if (!window.Auth || !Auth.user) {
+    body.replaceChildren(el('p', { class: 'error', text: 'Sign in to send an email.' }));
+    return;
+  }
+
+  const jobNo = String(state.jobNo ?? '').trim();
+  if (!mailDraft.subject) mailDraft.subject = `${jobNo || 'Panel Suite'} — drawings and BOQ`;
+
+  const inputs = {};
+  const form = el('div', { class: 'settings-form' });
+  for (const f of MAIL_FIELDS) {
+    const input =
+      f.rows > 1
+        ? el('textarea', { rows: f.rows })
+        : el('input', { type: 'text', spellcheck: 'false' });
+    // set on the node rather than through an attribute: a textarea's value is
+    // its content in markup but its `value` everywhere else, and the form reads
+    // `value` for both kinds
+    input.value = mailDraft[f.key] || '';
+    // keep what is typed, so Back and return does not empty the form
+    input.addEventListener('input', (e) => {
+      mailDraft[f.key] = e.target.value;
+    });
+    inputs[f.key] = input;
+    form.append(
+      el('label', { class: 'settings-field' }, [
+        el('span', { class: 'settings-label', text: f.label }),
+        input,
+        f.hint ? el('span', { class: 'hint', text: f.hint }) : null,
+      ]),
+    );
+  }
+
+  const msg = el('p', { class: 'settings-msg' });
+  const send = el('button', { class: 'btn primary', type: 'button', text: 'Send' });
+
+  send.addEventListener('click', async () => {
+    send.disabled = true;
+    msg.className = 'settings-msg';
+    msg.textContent = 'Building the attachments and sending…';
+    try {
+      const session = await Auth.session();
+      const res = await fetch('/api/mail', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${session ? session.access_token : ''}`,
+        },
+        body: JSON.stringify({
+          job: jobSpec(),
+          to: inputs.to.value,
+          cc: inputs.cc.value,
+          bcc: inputs.bcc.value,
+          subject: inputs.subject.value,
+          text: inputs.text.value,
+        }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.className = 'settings-msg error';
+        msg.textContent = out.error || `Could not send (${res.status})`;
+        return;
+      }
+      msg.className = 'settings-msg ok';
+      msg.textContent =
+        `Sent, with ${(out.attached || []).join(' and ')} attached. ` +
+        `Replies go to ${out.replyTo}.`;
+    } catch (err) {
+      msg.className = 'settings-msg error';
+      msg.textContent = err.message;
+    } finally {
+      send.disabled = false;
+    }
+  });
+
+  body.replaceChildren(
+    el('p', { class: 'hint', text: `Job ${jobNo || '(no number yet)'} — as it is on screen now.` }),
+    el('p', { class: 'attached' }, [
+      el('strong', { text: 'Attached automatically: ' }),
+      el('span', { text: 'the BOQ as an Excel workbook and the drawings as a PDF. ' }),
+      el('span', {
+        text: 'Both are built from this job when you press Send, so they cannot be out of date.',
+      }),
+    ]),
+    form,
+    el('div', { class: 'settings-actions' }, [send]),
+    msg,
+  );
 }
 
 /* ---------- admin ---------- */
@@ -3045,6 +3428,10 @@ $('#density').addEventListener('input', (e) => {
   refresh();
 });
 $('#printBtn').addEventListener('click', () => window.print());
+$('#mailBtn').addEventListener('click', () => {
+  closeMenus();
+  openMail();
+});
 
 for (const b of document.querySelectorAll('#fileMenu [data-file]')) {
   b.addEventListener('click', () => fileAction(b.getAttribute('data-file')));
@@ -3057,6 +3444,15 @@ async function boot() {
   } catch {
     /* keep the defaults — the form still works on PPGI 0.4 */
   }
+  // whether the server can send email at all. A boolean, never a key — the
+  // Brevo key stays in the host environment, which is why /api/mail exists
+  try {
+    const cfg = await (await fetch('/api/config')).json();
+    MAIL = { on: !!cfg.mail, reason: cfg.mailReason || '' };
+  } catch {
+    MAIL = { on: false, reason: 'the server did not answer /api/config' };
+  }
+
   // an account is a convenience on top of the calculator, never a gate in
   // front of it: if this fails the form still works, unsaved
   if (window.Auth) {

@@ -59,8 +59,16 @@ lagaiye.
 Supabase me **SQL Editor** kholiye, **New query**, ye paste karke **Run**.
 
 > **Sabse aasan raasta: repo ka `sql/` folder.** Wahan yahi SQL alag files me
-> hai — `01-tables.sql`, `02-access-and-admin.sql`, `03-make-admin.sql` — aur
-> unme **koi fence nahi hai**. File kholiye, sab select kijiye, copy, Run.
+> hai — `01-tables.sql`, `02-access-and-admin.sql`, `03-make-admin.sql`,
+> `04-profile-fields.sql` — aur unme **koi fence nahi hai**. File kholiye, sab
+> select kijiye, copy, Run. Kram se chalaiye, 01 se 04 tak.
+>
+> **`04-profile-fields.sql` chalana zaroori hai**, aur sirf naye columns ke liye
+> nahi. Wo ek asli chhed band karta hai: `profiles` ka update policy row-level
+> hai, column-level nahi — yaani koi bhi signed-in user apni hi row me
+> `is_admin: true` ya `access_until: 2099` PATCH kar sakta tha, aur Postgres
+> maan leta, kyunki row to unki apni hi hai. App ne wo request kabhi bheji nahi,
+> par haath se bhejna mushkil nahi tha. 04 wala trigger use rok deta hai.
 >
 > Yahan neeche se copy karein to ` ``` ` wali pehli aur aakhri line **chhod
 > dijiye** — wo markdown ka nishaan hai, SQL nahi. Ye do baar phansa chuka hai,
@@ -258,6 +266,75 @@ Ek aur baat jo waqt bachayegi: Supabase **nakli domain reject karta hai**.
 `@example.com` jaise pate par `email_address_invalid` milega. Test ke liye apna
 asli email hi use kijiye.
 
+### A4. SQL chali ya nahi — teen check
+
+> **Pehle ye samajh lijiye ki kya kahan chalta hai.** Sirf **Check 2** SQL hai
+> aur Supabase SQL Editor me jaata hai. **Check 1 PowerShell hai** — wo aapke
+> apne terminal me chalta hai, aur **Check 3 JavaScript hai** — wo browser ke
+> console me. Check 1 ko SQL Editor me paste karne se
+> `syntax error at or near "$"` aata hai; ye ho chuka hai, aur galti command ki
+> nahi, usse galat jagah chalane ki hai.
+
+**Check 1 — naye columns aa gaye? (PowerShell, apne terminal me)**
+
+Koi credential nahi chahiye: anon key `/api/config` se aati hai, jo public hai
+hi — wo project ka naam batati hai, kisi vyakti ka nahi.
+
+```powershell
+$cfg = Invoke-RestMethod "https://panelsuite.online/api/config"
+$url = $cfg.supabase.url; $key = $cfg.supabase.anonKey
+foreach ($col in @('drive_folder_url','sheet_url')) {
+  try {
+    Invoke-RestMethod "$url/rest/v1/profiles?select=$col&limit=1" -Headers @{ apikey = $key } | Out-Null
+    "   $col -> EXISTS"
+  } catch { "   $col -> MISSING" }
+}
+```
+
+Dono `EXISTS` chahiye. 04 chalne se pehle dono `MISSING` bolte hain — isi se
+pata chalta hai ki check sach me kuch naap raha hai.
+
+**Check 2 — trigger laga? (SQL, Supabase SQL Editor me)**
+
+```sql
+select tgname from pg_trigger
+where tgrelid = 'public.profiles'::regclass and not tgisinternal;
+```
+
+`profiles_guard_privileges` dikhna chahiye.
+
+**Check 3 — chhed sach me band hua? (JavaScript, browser console me)**
+
+> **SQL Editor se ye test mat kijiye.** Wahan `auth.uid()` null hota hai aur
+> trigger us haalat me jaan-boojh kar skip karta hai (warna service key aur 02
+> ka backfill toot jaate). To SQL Editor me `update profiles set is_admin = true`
+> **chal jayega** — aur bilkul aisa lagega jaise fix fail ho gaya. Wo galat
+> nateeja hai.
+
+panelsuite.online par signed in rehte hue, console me:
+
+```js
+const s = JSON.parse(localStorage.getItem('panelcalc.session'));
+const cfg = await (await fetch('/api/config')).json();
+const r = await fetch(`${cfg.supabase.url}/rest/v1/profiles?id=eq.${s.user.id}`, {
+  method: 'PATCH',
+  headers: { apikey: cfg.supabase.anonKey, Authorization: `Bearer ${s.access_token}`,
+             'content-type': 'application/json' },
+  body: JSON.stringify({ access_until: '2099-01-01T00:00:00Z' }),
+});
+console.log(r.status, await r.text());
+```
+
+*Only an administrator may change access or admin rights.* aana chahiye. `204`
+aaya to 04 nahi lagi.
+
+**Ye sirf 04 chalane ke baad chalaiye.** Pehle chalayenge to request sach me
+kaam kar jayegi — yaani aap wahi escalation kar denge jo band karni thi.
+
+Aur ise **kisi normal account se** kijiye. Trigger administrator ko chhoot deta
+hai, isliye admin ke account par ye hamesha pass ho jayega aur kuch sabit nahi
+karega.
+
 ---
 
 ## B — Brevo — email
@@ -406,6 +483,38 @@ daaliye. Mujhe bhejne ki zaroorat nahi — main code aise likhunga ki wo
 
 ## C — Google — Drive folder aur Sheet
 
+> **⚠️ Ye hissa 18 August ko badal gaya — abhi ise mat kijiye.**
+>
+> Neeche jo Apps Script wala tareeka likha hai, wo **ab nahi banaya ja raha**.
+> Shop ne kaha: estimator sirf **do link** daale, aur file ek ID ke saath Editor
+> me share ho — har estimator ka apna script deploy karna nahi.
+>
+> Usme se ek baat sahi hai aur ek nahi:
+>
+> - **"Public kar denge" se kaam nahi chalega.** *Anyone with the link — Editor*
+>   se **insaan browser me** edit kar sakta hai; server nahi. Google ka har
+>   likhne wala API credential maangta hai, link chahe jitna khula ho.
+> - **"Ek ID ke saath Editor me share"** bilkul sahi hai — uska naam **service
+>   account** hai.
+>
+> **Par service account ka apna Drive storage quota nahi hota**, isliye wo normal
+> Drive folder me file nahi bana sakta (`storageQuotaExceeded`). Shared Drive se
+> ye theek ho jaata hai, par uske liye paid Google Workspace chahiye — aur aapke
+> paas normal Gmail hai.
+>
+> **Isliye Phase 11 ab "Sign in with Google" hoga:** profile me ek baar apna
+> Google account connect kijiyega, aur server aapke naam par file rakhega — file
+> aapki, quota aapka, folder aapka. Sheet bhi usi se chalegi.
+>
+> Ye abhi bana nahi hai. Jab banega, iske steps yahin likhe jayenge. Tab tak
+> **My settings me sirf do link daaliye** — Drive folder aur Google Sheet —
+> aur Excel/PDF button se file download karke email me khud attach kar lijiye.
+> Poori wajah `DESIGN.md` me "Phase 11 rewritten" me hai.
+
+Neeche wala tareeka **fallback ke taur par rakha gaya hai**, hataya nahi —
+`tools/apps-script/panel-suite.gs` kaam karta hai, aur agar OAuth verification
+kabhi rukavat bani to yahi raasta bachega.
+
 Yaad rahe: **sirf URL se Google me kuch likha nahi ja sakta.** Isliye aap apni
 hi Sheet me ek chhoti script deploy karenge — wo aapke apne account me chalegi,
 aur is repo ke paas Google ka koi credential kabhi nahi aayega.
@@ -413,59 +522,27 @@ aur is repo ke paas Google ka koi credential kabhi nahi aayega.
 ### C1. Folder aur Sheet banaiye
 
 1. Drive me ek folder banaiye, jaise **`Panel Suite — Jobs`**.
-   Uska URL kuch aisa hoga:
-   `https://drive.google.com/drive/folders/1AbCdEf...` — aakhri hissa
-   **folder ID** hai, wo copy kar lijiye.
-2. Ek Google Sheet banaiye, jaise **`Panel Suite — BOQ`**.
+   Uska poora URL copy kar lijiye — kuch aisa:
+   `https://drive.google.com/drive/folders/1AbCdEf...`
+2. Ek Google Sheet banaiye, jaise **`Panel Suite — BOQ`**. Uska URL bhi copy
+   kar lijiye.
+
+Dono URL tool ke **My settings** me paste honge. Folder ID script ke andar
+**nahi** likhna — wo request ke saath jaata hai, taaki baad me folder badalna
+sirf ek box edit karna ho, script dobara deploy karna na pade.
 
 ### C2. Script paste kijiye
 
-Us Sheet me **Extensions → Apps Script**, sab kuch hata kar ye paste kijiye:
+Script repo me hai: **`tools/apps-script/panel-suite.gs`**. Use kholiye, poora
+copy kijiye.
 
-```javascript
-/**
- * Panel Suite — Drive + Sheet endpoint.
- * Ye script aapke apne Google account me chalti hai.
- */
-var FOLDER_ID = 'YAHAN_FOLDER_ID_PASTE_KIJIYE';
+Yahan wo dobara nahi likha gaya hai — jaan-boojh kar. Do copies hamesha alag ho
+jaati hain, aur jo chalti hai wo wahi hoti hai jise kisi ne edit nahi kiya. Wahi
+wajah hai jisse app ka guide bhi `GUIDE.md` ko render karta hai, uski nakal nahi
+rakhta.
 
-function doPost(e) {
-  var body = JSON.parse(e.postData.contents);
-  var out = { ok: true, files: [], rows: 0 };
-
-  // 1. files Drive folder me, job number ke naam se
-  if (body.files && body.files.length) {
-    var folder = DriveApp.getFolderById(FOLDER_ID);
-    body.files.forEach(function (f) {
-      var blob = Utilities.newBlob(
-        Utilities.base64Decode(f.base64), f.mimeType, f.name);
-      // usi naam ki purani copy hata do, taaki ek job ki ek hi current file rahe
-      var old = folder.getFilesByName(f.name);
-      while (old.hasNext()) old.next().setTrashed(true);
-      out.files.push(folder.createFile(blob).getUrl());
-    });
-  }
-
-  // 2. rows do alag tabs par
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  out.rows += appendBlock(ss, 'BOQ', body.boq);
-  out.rows += appendBlock(ss, 'Flashing', body.flashing);
-
-  return ContentService
-    .createTextOutput(JSON.stringify(out))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function appendBlock(ss, name, block) {
-  if (!block || !block.rows || !block.rows.length) return 0;
-  var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
-  if (sheet.getLastRow() === 0 && block.header) sheet.appendRow(block.header);
-  block.rows.forEach(function (row) { sheet.appendRow(row); });
-  return block.rows.length;
-}
-```
-
-`FOLDER_ID` me apna folder ID daal dijiye.
+Us Sheet me **Extensions → Apps Script** kholiye, jo pehle se likha hai sab
+hata dijiye, aur file ka content paste kar dijiye. Kuch badalna nahi hai.
 
 ### C3. Web app ki tarah deploy kijiye
 
@@ -476,8 +553,13 @@ function appendBlock(ss, name, block) {
 - **Who has access** — **Anyone**
 - **Deploy** → Google permission maangega → **Allow**
 
-Jo URL milega (`…/exec` par khatam hota hai) wo copy kar lijiye. Wahi tool ke
-profile me daalna hai.
+Jo URL milega (`…/exec` par khatam hota hai) wo copy kar lijiye. Wahi tool me
+**account menu → My settings → Apps Script Web App link** me daalna hai, saath
+me C1 wale folder aur sheet ke URL.
+
+> Teeno links Google ke hain aur teeno alag kaam karte hain — sabse aam galti
+> folder ka link script wale box me paste kar dena hai. Screen bata degi ki wo
+> jo maanga tha wo nahi lagta, par rokegi nahi: jo type kiya wahi save hota hai.
 
 > **Who has access: Anyone** ka matlab hai jiske paas URL hai wo is script ko
 > chala sakta hai. Isliye **ye URL ek secret ki tarah rakhiye** — kisi ke saath
@@ -496,8 +578,13 @@ Environment Variables** me:
 | `SUPABASE_URL` | `https://kyzexsarilxkzwkntode.supabase.co` | nahi | **ab — login isi se chalega** |
 | `SUPABASE_ANON_KEY` | anon / public key | nahi — browser me jaati hi hai | **ab** |
 | `SUPABASE_SERVICE_KEY` | Supabase ki **service_role** key | **haan — sabse khatarnak** | sirf "user delete" ke liye |
-| `BREVO_API_KEY` | Brevo API key | **haan — kisi ko mat dijiye** | Phase 12 |
-| `MAIL_FROM` |  `info@panelsuite.online` | nahi | Phase 12 |
+| `BREVO_API_KEY` | Brevo API key | **haan — kisi ko mat dijiye** | **ab — Email button isi se chalega** |
+| `MAIL_FROM` |  `info@panelsuite.online` | nahi | **ab** |
+
+> **Email button ke liye ye dono zaroori hain.** Ek bhi na ho to server saaf
+> keh deta hai — `/api/config` `mail:false` bhejta hai aur button khud bata deta
+> hai ki kya nahi laga. Chupchap fail nahi hota. Key kabhi browser me nahi
+> jaati; isi wajah se `/api/mail` server par hai.
 
 > **`SUPABASE_SERVICE_KEY` sirf tab daaliye jab admin ko user *delete* karna
 > ho.** Wo key har policy ko bypass karti hai, isliye wo **kabhi browser me
@@ -529,6 +616,29 @@ package nahi chahiye.
 3. Phir apne email se **sign up → email me link → sign in → Save**. Ek job save
    karke doosre account se dekhiye — dikhna nahi chahiye. Wahi asli test hai.
 
-Baaki (Brevo API key, Apps Script URL) Phase 11–12 ke waqt. **Brevo ka domain
-verification aaj hi shuru kar dijiye** — DNS failne me ghante lagte hain, aur wo
-intezaar baaki kaam ke saath chal jayega.
+4. ✅ **`04-profile-fields.sql`** — 18 August ko live project par chal chuki
+   hai. Profile ke naye columns aa gaye aur wo trigger lag gaya jo access/admin
+   ko apne aap badalne se rokta hai. Part A4 ke check se pakka kiya gaya.
+5. **`BREVO_API_KEY` aur `MAIL_FROM` Hostinger me daaliye** — Email button ban
+   chuka hai (18 August) aur bas inhi do ka intezaar hai. Inke bina button khud
+   keh dega ki wo band hai.
+6. Phir **My settings** kholiye aur do link daal dijiye — Drive folder aur
+   Google Sheet. Ye Phase 11 ke liye hain, jo abhi bana nahi hai (Part C ka
+   warning padh lijiye).
+
+**Brevo ka domain verification aaj hi shuru kar dijiye** agar baaki hai — DNS
+failne me ghante lagte hain, aur wo intezaar baaki kaam ke saath chal jayega.
+
+### Email kis address se jayega — ek shart jo pehle jaan lena behtar hai
+
+Brevo kisi bhi address se nahi bhejta — sirf us se jise aap **prove** kar sakein
+ki aapka hai. `panelsuite.online` verified hai, isliye `info@panelsuite.online`
+bina kisi setup ke chalta hai.
+
+Estimator apni khud ki ID (jaise `@gmail.com`) se bhejna chahe to Brevo me
+**Senders → Add a sender** karke us address ko verify karna hoga — Brevo ek
+confirmation mail bhejta hai, link click. Uske bina Brevo request hi reject kar
+dega.
+
+Dono soorat me **Reply-To hamesha estimator ki apni ID** rahegi, isliye customer
+ka jawab seedha unke paas aayega.

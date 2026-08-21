@@ -121,6 +121,18 @@
       return state.session && state.session.user ? state.session.user.email : '';
     },
 
+    /**
+     * The live session, refreshed if it is about to expire.
+     *
+     * Exposed because two things now need the access token to talk to our own
+     * server rather than to Supabase: deleting a user, and sending an email.
+     * Both endpoints work out who is calling from this token instead of
+     * believing what the request says about itself.
+     */
+    async session() {
+      return fresh();
+    },
+
     /** Ask the server which project to use, and pick up any stored session. */
     async boot() {
       try {
@@ -206,7 +218,9 @@
          */
         const rows = await db(
           `profiles?id=eq.${encodeURIComponent(session.user.id)}` +
-            '&select=id,email,access_until,is_admin&limit=1',
+            '&select=id,email,access_until,is_admin' +
+            ',display_name,drive_script_url,sheet_script_url,mail_from' +
+            ',drive_folder_url,sheet_url&limit=1',
         );
         state.profile = rows && rows.length ? rows[0] : null;
         state.profileError = '';
@@ -221,7 +235,7 @@
          */
         state.profile = null;
         state.profileError = /does not exist/i.test(err.message)
-          ? 'The database is missing the access columns — the setup SQL has not been run yet.'
+          ? 'The database is missing columns the app needs — not all of the setup SQL in sql/ has been run yet.'
           : err.message;
       }
       return state.profile;
@@ -246,6 +260,65 @@
       if (state.profile.is_admin) return true;
       const until = state.profile.access_until;
       return !!until && new Date(until).getTime() > Date.now();
+    },
+
+    /* ---------- the estimator's own settings ---------- */
+
+    /**
+     * Where this estimator's paperwork goes: the Apps Script Web App that files
+     * the drawing and workbook into their Drive folder, the one that appends a
+     * row to their Google Sheet — often the same script — and the address their
+     * email is sent from.
+     *
+     * Read off the profile row that `profile()` already fetched, so opening the
+     * settings screen costs no second request. `''` rather than `null` because
+     * these go straight into text inputs.
+     */
+    get settings() {
+      const p = state.profile || {};
+      return {
+        displayName: p.display_name || '',
+        driveFolderUrl: p.drive_folder_url || '',
+        sheetUrl: p.sheet_url || '',
+        driveScriptUrl: p.drive_script_url || '',
+        sheetScriptUrl: p.sheet_script_url || '',
+        mailFrom: p.mail_from || '',
+      };
+    },
+
+    /**
+     * Save the four the screen shows, and read the row back rather than assume
+     * it took.
+     *
+     * The database is what decides here as everywhere else: `change own profile`
+     * limits this to the caller's own row, and the `profiles_guard_privileges`
+     * trigger from `sql/04-profile-fields.sql` refuses any attempt to reach
+     * `access_until` or `is_admin` through the same call. This method sends four
+     * columns and no others, but that is not what makes it safe — the trigger
+     * is, because the request can be written by hand.
+     */
+    async saveSettings(fields) {
+      const session = await fresh();
+      if (!session) throw new Error('Not signed in.');
+      const trim = (v) => String(v ?? '').trim();
+      await db(`profiles?id=eq.${encodeURIComponent(session.user.id)}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        /*
+         * The two `_script_url` columns are deliberately not written. Phase 11
+         * stopped being "an Apps Script each estimator deploys" on 18 August —
+         * see DESIGN.md — so the screen no longer offers them, and a PATCH that
+         * named them would blank whatever an early tester had already typed.
+         * A column this screen does not show is a column it does not touch.
+         */
+        body: {
+          display_name: trim(fields.displayName) || null,
+          drive_folder_url: trim(fields.driveFolderUrl) || null,
+          sheet_url: trim(fields.sheetUrl) || null,
+          mail_from: trim(fields.mailFrom) || null,
+        },
+      });
+      return Auth.profile();
     },
 
     /* ---------- admin ---------- */

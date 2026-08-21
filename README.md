@@ -20,11 +20,23 @@ weight and area — with no BOQ figures fed in as input.
 | HI-15279 | Ambient + Milk 60mm merged block | ⬜ needs BOQ-group merging, partition panels, Door TOP |
 | HI-15252 | Freezer 120 + Chiller 60 + F&V 60, module 1030 | ⬜ not yet |
 
-169 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
+237 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
 (`npm run dev`) renders the generated sheet and its drawings, runs the verifier
 in the browser, and lets you rebuild from an edited input. The two browser
 scripts are covered too — `core/verify/web.test.ts` boots them headless in a
 `node:vm` context with a stub DOM.
+
+A job goes out as a **`.xlsx` workbook** and a **PDF drawing set**, both written
+by hand in `core/export/` so the no-dependency rule survives. An export counts
+nothing of its own: every figure is one `buildJob` already produced, the
+workbook's totals are the engine's rather than an Excel `=SUM`, and each PDF
+page prints the scale it was fitted at. The **DXF is still the 1:1 file** the
+machine cuts from.
+
+An **Email** button sends both to a customer through Brevo — subject prefilled
+with the job number, attachments built when Send is pressed so they cannot be
+stale, and the estimator always the Reply-To. The API key is an environment
+variable on the server and never reaches the browser.
 
 A room is a closed polygon; its wall list is compiled from that outline, and
 the drawings read the same outline the BOQ reads — so a drawing cannot show a
@@ -258,10 +270,18 @@ core/format.ts              Excel-compatible half-up rounding
 core/draw/                  plan, elevation, ceiling, floor -> SVG and DXF
 core/draw/sheet.ts          many drawings -> one 1:1 sheet, by translation only
 core/draw/model3d.ts        the job as flat faces in space, for the 3D toggle
+core/export/zip.ts          a stored ZIP and CRC32 — no compressor, no package
+core/export/xlsx.ts         BOQ -> .xlsx. Rounded figures as numbers, and the
+                            engine's own totals — never an Excel =SUM
+core/export/pdf.ts          Drawing -> PDF, a page per view, each stating the
+                            scale it was fitted at. The DXF stays the 1:1 one
 core/jobs/                  job inputs, transcribed from drawings only
 core/verify/                expected sheets + diff runner + tests
 core/verify/web.test.ts     web/app.js and web/guide.js, booted headless in a
                             node:vm context with a stub DOM
+server/mail.ts              sending a job out through Brevo's HTTP API. One
+                            fetch, no dependency, and the key never leaves the
+                            process — which is why /api/mail is on the server
 server/serve.ts             local dev server (node:http, no dependencies)
 server/config.ts            where the server binds, and why — its own file so
                             it can be tested, since serve.ts listens on import

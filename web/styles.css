@@ -251,6 +251,7 @@ body.signed-out #fileMenu,
 body.signed-out #jobSearch,
 body.signed-out #jobSearchMsg,
 body.signed-out #printBtn,
+body.signed-out #mailBtn,
 body.signed-out #accountMenu { display: none; }
 
 /* Shown by the body class, not by the `hidden` attribute alone.
@@ -314,6 +315,50 @@ body.signed-out .gate {
 }
 .ok-tag { background: #e7f6ed; color: var(--ok); }
 .dev-tag { background: #fff8ea; color: var(--dev); }
+
+/* ---------- the estimator's own settings ---------- */
+
+/* Borrows the .admin panel for its frame; only the form inside is new.
+   One column at every width: these are long URLs, and a link cut in half by a
+   two-column grid is a link nobody can check before pasting over it. */
+.settings-form { display: flex; flex-direction: column; gap: 18px; margin: 20px 0 0; }
+.settings-field { display: flex; flex-direction: column; gap: 6px; }
+.settings-label { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.settings-field input {
+  font: inherit; font-size: 13px; padding: 9px 11px; width: 100%;
+  border: 1px solid var(--line-2); border-radius: 9px;
+  background: var(--card); color: var(--ink);
+}
+.settings-field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* the hint sits under its box, not over it — these run to three lines */
+.settings-field .hint { margin: 0; }
+
+.settings-actions { margin: 22px 0 0; }
+.btn.primary {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  font-weight: 600; padding: 9px 18px;
+}
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.primary:disabled { opacity: .55; cursor: default; filter: none; }
+
+.settings-msg:empty { display: none; }
+.settings-msg { margin: 14px 0 0; font-size: 12.5px; }
+.settings-msg.ok { color: var(--ok); font-weight: 600; }
+
+.settings-field textarea {
+  font: inherit; font-size: 13px; padding: 9px 11px; width: 100%;
+  border: 1px solid var(--line-2); border-radius: 9px; resize: vertical;
+  background: var(--card); color: var(--ink); line-height: 1.55;
+}
+.settings-field textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* the two attachments are stated, not offered — a job goes out as its BOQ and
+   its drawings or it does not go out */
+.attached {
+  margin: 16px 0 0; padding: 11px 14px; font-size: 12.5px; line-height: 1.55;
+  background: var(--bg-2, #f6f7f9); border: 1px solid var(--line); border-radius: 9px;
+  color: var(--ink-2);
+}
 
 /* ---------- header menus (File, account) ---------- */
 
@@ -456,6 +501,17 @@ body.signed-out .gate {
 .room-head:first-of-type { margin-top: 0; }
 /* every room's sheet lives under this one heading */
 .boq-head { background: var(--accent); }
+
+/* the heading and the workbook button sit on one line; the heading keeps its
+   own margins, so the row only has to align them */
+.boq-head-row { display: flex; align-items: center; gap: 12px; }
+.boq-head-row .room-head { flex: 1; margin-bottom: 14px; }
+.boq-head-row .btn { flex: none; }
+@media (max-width: 640px) {
+  .boq-head-row { flex-wrap: wrap; }
+  .boq-head-row .room-head { flex-basis: 100%; margin-bottom: 8px; }
+  .boq-head-row .btn { min-height: 40px; margin-bottom: 14px; }
+}
 
 .grand { border-color: var(--accent); }
 .grand td.desc { font-weight: 600; }
@@ -630,7 +686,9 @@ tr.total td.desc { text-transform: uppercase; letter-spacing: .5px; font-size: 1
   .summary .card { min-width: 0; }
 
   /* a form control has to be thumb-sized, and 16px stops iOS zooming on focus */
-  .f input, .f select, .auth-form input { min-height: 42px; font-size: 16px; }
+  .f input, .f select, .auth-form input,
+  .settings-field input { min-height: 42px; font-size: 16px; }
+  .settings-actions .btn.primary { min-height: 42px; width: 100%; }
   .chk { min-height: 40px; display: flex; align-items: center; }
   .chk input { width: 20px; height: 20px; }
 

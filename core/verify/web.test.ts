@@ -439,6 +439,7 @@ const APP_IDS = [
   '#jobNo',
   '#density',
   '#printBtn',
+  '#mailBtn',
   '#jobSearch',
   '#jobList',
   '#jobSearchMsg',
@@ -667,7 +668,12 @@ const PROFILE = {
   is_admin: false,
 };
 
-const acct = harness(APP_SOURCES, [...APP_IDS, '#admin', '#adminBody', '#adminBack'], {
+const acct = harness(APP_SOURCES, [
+    ...APP_IDS,
+    '#admin', '#adminBody', '#adminBack',
+    '#settings', '#settingsBody', '#settingsBack',
+    '#mail', '#mailBody', '#mailBack',
+  ], {
   '/api/config': { supabase: { url: SUPA, anonKey: 'anon-key' } },
   '/api/rules': { materials: { PPGI: [0.4] }, defaultSkin: { material: 'PPGI', thickness: 0.4 }, doorTypes: [], doorCores: ['Puf'], doorHands: ['LHS', 'RHS'], lCutMinWallTh: 50, doorTopMinWallHeight: 3050, floorMaterials: ['PPGI'], floorLayers: [], flashingTypes: ['U Flashing'] },
   '/api/jobs': [{ jobNo: 'HI-15191', rooms: [{ name: 'Freezer Room' }] }],
@@ -863,13 +869,28 @@ await t('a session is kept, so a reload does not sign the estimator out', () => 
 
 console.log('\n  access, and the administrator\n');
 
-/** A harness that is already signed in, with the profile it is given. */
-const signedInAs = (profile: Record<string, unknown>, users?: unknown) => {
-  const h = harness(APP_SOURCES, [...APP_IDS, '#admin', '#adminBody', '#adminBack'], {
-    '/api/config': { supabase: { url: SUPA, anonKey: 'anon-key' } },
+/**
+ * A harness that is already signed in, with the profile it is given.
+ *
+ * @param mail what /api/config says about email, so a test can have the server
+ * configured for it or not.
+ */
+const signedInAs = (
+  profile: Record<string, unknown>,
+  users?: unknown,
+  mail: { mail: boolean; mailReason?: string } = { mail: true },
+) => {
+  const h = harness(APP_SOURCES, [
+    ...APP_IDS,
+    '#admin', '#adminBody', '#adminBack',
+    '#settings', '#settingsBody', '#settingsBack',
+    '#mail', '#mailBody', '#mailBack',
+  ], {
+    '/api/config': { supabase: { url: SUPA, anonKey: 'anon-key' }, ...mail },
     '/api/rules': { materials: { PPGI: [0.4] }, defaultSkin: { material: 'PPGI', thickness: 0.4 }, doorTypes: [], doorCores: ['Puf'], doorHands: ['LHS'], lCutMinWallTh: 50, doorTopMinWallHeight: 3050, floorMaterials: ['PPGI'], floorLayers: [], flashingTypes: ['U Flashing'] },
     '/api/jobs': [],
     '/api/render': RENDER_REPLY,
+    '/api/mail': { ok: true, attached: ['HI-20001-BOQ.xlsx', 'HI-20001-drawing.pdf'], replyTo: 'asha@example.com' },
     [`${SUPA}/auth/v1/token`]: SESSION,
     [`${SUPA}/rest/v1/profiles`]: (url: string) =>
       url.includes('order=') ? (users ?? [profile]) : [profile],
@@ -989,6 +1010,294 @@ await t('any number of days can be typed, for when the three buttons do not fit'
     (new Date((patch!.body as { access_until: string }).access_until).getTime() - Date.now()) /
     86400000;
   assert.ok(days > 89 && days < 91, `should be about 90 days, was ${days}`);
+});
+
+console.log('\n  settings — where this estimator\'s paperwork goes\n');
+
+/** Open *My settings* on a harness that is already signed in. */
+const openSettingsOn = async (h: Harness) => {
+  const open = [...walk(h.ids.get('#accountPanel')!)].find(
+    (n) => n.tag === 'button' && textOf(n).trim() === 'My settings',
+  );
+  assert.ok(open, 'no My settings button');
+  open!.fire('click');
+  await settle();
+};
+
+/** The box under the label an estimator reads. */
+const settingsInput = (h: Harness, label: string) => {
+  const field = [...walk(h.ids.get('#settingsBody')!)].find(
+    (n) => n.className === 'settings-field' && textOf(n).includes(label),
+  );
+  return field && [...walk(field)].find((n) => n.tag === 'input');
+};
+
+const saveSettingsButton = (h: Harness) =>
+  [...walk(h.ids.get('#settingsBody')!)].find(
+    (n) => n.tag === 'button' && textOf(n).trim() === 'Save settings',
+  );
+
+/** A profile with somewhere for its paperwork to go. */
+const KITTED = {
+  ...PROFILE,
+  drive_folder_url: 'https://drive.google.com/drive/folders/abc123',
+  sheet_url: 'https://docs.google.com/spreadsheets/d/sheet123/edit',
+  drive_script_url: 'https://script.google.com/macros/s/dep123/exec',
+  mail_from: 'asha@example.com',
+};
+
+await t('every signed-in estimator is offered their settings, admin or not', async () => {
+  const ordinary = signedInAs(PROFILE);
+  await settle();
+  const items = textOf(ordinary.ids.get('#accountPanel'));
+  assert.ok(items.includes('My settings'), 'an ordinary estimator must be offered it');
+  assert.ok(!items.includes('Manage users'), 'and still not the admin screen');
+});
+
+await t('the screen opens showing what is already saved', async () => {
+  const h = signedInAs(KITTED);
+  await settle();
+  await openSettingsOn(h);
+
+  assert.equal(h.ids.get('#settings')!.hidden, false, 'the panel should be showing');
+  assert.equal(
+    settingsInput(h, 'Google Drive folder link')!.value,
+    KITTED.drive_folder_url,
+    'the saved folder should be in its box',
+  );
+  assert.equal(settingsInput(h, 'Google Sheet link')!.value, KITTED.sheet_url);
+  assert.equal(settingsInput(h, 'Send email from')!.value, 'asha@example.com');
+});
+
+await t('the Apps Script box is gone, and its column is left alone', async () => {
+  /*
+   * Phase 11 stopped being "an Apps Script each estimator deploys" on 18 August
+   * — the shop asked for two links and one shared ID instead. The box came off
+   * the form the same day, on this repo's rule that a control which does
+   * nothing is worse than no control. The column stays, and a save must not
+   * blank what an early tester already typed into it.
+   */
+  const h = signedInAs(KITTED);
+  await settle();
+  await openSettingsOn(h);
+  assert.equal(settingsInput(h, 'Apps Script'), undefined, 'the box should be gone');
+
+  const before = h.posts.length;
+  saveSettingsButton(h)!.fire('click');
+  await settle();
+  const patch = h.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  const body = patch!.body as Record<string, unknown>;
+  assert.ok(!('drive_script_url' in body), 'a column the screen does not show is not written');
+  assert.ok(!('sheet_script_url' in body), 'nor this one');
+});
+
+await t('saving writes the four columns the screen shows, to that estimator\'s own row', async () => {
+  const h = signedInAs(PROFILE);
+  await settle();
+  await openSettingsOn(h);
+
+  settingsInput(h, 'Google Drive folder link')!.value =
+    'https://drive.google.com/drive/folders/newfolder';
+  settingsInput(h, 'Google Sheet link')!.value =
+    'https://docs.google.com/spreadsheets/d/newsheet/edit';
+  settingsInput(h, 'Send email from')!.value = 'asha@example.com';
+
+  const before = h.posts.length;
+  saveSettingsButton(h)!.fire('click');
+  await settle();
+
+  const patch = h.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  assert.ok(patch, 'nothing was saved');
+  assert.ok(
+    patch!.url.includes(`id=eq.${SESSION.user.id}`),
+    `it must name its own row: ${patch!.url}`,
+  );
+  const body = patch!.body as Record<string, unknown>;
+  assert.equal(body.drive_folder_url, 'https://drive.google.com/drive/folders/newfolder');
+  assert.equal(body.sheet_url, 'https://docs.google.com/spreadsheets/d/newsheet/edit');
+  assert.equal(body.mail_from, 'asha@example.com');
+  /*
+   * Neither of these may travel with a profile save. The database refuses them
+   * either way — `profiles_guard_privileges` in sql/04-profile-fields.sql — but
+   * the app has no business asking, and a request it does not send is one
+   * nobody has to reason about.
+   */
+  assert.ok(!('access_until' in body), 'a settings save must never carry access');
+  assert.ok(!('is_admin' in body), 'a settings save must never carry admin rights');
+  assert.ok(textOf(h.ids.get('#settingsBody')).includes('Saved.'), 'it should say it saved');
+});
+
+await t('a link that is not the one asked for is said, and still saved', async () => {
+  /*
+   * Said, not corrected — the same rule the wall chain that does not close
+   * follows. Both boxes take a Google URL and they are not interchangeable, so
+   * the sheet link in the folder box is the mistake worth naming.
+   */
+  const h = signedInAs(PROFILE);
+  await settle();
+  await openSettingsOn(h);
+
+  settingsInput(h, 'Google Drive folder link')!.value =
+    'https://docs.google.com/spreadsheets/d/sheet123/edit';
+
+  const before = h.posts.length;
+  saveSettingsButton(h)!.fire('click');
+  await settle();
+
+  const patch = h.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  assert.ok(patch, 'what was typed must still be saved');
+  assert.equal(
+    (patch!.body as Record<string, unknown>).drive_folder_url,
+    'https://docs.google.com/spreadsheets/d/sheet123/edit',
+    'it must be stored exactly as typed, not corrected',
+  );
+  const said = textOf(h.ids.get('#settingsBody'));
+  assert.ok(said.includes('Saved.'), `it saved: ${said}`);
+  assert.ok(
+    said.includes('Google Drive folder link does not look like'),
+    `and said so: ${said}`,
+  );
+});
+
+await t('the mail_from box states the one thing that decides whether email arrives', async () => {
+  // Brevo will not send as an address it cannot prove the sender owns. That is
+  // not a rule this app can bend, so the box has to say it where it is read.
+  const h = signedInAs(PROFILE);
+  await settle();
+  await openSettingsOn(h);
+  const said = textOf(h.ids.get('#settingsBody'));
+  assert.ok(said.includes('verified as a sender'), `the constraint must be on screen: ${said}`);
+  assert.ok(said.includes('Reply-To'), 'and what happens to replies');
+});
+
+console.log('\n  email — the job, sent out\n');
+
+/** The box under a label on the email form. */
+const mailInput = (h: Harness, label: string) => {
+  const field = [...walk(h.ids.get('#mailBody')!)].find(
+    (n) => n.className === 'settings-field' && textOf(n).includes(label),
+  );
+  return field && [...walk(field)].find((n) => n.tag === 'input' || n.tag === 'textarea');
+};
+
+const openMailOn = async (h: Harness) => {
+  h.ids.get('#mailBtn')!.fire('click');
+  await settle();
+};
+
+await t('the Email button sits beside Print, and opens the form', async () => {
+  const h = signedInAs(PROFILE);
+  await settle();
+  await openMailOn(h);
+
+  assert.equal(h.ids.get('#mail')!.hidden, false, 'the panel should be showing');
+  for (const label of ['To', 'CC', 'BCC', 'Subject', 'Message']) {
+    assert.ok(mailInput(h, label), `no ${label} box`);
+  }
+});
+
+await t('the subject is filled in with the job number', async () => {
+  const h = signedInAs(PROFILE);
+  await settle();
+  h.ids.get('#jobNo')!.value = 'HI-20001';
+  h.ids.get('#jobNo')!.fire('input');
+  await settle();
+  await openMailOn(h);
+
+  assert.equal(mailInput(h, 'Subject')!.value, 'HI-20001 — drawings and BOQ');
+});
+
+await t('the two attachments are stated, not offered as a choice', async () => {
+  // a job goes out as its BOQ and its drawings or it does not go out
+  const h = signedInAs(PROFILE);
+  await settle();
+  await openMailOn(h);
+  const said = textOf(h.ids.get('#mailBody'));
+  assert.ok(said.includes('Excel workbook'), `the workbook should be named: ${said}`);
+  assert.ok(said.includes('PDF'), 'the drawings should be named');
+  const boxes = [...walk(h.ids.get('#mailBody')!)].filter(
+    (n) => n.tag === 'input' && n.attrs.type === 'checkbox',
+  );
+  assert.equal(boxes.length, 0, 'there must be nothing to untick');
+});
+
+await t('Send posts the job and the boxes, as the signed-in estimator', async () => {
+  const h = signedInAs(PROFILE);
+  await settle();
+  await openMailOn(h);
+
+  mailInput(h, 'To')!.value = 'customer@example.com';
+  mailInput(h, 'CC')!.value = 'office@example.com';
+  mailInput(h, 'Message')!.value = 'Drawings and BOQ attached.';
+
+  const before = h.posts.length;
+  [...walk(h.ids.get('#mailBody')!)]
+    .find((n) => n.tag === 'button' && textOf(n).trim() === 'Send')!
+    .fire('click');
+  await settle();
+
+  const sent = h.posts.slice(before).find((p) => p.url.includes('/api/mail'));
+  assert.ok(sent, 'nothing was sent');
+  const b = sent!.body as Record<string, unknown>;
+  assert.equal(b.to, 'customer@example.com');
+  assert.equal(b.cc, 'office@example.com');
+  assert.equal(b.text, 'Drawings and BOQ attached.');
+  /*
+   * The spec goes, not the BOQ. The server builds the attachments from it with
+   * the same calls /api/export makes — two builds of one sheet are two chances
+   * to disagree, and the customer must open what the estimator saw.
+   */
+  assert.ok(b.job && typeof b.job === 'object', 'the job spec has to go with it');
+  assert.ok(!('blocks' in (b.job as object)), 'a built BOQ must never be posted');
+
+  assert.ok(
+    textOf(h.ids.get('#mailBody')).includes('Sent'),
+    'it should say it sent, and what went with it',
+  );
+});
+
+await t('with no mail key the button says what is missing, and posts nothing', async () => {
+  /*
+   * A button that opens a form which cannot post anywhere is worse than no
+   * button — the same rule that kept the BOQ group field off the form. The key
+   * lives in the host environment, so the browser is told yes or no and never
+   * the key itself.
+   */
+  const h = signedInAs(PROFILE, undefined, {
+    mail: false,
+    mailReason: 'BREVO_API_KEY / MAIL_FROM are not set on the server',
+  });
+  await settle();
+  await openMailOn(h);
+
+  const said = textOf(h.ids.get('#mailBody'));
+  assert.ok(said.includes('not set up'), `it should say so: ${said}`);
+  assert.ok(said.includes('BREVO_API_KEY'), 'and name what is missing');
+  assert.equal(mailInput(h, 'To'), undefined, 'no form that cannot be sent');
+  assert.ok(
+    !h.posts.some((p) => p.url.includes('/api/mail')),
+    'nothing may be posted when email is off',
+  );
+});
+
+await t('what was typed survives going back and opening it again', async () => {
+  const h = signedInAs(PROFILE);
+  await settle();
+  await openMailOn(h);
+  const box = mailInput(h, 'To')!;
+  box.value = 'customer@example.com';
+  box.fire('input');
+
+  h.ids.get('#mailBack')!.fire('click');
+  await settle();
+  assert.equal(h.ids.get('#mail')!.hidden, true, 'Back should close it');
+
+  await openMailOn(h);
+  assert.equal(
+    mailInput(h, 'To')!.value,
+    'customer@example.com',
+    'a half typed email must not be thrown away',
+  );
 });
 
 console.log(`\n  ${passed} passed\n`);

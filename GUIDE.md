@@ -587,6 +587,96 @@ badi keemat hai.
 
 ---
 
+## Job ko bahar nikalna — Excel, PDF, DXF
+
+Teen download hain, aur teeno alag kaam ke liye hain:
+
+| Button | Kahan | Kya milta hai |
+|---|---|---|
+| **Excel — whole BOQ** | SHEET FABRICATION heading ke bagal | Har room ki apni sheet, plus Job total aur Flashing. Wahi numbers jo screen par hain. |
+| **PDF — whole sheet** | drawing ke upar, DXF ke bagal | Har view apne page par, page 1 par poori sheet. Har page apna scale likhta hai. |
+| **DXF** | drawing ke upar | Machine ke liye — **1:1 millimetre me**. Yahi wo file hai jisse cutting hoti hai. |
+
+**PDF aur DXF ka farak samajh lijiye.** DXF 1:1 hai, wahi factory ko jaata hai.
+PDF page par fit kiya jaata hai — isliye har page ke neeche uska scale likha
+rehta hai (jaise `Scale 1:14 on 420x297mm`). PDF customer ko bhejne ke liye aur
+padhne ke liye hai; **usse naap kar mat kaatiye**, uske liye DXF hai.
+
+Excel me **totals engine ke apne numbers hain, `=SUM` formula nahi.** Ye
+jaan-boojh kar hai: har number pehle hi half-up round ho chuka hai taaki printed
+sheet se mile, aur formula file khulte hi unhe dobara jodkar apni alag raay bana
+leta. BOQ ki ek hi raay honi chahiye.
+
+---
+
+## Email — job customer ko bhejna
+
+Header me **Print ke bagal** ek **Email** button hai. Uspe click kariye:
+
+| Box | Kya |
+|---|---|
+| **To** | Ek address, ya kai — comma se alag |
+| **CC / BCC** | Marzi ho to |
+| **Subject** | **Job number ke saath pehle se bhara hua** aata hai. Badalna ho to badal dijiye |
+| **Message** | Jo likhenge wahi jayega, plain text |
+
+**Attachment aap nahi chunte — wo apne aap jaate hain:** BOQ ka Excel workbook
+aur drawings ki PDF. Untick karne ka koi option nahi hai, jaan-boojh kar — job
+apne BOQ aur apni drawings ke saath hi bahar jata hai, ya nahi jata.
+
+Dono file **Send dabate waqt banti hain**, screen par jo job hai usi se. Isliye
+purani file bhejne ka sawal hi nahi.
+
+**Reply aapke paas hi aayega.** Mail bhale `info@panelsuite.online` se jaye,
+Reply-To hamesha aapka apna address rehta hai — customer Reply dabayega to seedha
+aapko milega.
+
+Kuch galat hoga to screen wahi batayegi: kis address ki shakl galat hai, subject
+khali hai, ya attachment 10MB se bade hain. Ye sab bhejne se **pehle** bataya
+jaata hai.
+
+> **Button "not set up" bole to** — server par `BREVO_API_KEY` aur `MAIL_FROM`
+> nahi lage hain. `SETUP.md` ka Part B aur Part D. Tab tak Excel aur PDF button
+> se file download karke khud attach kar lijiye.
+
+---
+
+## My settings — ek baar bhar dijiye
+
+Upar dayein apne email par click kijiye → **My settings**. Yahan paanch box hain,
+aur ye wo hain jinse job tool se bahar jaata hai: drawing aur BOQ aapke Drive
+folder me, BOQ ki lines aapki Google Sheet me, aur email customer ko.
+
+| Box | Kya daalna hai |
+|---|---|
+| **Your name** | Optional. Email par aapka naam. BOQ me kahin nahi aata. |
+| **Google Drive folder link** | Wo folder jahan job number ke naam se drawing PDF aur BOQ workbook file honge. Drive me folder kholiye aur address bar copy kar lijiye. |
+| **Google Sheet link** | Jis sheet me BOQ append hogi — har row par timestamp aur job number. |
+| **Apps Script Web App link** | `…/exec` par khatam hone wala URL. `SETUP.md` ka Part C batata hai ise kaise banate hain. |
+| **Send email from** | Jis address se mail jayega. Khali chhod dijiye to `info@panelsuite.online` se jayega. |
+
+**Teeno Google link alag cheezein hain aur aapas me badle nahi ja sakte.** Folder
+aur sheet ke link se koi *padh* sakta hai — likh koi nahi sakta. Likhne ka kaam
+sirf Apps Script wala link karta hai. Sabse aam galti folder ka link script wale
+box me paste kar dena hai; screen bata degi ki wo jo maanga tha wo nahi lagta —
+par **rokegi nahi**. Jo aapne type kiya wahi save hota hai, kyunki ho sakta hai
+aapka link sahi ho aur tool ne wo shakl pehle na dekhi ho.
+
+Folder baad me badalna ho to bas ye box badal dijiye. Script dobara deploy karne
+ki zaroorat nahi — folder ka pata script ke andar rakha hi nahi gaya, isi liye.
+
+> **Email kis address se jayega** — mail service (Brevo) sirf us address se
+> bhejta hai jise aap prove kar sakein ki aapka hai. `info@panelsuite.online`
+> bina kisi setup ke chalta hai. Apni khud ki ID (jaise Gmail) daalni ho to
+> Brevo me ek baar us address ko **Senders** me verify karna hoga, warna send
+> reject ho jayega. Dono soorat me **Reply-To aapki apni ID** rahegi, isliye
+> customer ka jawab seedha aapke paas aayega.
+
+Ye settings sirf aapki hain. Koi doosra estimator na inhe dekh sakta hai na
+badal sakta hai — ye database rokta hai, screen nahi.
+
+---
+
 ## Code me job add karna (verification ke liye)
 
 Neeche wala hissa tab kaam aata hai jab kisi job ko permanently repo me daalkar

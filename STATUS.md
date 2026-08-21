@@ -4,7 +4,7 @@ Read this first if you are picking the project up — on this machine or another
 `README.md` says what the engine does, `DESIGN.md` says where it is going, this
 file says what has actually happened and what is next.
 
-Last updated: 17 August 2026.
+Last updated: 21 August 2026 — the 18 August work was committed on 21 August, unpushed.
 
 ## What exists and works
 
@@ -26,7 +26,7 @@ uses.
 | Calculator (`server/`, `web/`) | multi-room, connected rooms, rooms of any right-angled shape typed wall by wall, per-wall sheets, doors, the L cut on or off, floor build-up and run direction, flashing |
 | Guide (`/guide`, `web/guide.js`) | `GUIDE.md` rendered in the app, one button in the header, one copy of the instructions |
 | Accounts (`web/auth.js`, `/api/config`) | sign up with email confirmation, sign in, File → New / Open / Save / Save As. Each estimator's jobs their own, enforced by the database |
-| Tests | 169, plus the line-by-line sheet diff |
+| Tests | 229, plus the line-by-line sheet diff |
 
 `npm run check` must print **`ALL ROWS MATCH across 3 jobs`** with 9 documented
 deviations and **1 plan finding** (HI-15191's ante room — see below). It did at
@@ -40,6 +40,186 @@ next step 1 since 14 August — an undefined identifier once survived a whole
 session in `web/app.js` because nothing in the repo ever ran the file. The stub
 DOM is deliberately small; extend it when the form needs something it lacks.
 The 3D maths in the browser is still only exercised from a throwaway harness.
+
+## What landed on 18 August
+
+**Phase 10 is built, Phase 11/12 groundwork is in, and one hole that was live is
+closed.** `npm run check` prints `ALL ROWS MATCH across 3 jobs` with the same 9
+deviations and 1 plan finding across **229 tests**. No BOQ figure moved.
+
+### Phase 10 — the workbook and the PDF
+
+`core/export/` — `zip.ts`, `xlsx.ts`, `pdf.ts` — plus `/api/export` and two
+buttons: **Excel — whole BOQ** beside the SHEET FABRICATION heading, and
+**PDF — whole sheet** beside the DXF button. Still no dependency.
+
+- **`.xlsx` is a ZIP written stored**, so no compressor and no package. CRC32 is
+  the one piece that could not be skipped. Timestamps are fixed rather than the
+  clock, so the same job twice is byte-identical.
+- **The totals row is a literal number, never `=SUM`.** Every figure is already
+  rounded half-up to agree with the printed sheet; a formula would re-add them
+  on open and quietly become a second opinion about a BOQ that was checked line
+  by line. Every worksheet is asserted free of `<f>` and `SUM(`.
+- **A drawing PDF is a page per view**, composed sheet first. One A3 holding all
+  fourteen of HI-15191's views came out at 1:159 with nothing legible. Each page
+  is fitted and oriented on its own and **states its scale** — a drawing whose
+  scale is not printed is one somebody will measure off wrongly. The DXF is
+  still the 1:1 thing the machine cuts from.
+- **Two faults came out of looking at a rendered page, not out of a test.** The
+  em dash in every drawing title printed as `?`, and the drawing sat at a fifth
+  of the page because `toSvg`'s 30% padding suits a screen that scrolls and not
+  paper. `boundsOf` is exported from `sheet.ts` and reused for the page size.
+  This is the second time presentation has been caught by looking — `CLAUDE.md`
+  already says the harness checks behaviour and the eye checks the picture.
+
+**Checked from outside, not assumed:** Windows' ZIP reader expands the workbook,
+**Excel opens it** — four sheets, correct headers, and `Total` reading 23 / 46 /
+300.97 / 64.73, which is exactly what `buildJob` prints — and the **Windows PDF
+engine** parses the 15-page export and renders every page. Both files were also
+fetched over HTTP from `/api/export` rather than only built in a test.
+
+### Phase 12 — email, built
+
+An **Email** button beside Print. To / CC / BCC / Subject / Message, the subject
+already carrying the job number, and **both attachments automatic** — the BOQ
+workbook and the drawing PDF, built by the server when Send is pressed from the
+same calls `/api/export` makes. There is nothing to untick: a job goes out as
+its BOQ and its drawings or it does not go out.
+
+- `server/mail.ts` is the Brevo client — one `fetch`, no dependency, and the key
+  never leaves the process. That is the whole reason it goes through our server
+  rather than straight from the page.
+- **Reply-To is the signed-in estimator**, read from Supabase with their own
+  token rather than taken from the request. The From may have to be
+  `info@panelsuite.online`, because Brevo will not send as an address it cannot
+  prove the sender owns; the Reply-To is always a person.
+- **What is wrong is said here, not by Brevo** — empty recipients, a malformed
+  address named so it can be found, an empty subject, and attachments over 10MB
+  measured at their base64 size, which is what actually travels.
+- **No key, no form.** `/api/config` hands over a boolean and never the key;
+  without `BREVO_API_KEY` and `MAIL_FROM` the panel names what is missing and
+  posts nothing.
+
+Checked by running it: `/api/config` reports `mail:false` and `/api/mail`
+answers **501** naming both variables; with the variables set it reports
+`mail:true` and answers **401 "Sign in to send an email."** — so the two gates
+fire in the right order. 15 tests in `core/verify/mail.test.ts` cover the
+address parsing, every refusal, and the exact JSON Brevo is handed; 6 more in
+`web.test.ts` drive the form.
+
+**Still to do before an email actually arrives:** `BREVO_API_KEY` and
+`MAIL_FROM` in Hostinger's environment. Until they are there the button is
+honest about being switched off.
+
+### A bug found on the way, in code this touched
+
+`/api/admin/user` read `profiles?select=id,is_admin&limit=1` — *whichever row
+comes first*. That is the caller's own row only while they can read exactly one,
+and **an administrator can read all of them**. So the "are you an admin" check
+and the "you cannot delete your own account" check were both being made against
+somebody else's row. This is the identical mistake `web/auth.js` was fixed for
+on 17 August, and STATUS.md already carried the warning: *anything that reads a
+single row should name it*. It reappeared in the server because that file was
+written before the lesson.
+
+Both endpoints now go through `whoIsCalling`, which asks `/auth/v1/user` — the
+one endpoint whose entire answer is "you". Naming the row was not enough here:
+the caller's own id is exactly what was being looked up.
+
+### Phase 11 changed shape — read this before building it
+
+The shop restated the requirement on 18 August: an estimator pastes **two
+links**, and those files are shared **with one ID in Editor mode**. No
+per-estimator Apps Script deploy. Two things follow:
+
+- **"Public" cannot be written to.** *Anyone with the link — Editor* lets **a
+  person in a browser** edit. A server still needs a credential. This is the
+  obvious thing to reach for and it fails at the first upload.
+- **"One ID, shared as Editor" is exactly right** — it is a **service account**.
+  One identity, its private key on the server, every estimator shares with it.
+  `node:crypto` signs the JWT, so no dependency.
+
+**But a service account has no Drive storage quota**, so it cannot create a file
+in an ordinary My Drive folder — `storageQuotaExceeded`. A Shared Drive fixes it
+and needs Google Workspace. **The shop is on ordinary free Gmail** (asked and
+answered), so Phase 11 becomes **Sign in with Google**: the estimator connects
+their account once from the profile, the server keeps the refresh token, and
+files are created as them — their file, their quota, their folder. One
+mechanism covers the Sheet as well.
+
+Cost, recorded now rather than discovered later: a Google Cloud OAuth client
+(id and secret as environment variables, never in this repo), a consent screen,
+and refresh tokens per user in `profiles`. Google's *Testing* mode allows 100
+users without verification, which is more than this shop needs.
+`tools/apps-script/panel-suite.gs` stays as the fallback.
+
+### Phase 11 groundwork
+
+- **A profile screen: *My settings*, in the account menu.** Five boxes — name,
+  Drive folder link, Google Sheet link, Apps Script Web App link, and the
+  address email is sent from. This is what Phases 11 and 12 read; without it a
+  push and a send have nowhere to go. `web/auth.js` gained `settings` and
+  `saveSettings`, and the screen borrows the admin panel's frame.
+- **Two new profile columns, `drive_folder_url` and `sheet_url`.** The folder id
+  used to live inside the deployed Apps Script, which made "change the folder"
+  mean "redeploy a Google script". The target now travels with the request, so
+  it is one box in the app. Reasoning in `DESIGN.md`.
+- **The Apps Script has one copy, `tools/apps-script/panel-suite.gs`.** It was
+  written out inside `SETUP.md`; that section now says to open the file instead.
+  Two copies of a script drift and the one that runs is the one nobody edited —
+  the same reasoning that makes `/guide` render `GUIDE.md` rather than repeat
+  it. While moving it, it grew a per-job sub-folder, the timestamp and job
+  number on every appended row, and a failure that is reported rather than
+  swallowed.
+- **A wrong link is said, not refused.** Three of the five boxes take a Google
+  URL and only one of them can write; pasting the folder link into the script
+  box is the mistake the screen exists to catch. It names what does not look
+  right and **saves what was typed anyway**, exactly as the wall chain that does
+  not close is reported rather than nudged shut.
+
+### The hole — worth reading before touching any policy
+
+**A row level policy is not a column level one.** `change own profile` is
+`for update using (auth.uid() = id)`: it says which *rows* may be updated and
+nothing at all about which *columns*. So any signed-in estimator could send
+
+    PATCH /rest/v1/profiles?id=eq.<their own id>   { "is_admin": true }
+
+and Postgres would allow it — the row is still theirs, so the policy is still
+satisfied. Every gate in this app sits behind `is_admin` and `has_access()`, so
+that one request was the administrator's screen and a licence that never
+expires. **Nothing in the app ever sent it**, which is exactly why it survived:
+the app was not the attack surface, the anon key and an ordinary session were.
+This was live on `panelsuite.online`.
+
+`sql/04-profile-fields.sql` closes it with a `before update` trigger that raises
+if a non-admin's update touches `access_until`, `is_admin`, `email` or `id`.
+Column privileges were the obvious fix and are wrong here — they attach to the
+role, and an administrator is `authenticated` too, so revoking the column from
+the role would take it from the admin screen as well.
+
+**Run on the live project on 18 August**, and confirmed by the column check in
+`SETUP.md` A4. It is not a new-database step — until it ran, the hole was open
+on `panelsuite.online`. It skips when `auth.uid()` is null so the service key,
+the SQL editor and `02-access-and-admin.sql`'s backfill are unaffected.
+
+**That skip is also why the SQL Editor cannot test it.** An `update profiles set
+is_admin = true` typed there succeeds, because the editor has no `auth.uid()` —
+and reads exactly like the fix having failed. The real test is a `PATCH` from a
+signed-in browser session, and it has to be a **non-admin** one, since the
+trigger lets an administrator through by design. `SETUP.md` A4 has both.
+
+Tests: `core/verify/web.test.ts` is 44, five of them new — the screen shows what
+is saved, saving names its own row and carries neither `access_until` nor
+`is_admin`, a wrong-looking link is said and still stored, and the Brevo sender
+constraint is on the screen where it is read.
+
+**Email goes through Brevo — decided by the shop on 18 August**, over sending
+from the estimator's own Gmail via the Phase 11 Apps Script. Both were put to
+them. What it costs is in `DESIGN.md` and on the settings screen: Brevo will not
+send as an address it cannot prove the sender owns, so `info@panelsuite.online`
+works out of the box and an estimator's own address needs a one-time verify in
+Brevo. The estimator's address is the Reply-To either way.
 
 ## What landed on 17 August
 
@@ -528,36 +708,64 @@ three stand on.
 
 ## What to do next
 
-In rough order of value:
+**First, and asked for by the shop: finish getting a job out of the tool.**
+Five things were asked for on 18 August; the first is built, the rest are not.
+In dependency order, because each needs the one before it:
 
-1. **Look at the app in a real browser.** Still outstanding from 14 August and
+1. ✅ **Profile settings** — Drive folder URL, Sheet URL, script URL, mail from.
+   Built 18 August, and **`sql/04-profile-fields.sql` has been run on the live
+   project** the same day. Checked from outside rather than taken on trust:
+   all six profile columns answer on `kyzexsarilxkzwkntode`, where
+   `drive_folder_url` and `sheet_url` had both replied *"does not exist"* before
+   it ran — and an anonymous read of `profiles` and `jobs` still comes back `[]`,
+   so nothing was widened on the way.
+2. ✅ **The workbook and the PDF** — Phase 10, built 18 August. `core/export/`,
+   `/api/export`, and the two download buttons. The bytes those buttons produce
+   are the bytes Phases 11 and 12 send; nothing is rebuilt for a different
+   destination, because two builds are two chances to disagree.
+3. ✅ **Email** — Phase 12, built 18 August. The button, the form, both
+   attachments, and every refusal answered in words an estimator can act on.
+   **Two environment variables away from working**: `BREVO_API_KEY` and
+   `MAIL_FROM` in Hostinger. Until they are set the button says so.
+4. **Google — Sign in with Google, then Drive and Sheet** — Phase 11, and the
+   next thing to build. Its shape changed on 18 August; read the section above
+   before starting. In order: an OAuth client in Google Cloud, a **Connect
+   Google** button on the settings screen, refresh tokens in `profiles`, then
+   `/api/push` — file the two exports into the estimator's folder under the job
+   number and append the BOQ rows to their sheet with the timestamp and job
+   number on every row. **`job_exports` has no SQL file yet** — it is specified
+   in `DESIGN.md` and needs writing. A push that silently did nothing is the
+   worst outcome here: the estimator would believe the drawing office has the
+   sheet.
+
+Then, in rough order of value:
+
+5. **Look at the app in a real browser.** Still outstanding from 14 August and
    now bigger: the drawing sheet, the 3D view, the door swing on the plan and
    the new guide page have all been verified headless, and none of them has been
    *seen*. `npm run dev`, then the Guide button, a door with a hand on it, and a
    room over 3050 high.
-2. **Transcribe HI-15191's printed flashing rows** — Inner PP, Outer PP, Flat
+6. **Transcribe HI-15191's printed flashing rows** — Inner PP, Outer PP, Flat
    Strip and U flashing 120/60, with profile and RMTR. The shop is sending them.
    They settle the one rule in the engine that no sheet backs, and the older
    finding that perimeter estimates missed those figures both ways. The 17
    August open-end rule rides on the same reckoning and is settled by the same
    rows.
-3. **Get the printed sheet for a floor that is not PPGI + ply** — the shop has
+7. **Get the printed sheet for a floor that is not PPGI + ply** — the shop has
    one. Transcribe it as a job + expected pair and it settles how SS and
    chequered layers are counted, which is the one part of the floor build-up
    left unbuilt.
-4. **A printed sheet from a job with walls over 3050** would be the first that
+8. **A printed sheet from a job with walls over 3050** would be the first that
    can check the door top panel at all — its size, its blank, and whether the
    shop splits it when the door module is wider than the panel module. The
    engine makes one panel and does not split.
-5. **Point a real domain at it, once there is a login.** The deploy is done and
-   live on the temporary domain. There is still no account on it, so anyone with
-   the URL has the tool and every job in it — a temporary domain is unguessed,
-   not secret. Either Phase 9 lands first, or basic auth goes in front of it.
-6. **The rest of Phase 4 in `DESIGN.md`** — machine maximum panel length and the
-   ceiling light cutout. Both in the legacy calculator, neither in this engine.
-   The door top panel is done, on the shop's own rule rather than legacy's.
-7. **Phase 3** — deriving partitions from geometry rather than a tick, which
-   unlocks HI-15279's Ambient+Milk block and HI-15252.
+9. **Rotate the two Brevo keys** — see the section above. Not urgent, and it
+   stops being a loose end the moment Phase 12 puts the API key to work.
+10. **The rest of Phase 4 in `DESIGN.md`** — machine maximum panel length and the
+    ceiling light cutout. Both in the legacy calculator, neither in this engine.
+    The door top panel is done, on the shop's own rule rather than legacy's.
+11. **Phase 3** — deriving partitions from geometry rather than a tick, which
+    unlocks HI-15279's Ambient+Milk block and HI-15252.
 
 ## What must not be done
 

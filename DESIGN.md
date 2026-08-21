@@ -409,6 +409,8 @@ profiles
   drive_script_url  text   -- the Apps Script Web App, phase 11
   sheet_script_url  text   -- may be the same one
   mail_from     text       -- phase 12
+  drive_folder_url  text   -- WHERE the files land   (added 18 Aug)
+  sheet_url         text   -- WHERE the rows append  (added 18 Aug)
 
 jobs
   id          uuid
@@ -428,6 +430,29 @@ figure is how a saved job and a fresh one start to disagree.
 
 `unique (user_id, job_no)` is what makes **Save** an upsert and **Save As** a
 new row, and it is per user: two estimators may each have their own HI-15191.
+
+**The script URL and the target URL are separate on purpose** (18 August). The
+first design had the folder id inside the deployed script, which meant changing
+which folder a job filed into was editing and redeploying a Google script. The
+target now travels with the request and lives in the profile, so it is one box
+in the app. The script keeps a `FOLDER_ID` constant as the fallback for a
+request that names no folder, and nothing else.
+
+**A row level policy is not a column level one** (18 August). `change own
+profile` says `auth.uid() = id` — which rows may be updated, and nothing about
+which columns. Any signed-in estimator could therefore have PATCHed their own
+row with `{"is_admin": true}` and Postgres would have allowed it: the row is
+still theirs, so the policy is still satisfied. Every gate in the app sits
+behind `is_admin` and `has_access()`, so that one request was the administrator's
+screen and a permanent licence. Nothing in the app ever sent it; the anon key
+and an ordinary session were enough to send it by hand.
+
+Column privileges are the usual fix and are wrong here, because they attach to
+the role and an administrator is `authenticated` too — revoking `access_until`
+from the role takes it from the admin screen as well. A `before update` trigger
+can tell the two apart, needs no change in the app, and raises rather than
+silently reverting. It is in `sql/04-profile-fields.sql`, and it is the reason
+that file has to be run on an existing project and not only a new one.
 
 ### Phase 9 — accounts and saved jobs
 
@@ -461,7 +486,91 @@ totals row must be the engine's own total rather than an Excel `SUM` — otherwi
 a spreadsheet formula quietly becomes a second opinion about the BOQ. This is
 the same reasoning that keeps `toFixed` out of the browser.
 
-### Phase 11 — Google, through the estimator's own script
+### Phase 10 result
+
+Built on 18 August 2026. `core/export/` — `zip.ts`, `xlsx.ts`, `pdf.ts` — with
+`/api/export` serving both and two buttons in the app. No dependency; the rule
+held everywhere it was tested against.
+
+- **The workbook is a stored ZIP.** No compressor, so no package: the one piece
+  that could not be skipped is CRC32, which the format checksums every entry
+  with. Entry timestamps are **fixed rather than the clock**, so the same job
+  exported twice is byte-identical — a re-push of an unchanged job does not look
+  like a change, and a test can assert on bytes.
+- **The totals row is a literal number.** Checked from outside: Excel opened the
+  file and reports `Formula = '300.97'`, not `=SUM(...)`. Every worksheet part is
+  asserted free of `<f>` and of `SUM(`.
+- **The PDF settles the "1:1 in millimetres" question above.** Taken literally a
+  six metre drawing is a six metre page, past the format's own 200 inch limit
+  and unprintable. So the *coordinates* are 1:1 — every number in the content
+  stream is the raw millimetre figure — and one `cm` matrix maps them to a sheet
+  of paper. **The ratio that matrix works out is printed on the page**, because a
+  drawing whose scale is not stated is one somebody will measure off. The DXF
+  stays the 1:1 artefact that goes to the machine.
+- **A drawing PDF is a page per view**, with the composed sheet as page one.
+  Fourteen views on a single A3 came out at 1:159 and nothing on it was legible.
+  Each page is fitted and oriented on its own — a tall elevation gets portrait, a
+  wide ceiling plan landscape — and states its own scale.
+- **Two faults were found by rendering the file and looking at it**, neither of
+  which any test would have caught: the em dash in every drawing title printing
+  as `?` (WinAnsiEncoding has no code point for it, so the few characters this
+  repo writes are transliterated), and the drawing sitting at a fifth of the
+  page because `toSvg`'s 30% padding is right for a screen that scrolls and
+  wrong for paper. The page is sized from `boundsOf` now — the sheet composer's
+  own function, exported and reused rather than reimplemented.
+
+Checked from outside rather than assumed: Windows' own ZIP reader expands the
+workbook, **Excel opens it** with all four sheets named and its figures equal to
+`buildJob`'s, and the **Windows PDF engine** parses the 15-page export and
+renders every page.
+
+### Phase 11 rewritten — 18 August, and why
+
+The shop stated the requirement plainly: an estimator pastes **two links** —
+their Google Sheet and their Drive folder — and those are shared either publicly
+or **with one ID, in Editor mode**. No per-estimator Apps Script deploy.
+
+**Half of that does not work, and the half that does is the important half.**
+
+- **"Public" cannot be written to.** A folder or sheet shared as *Anyone with
+  the link — Editor* can be edited by **a person in a browser**. It cannot be
+  written by a server: every Google write API demands a credential, however open
+  the link is. This is the same fact recorded at the top of this section, and it
+  is worth restating because "make it public" is the obvious thing to reach for
+  and it fails silently at the first upload.
+- **"Share it with one ID in Editor mode" is exactly right**, and it has a name:
+  a **service account**. One Google identity with a private key held by the
+  server; every estimator shares their folder and sheet with that one address.
+  No script to deploy, no per-user setup — which is what makes it the better
+  design for this shop. Node signs the JWT with `node:crypto`, so **still no
+  dependency**.
+
+**But a service account cannot put a file in an ordinary Drive folder.** It has
+no storage quota of its own, so a file it creates in somebody's My Drive fails
+with `storageQuotaExceeded`. Two ways round it, and the shop's answer decides:
+
+| | Sheet append | Drive upload |
+|---|---|---|
+| Service account + **Shared Drive** (needs Workspace) | works | works — the file belongs to the Shared Drive |
+| Service account + ordinary Drive | works | **fails** — no quota |
+| **Sign in with Google** per estimator | works | works — the file is theirs |
+
+**The shop is on ordinary free Gmail** (asked and answered, 18 August). So the
+Drive half becomes **Sign in with Google**: the estimator connects their account
+once from the profile screen, the server keeps the refresh token, and files are
+created as them — their file, their quota, their folder. The Sheet half can use
+the same token, so there is one mechanism rather than two.
+
+What that costs, recorded now rather than discovered later: a Google Cloud OAuth
+client (id and secret as environment variables, never in this repo), a consent
+screen, and refresh tokens stored per user in `profiles`. Google's *Testing*
+mode allows 100 users without verification, which is more than this shop needs.
+
+The Apps Script design below is **not being built**. It is kept because it is
+the fallback if OAuth verification ever becomes an obstacle, and because
+`tools/apps-script/panel-suite.gs` already exists and works.
+
+### Phase 11 as originally designed — Google, through the estimator's own script
 
 The profile takes two URLs, both Apps Script Web Apps the estimator deploys.
 Saving a job POSTs to them from the server:
@@ -489,6 +598,60 @@ written and no mail port has to be open on the host; the API key is an
 environment variable, and the sending domain needs its two DNS records before
 anything will arrive. Nothing about the BOQ is re-computed to send it — the
 attachments are the same bytes the download buttons give.
+
+**The service is Brevo, chosen by the shop on 18 August**, over the alternative
+of sending from the estimator's own Gmail through the same Apps Script that
+Phase 11 uses. Both were put to them; this is the one they took, and it is what
+this section already specified.
+
+What it costs, stated so nobody rediscovers it from a bounced send: **Brevo will
+not send as an address it cannot prove the sender owns.** `panelsuite.online` is
+authenticated, so `info@panelsuite.online` works with no further setup. An
+estimator who wants their own address in the From line has to add it under
+*Senders* in Brevo once and click the confirmation link. Either way the
+estimator's own address is the **Reply-To**, so the customer replies to a person
+rather than to the tool. `mail_from` on the profile is that address; blank falls
+back to the authenticated domain. The settings screen says all of this beside
+the box, because it is the difference between an email arriving and a 400 from
+Brevo that nobody can interpret.
+
+### Phase 12 result
+
+Built on 18 August 2026. `server/mail.ts`, `/api/mail`, and an **Email** button
+beside Print opening a To / CC / BCC / Subject / Message form.
+
+- **The attachments are not a choice.** A job goes out as its BOQ workbook and
+  its drawing PDF or it does not go out, so there is nothing to untick — a test
+  asserts the form has no checkbox. They are built by the server when Send is
+  pressed, with the same calls `/api/export` makes, so what the customer opens
+  is what the estimator saw. Nothing about the BOQ is rebuilt for a different
+  destination.
+- **The subject arrives filled in with the job number**, and can be changed. It
+  is what a customer replies about and what anyone searching a mailbox six
+  months later types.
+- **Reply-To is the signed-in estimator, read from Supabase** through
+  `/auth/v1/user` with their own token — not taken from the request, which the
+  browser could put anything in. The From may have to be the authenticated
+  domain; the Reply-To is always a person.
+- **What is wrong is answered here, not by Brevo.** An empty recipient list, a
+  malformed address (named, so it can be found), an empty subject, and
+  attachments over the 10MB ceiling — checked against the *base64* size, which
+  is what travels and is a third larger than the bytes. Brevo's reply to an
+  empty recipient is `invalid_parameter`, which tells an estimator nothing about
+  the box they left blank.
+- **With no key the button says so.** `/api/config` hands the browser a boolean
+  and never the key; without `BREVO_API_KEY` and `MAIL_FROM` the panel names
+  what is missing and posts nothing, rather than opening a form that cannot
+  reach anywhere. Same rule that kept the BOQ group field off the form.
+
+**A bug fixed on the way, in code this touched:** `/api/admin/user` checked
+`profiles?select=id,is_admin&limit=1` — "whichever row comes first", which is
+the caller's own row only while they can read exactly one. An administrator can
+read all of them, so the admin check and the "cannot delete your own account"
+check were both being made against a stranger. This is the identical mistake
+`web/auth.js` was fixed for on 17 August. Both endpoints now go through
+`whoIsCalling`, which asks `/auth/v1/user` — the one endpoint whose entire
+answer is "you".
 
 ### Phase 9 result
 

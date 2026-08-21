@@ -32,7 +32,10 @@ import {
   toSvg,
 } from '../core/draw/index.ts';
 import { compileWalls } from '../core/plan.ts';
+import { toXlsx, xlsxFileName, XLSX_MIME } from '../core/export/xlsx.ts';
+import { toPdfPages, pdfFileName, PDF_MIME } from '../core/export/pdf.ts';
 import { binding, environmentReport } from './config.ts';
+import { defaultSubject, parseAddresses, sendMail } from './mail.ts';
 import {
   DEFAULT_FLOOR_LAYERS,
   DEFAULT_SKIN,
@@ -229,10 +232,83 @@ const send = (res: ServerResponse, code: number, body: string, type: string) => 
 const json = (res: ServerResponse, code: number, data: unknown) =>
   send(res, code, JSON.stringify(data), MIME['.json']);
 
+/**
+ * A file rather than a page. `content-disposition` carries the name, so the
+ * browser saves `HI-15191-BOQ.xlsx` instead of `export`, and the same bytes
+ * can be posted to Drive and attached to an email without being rebuilt.
+ */
+const sendBytes = (
+  res: ServerResponse,
+  bytes: Uint8Array,
+  type: string,
+  filename: string,
+) => {
+  res.writeHead(200, {
+    'content-type': type,
+    'content-length': String(bytes.length),
+    'content-disposition': `attachment; filename="${filename}"`,
+    'cache-control': 'no-store',
+  });
+  res.end(Buffer.from(bytes));
+};
+
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const c of req) chunks.push(c as Buffer);
   return Buffer.concat(chunks).toString('utf8');
+}
+
+/**
+ * Who is making this request, according to Supabase — not according to the
+ * request.
+ *
+ * `/auth/v1/user` answers for the token it is given and for nobody else, so
+ * this cannot be told a different name by the browser. It is used for the
+ * Reply-To on an email (which has to be a real person) and for the
+ * administrator check on a delete.
+ *
+ * It replaced `profiles?select=…&limit=1` in both places. That was correct
+ * while every caller could read exactly one row and quietly wrong the moment an
+ * admin could read all of them — "give me one row" then hands back whichever
+ * comes first, which is somebody else. The same mistake had already been found
+ * and fixed once in `web/auth.js`; `STATUS.md` records it as the thing to watch
+ * when a policy is widened. Naming the row is not enough here, because the
+ * caller's own id is exactly what we are trying to learn — so this asks the
+ * one endpoint whose entire answer is "you".
+ */
+async function whoIsCalling(
+  req: IncomingMessage,
+): Promise<{ id: string; email: string } | null> {
+  const url = process.env.SUPABASE_URL ?? '';
+  const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
+  const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+  if (!url || !anonKey || !token) return null;
+
+  const res = await fetch(`${url}/auth/v1/user`, {
+    headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const user = (await res.json()) as { id?: string; email?: string };
+  return user.id ? { id: user.id, email: user.email ?? '' } : null;
+}
+
+/** That caller's own profile row, asked for by id rather than by "one row". */
+async function profileOf(id: string, token: string) {
+  const url = process.env.SUPABASE_URL ?? '';
+  const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
+  const res = await fetch(
+    `${url}/rest/v1/profiles?id=eq.${encodeURIComponent(id)}` +
+      '&select=id,is_admin,mail_from,display_name&limit=1',
+    { headers: { apikey: anonKey, Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) return null;
+  const rows = (await res.json()) as Array<{
+    id: string;
+    is_admin: boolean;
+    mail_from: string | null;
+    display_name: string | null;
+  }>;
+  return rows.length ? rows[0] : null;
 }
 
 /**
@@ -301,9 +377,17 @@ const server = createServer(async (req, res) => {
     if (path === '/api/config') {
       const url = process.env.SUPABASE_URL ?? '';
       const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
+      /*
+       * Whether email can be sent — a boolean, never the key. The browser needs
+       * to know so the Email button can say what is missing instead of opening
+       * a form that cannot post anywhere. Same reasoning as `accountsReason`.
+       */
+      const mail = !!(process.env.BREVO_API_KEY && process.env.MAIL_FROM);
       return json(res, 200, {
         supabase: url && anonKey ? { url, anonKey } : null,
         accountsReason: url && anonKey ? '' : 'SUPABASE_URL / SUPABASE_ANON_KEY are not set',
+        mail,
+        mailReason: mail ? '' : 'BREVO_API_KEY / MAIL_FROM are not set on the server',
       });
     }
 
@@ -336,17 +420,23 @@ const server = createServer(async (req, res) => {
       const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
       if (!token) return json(res, 401, { error: 'Not signed in.' });
 
-      const who = await fetch(`${url}/rest/v1/profiles?select=id,is_admin&limit=1`, {
-        headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
-      });
-      const rows = who.ok ? ((await who.json()) as Array<{ id: string; is_admin: boolean }>) : [];
-      if (!rows.length || !rows[0].is_admin) {
+      /*
+       * Who is asking, from Supabase rather than from the request — and then
+       * their own row by id. This used to be `profiles?select=id,is_admin&
+       * limit=1`, which is the row that comes first and not the caller's: an
+       * admin may read every profile, so the check could be made against a
+       * stranger. Same mistake `web/auth.js` was fixed for on 17 August.
+       */
+      const caller = await whoIsCalling(req);
+      if (!caller) return json(res, 401, { error: 'Not signed in.' });
+      const me = await profileOf(caller.id, token);
+      if (!me?.is_admin) {
         return json(res, 403, { error: 'Only an administrator can delete a user.' });
       }
 
       const { id } = JSON.parse(await readBody(req)) as { id?: string };
       if (!id) return json(res, 400, { error: 'Which user?' });
-      if (id === rows[0].id) {
+      if (id === caller.id) {
         return json(res, 400, { error: 'An administrator cannot delete their own account.' });
       }
 
@@ -441,6 +531,143 @@ const server = createServer(async (req, res) => {
               : roomDrawings(withWalls(body.room!))[body.index ?? 0];
         if (!drawing) return json(res, 404, { error: 'no such drawing' });
         return send(res, 200, toDxf(drawing), 'image/vnd.dxf');
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    /**
+     * The two files a job goes out as: the BOQ workbook and the drawing sheet.
+     *
+     * Both are built from the posted spec through `core/export/`, which counts
+     * nothing of its own — every figure is one `buildJob` already produced. The
+     * bytes returned here are the same bytes Phase 11 files into Drive and
+     * Phase 12 attaches to an email; nothing is rebuilt for a different
+     * destination, because two builds are two chances to disagree.
+     */
+    if (path === '/api/export' && req.method === 'POST') {
+      try {
+        const body = JSON.parse(await readBody(req)) as { job?: JobSpec; kind?: string };
+        if (!body.job) return json(res, 400, { error: 'no job' });
+        const job = normalise(body.job);
+
+        if (body.kind === 'xlsx') {
+          const bytes = toXlsx({
+            jobNo: job.jobNo,
+            density: job.density,
+            rooms: job.rooms.map((r) => r.name),
+            blocks: buildJob(job),
+            flashing: jobFlashing(job),
+          });
+          return sendBytes(res, bytes, XLSX_MIME, xlsxFileName(job.jobNo));
+        }
+
+        if (body.kind === 'pdf') {
+          const views = sheetViews(job);
+          if (!views.length) return json(res, 400, { error: 'nothing to draw' });
+          /*
+           * The composed sheet first, as the contents page — then every view on
+           * a page of its own. The sheet alone is unreadable printed: HI-15191
+           * puts fourteen views on it, which lands at 1:159 on an A3. A page
+           * each is what a factory can work from, and each states its scale.
+           */
+          const sheet = composeSheet(views, { title: `${job.jobNo} — DRAWING SHEET` });
+          const bytes = toPdfPages([sheet.drawing, ...views], { footer: job.jobNo });
+          return sendBytes(res, bytes, PDF_MIME, pdfFileName(job.jobNo));
+        }
+
+        return json(res, 400, { error: 'kind must be xlsx or pdf' });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    /**
+     * Email the job out: the workbook and the drawings, attached.
+     *
+     * The attachments are built here from the posted spec, by the same calls
+     * `/api/export` makes — so what the customer opens is what the estimator
+     * saw. Nothing about the BOQ is recomputed for a different destination.
+     *
+     * The API key never leaves this process, which is the whole reason this
+     * goes through our own server rather than straight from the page.
+     */
+    if (path === '/api/mail' && req.method === 'POST') {
+      const apiKey = process.env.BREVO_API_KEY ?? '';
+      const fallbackFrom = process.env.MAIL_FROM ?? '';
+      if (!apiKey || !fallbackFrom) {
+        // said plainly rather than half-working, the same way Delete does
+        // without SUPABASE_SERVICE_KEY
+        return json(res, 501, {
+          error:
+            'Email is not configured on this server. BREVO_API_KEY and MAIL_FROM have to be ' +
+            'set in the host environment before anything can be sent.',
+        });
+      }
+
+      const caller = await whoIsCalling(req);
+      if (!caller) return json(res, 401, { error: 'Sign in to send an email.' });
+
+      try {
+        const body = JSON.parse(await readBody(req)) as {
+          job?: JobSpec;
+          to?: string;
+          cc?: string;
+          bcc?: string;
+          subject?: string;
+          text?: string;
+        };
+        if (!body.job) return json(res, 400, { error: 'no job' });
+        const job = normalise(body.job);
+
+        const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+        const me = await profileOf(caller.id, token);
+
+        const views = sheetViews(job);
+        const attachments = [
+          {
+            name: xlsxFileName(job.jobNo),
+            bytes: toXlsx({
+              jobNo: job.jobNo,
+              density: job.density,
+              rooms: job.rooms.map((r) => r.name),
+              blocks: buildJob(job),
+              flashing: jobFlashing(job),
+            }),
+          },
+        ];
+        if (views.length) {
+          const sheet = composeSheet(views, { title: `${job.jobNo} — DRAWING SHEET` });
+          attachments.push({
+            name: pdfFileName(job.jobNo),
+            bytes: toPdfPages([sheet.drawing, ...views], { footer: job.jobNo }),
+          });
+        }
+
+        const result = await sendMail(
+          {
+            to: parseAddresses(body.to ?? ''),
+            cc: parseAddresses(body.cc ?? ''),
+            bcc: parseAddresses(body.bcc ?? ''),
+            subject: (body.subject ?? '').trim() || defaultSubject(job.jobNo),
+            text: body.text ?? '',
+            attachments,
+            from: me?.mail_from ?? '',
+            fromName: me?.display_name ?? '',
+            // the signed-in estimator, so the customer replies to a person
+            replyTo: caller.email,
+          },
+          apiKey,
+          fallbackFrom,
+        );
+
+        if (!result.ok) return json(res, 400, { error: result.error });
+        return json(res, 200, {
+          ok: true,
+          messageId: result.messageId,
+          attached: attachments.map((a) => a.name),
+          replyTo: caller.email,
+        });
       } catch (err) {
         return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
       }

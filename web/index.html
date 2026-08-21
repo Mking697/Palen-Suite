@@ -50,6 +50,7 @@
         <!-- a new tab, so a job half typed into the form is not lost -->
         <a class="btn" id="guideBtn" href="/guide" target="_blank" rel="noopener">Guide</a>
         <button class="btn" id="printBtn">Print</button>
+        <button class="btn" id="mailBtn">Email</button>
 
         <details class="menu" id="accountMenu">
           <summary class="btn" id="accountBtn">Sign in</summary>
@@ -77,6 +78,26 @@
         <button class="btn" type="button" id="adminBack">&larr; Back to the calculator</button>
       </div>
       <div id="adminBody"></div>
+    </div>
+
+    <!-- where this estimator's paperwork goes: Drive, Sheet, and the address
+         email is sent from. Same shape as the admin screen, over the tool. -->
+    <div class="admin" id="settings" hidden>
+      <div class="admin-head">
+        <h2>My settings</h2>
+        <button class="btn" type="button" id="settingsBack">&larr; Back to the calculator</button>
+      </div>
+      <div id="settingsBody"></div>
+    </div>
+
+    <!-- send the job out. The job on screen stays exactly as it is behind this,
+         so cancelling loses nothing. -->
+    <div class="admin" id="mail" hidden>
+      <div class="admin-head">
+        <h2>Email this job</h2>
+        <button class="btn" type="button" id="mailBack">&larr; Back to the calculator</button>
+      </div>
+      <div id="mailBody"></div>
     </div>
 
     <div class="app">
