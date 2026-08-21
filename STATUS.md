@@ -134,6 +134,37 @@ the box stays in Build-up and the panel says why. Unticking the cut is the
 estimator's own decision; a tool that unticks the box beside the one you
 clicked is a tool nobody can check.
 
+### Pushed, and checked on the live site
+
+Five commits went out together — Phase 10, the policy fix, Phase 12, the
+reversed-digits fix and the per-corner leg, and the optional ceiling/floor with
+the guide. `073ae0f..f257bcb`. Hostinger rebuilt and restarted in about twenty
+seconds.
+
+**Checked on `panelsuite.online` rather than assumed:**
+
+- `/`, `/guide`, `/api/rules`, `/api/config` and `/api/guide` all answer 200,
+  and the served `app.js` is the new one — no `type: 'number'` anywhere in it,
+  `inputmode` on the dimensions, the per-corner **Leg** box, and both
+  **required** ticks. `index.html` serves Density as text.
+- **`/api/export` returns real files over HTTP**: the workbook starts `PK` at
+  11.6 KB and the drawing PDF starts `%PDF-` at 45.3 KB.
+- **`/api/mail` answers 501** naming `BREVO_API_KEY` and `MAIL_FROM`, which are
+  still not set — the button is switched off and says so.
+- **The two new engine rules work on the live engine**, posted to `/api/render`:
+  a room stating 450 at two vertices prints `Corner Panel (Outer) 900 × 2590
+  qty 2` beside `600 × 2590 qty 2`; a room with neither a ceiling nor a floor
+  prints only wall and corner rows.
+- **Anonymous reads of `profiles` and `jobs` still come back `[]`**, so nothing
+  was widened on the way out.
+
+**One check that could not be made from here, and must not be read as a pass.**
+An anonymous `PATCH` setting `is_admin` answered 204 — but it named an id that
+does not exist, so it matched no rows, and the trigger skips when `auth.uid()`
+is null in any case. The anon key cannot test it. The real test is a `PATCH`
+from a signed-in **non-admin** browser session, it is written up in `SETUP.md`
+A4, and it was made on 18 August.
+
 ### The guide now describes every control
 
 The shop asked for it after using the screen: a layman has to be able to read
@@ -814,12 +845,11 @@ three stand on.
 
 ## What to do next
 
-**Nothing is pushed.** Six commits sit on local `main` — the three from 18
-August and the three from 21 August — and a push to `main` is the deploy, so
-`panelsuite.online` is still the 17 August build. The reversed-digits fix and
-the per-corner leg are not on the live site until somebody pushes.
+**Everything is pushed and live.** `073ae0f..f257bcb` went to `main` on 21
+August and Hostinger had it up in about twenty seconds. See *What is live*
+below for what was checked from outside.
 
-**Then, asked for by the shop: finish getting a job out of the tool.**
+**Next, asked for by the shop: finish getting a job out of the tool.**
 Five things were asked for on 18 August; the first is built, the rest are not.
 In dependency order, because each needs the one before it:
 
