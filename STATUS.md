@@ -26,7 +26,7 @@ uses.
 | Calculator (`server/`, `web/`) | multi-room, connected rooms, rooms of any right-angled shape typed wall by wall, per-wall sheets, doors, the L cut on or off, floor build-up and run direction, flashing |
 | Guide (`/guide`, `web/guide.js`) | `GUIDE.md` rendered in the app, one button in the header, one copy of the instructions |
 | Accounts (`web/auth.js`, `/api/config`) | sign up with email confirmation, sign in, File → New / Open / Save / Save As. Each estimator's jobs their own, enforced by the database |
-| Tests | 244, plus the line-by-line sheet diff |
+| Tests | 252, plus the line-by-line sheet diff |
 
 `npm run check` must print **`ALL ROWS MATCH across 3 jobs`** with 9 documented
 deviations and **1 plan finding** (HI-15191's ante room — see below). It did at
@@ -113,8 +113,39 @@ moves both.
 - A blank box is the room's figure and **not zero** — 0 would print a corner
   panel with no width. The placeholder shows what will be used.
 
+### A ceiling and a floor are each optional
+
+Also the shop, 21 August 2026: a customer sometimes takes the room without one,
+or without either. **Ceiling required** and **Floor required** are ticks on the
+form, both on by default, and `ceiling.fitted` / `floor.fitted` are only ever
+*sent* when false — so a job saved before this existed opens as the room it
+always was, and the three verified jobs are untouched.
+
+Turning one off takes its rows off the sheet, its view off the drawing and its
+faces out of the 3D model. **Nothing else moves**: the walls do not stand on
+the floor and do not hang from the ceiling, and the flashing is counted off the
+wall perimeter. On HI-15191's freezer, no ceiling is 23 panels down to 19 and
+46 PPGI down to 38; no floor is 23 down to 22 with the PPGI unchanged, because
+a puf slab carries none.
+
+**It deliberately does not touch the L cut.** The ceiling thickness is also the
+depth of the rebate, so the walls' inner skins go on being shortened by it —
+the box stays in Build-up and the panel says why. Unticking the cut is the
+estimator's own decision; a tool that unticks the box beside the one you
+clicked is a tool nobody can check.
+
+### The guide now describes every control
+
+The shop asked for it after using the screen: a layman has to be able to read
+what each box does. `GUIDE.md` gained **Screen par har control — ek-ek karke**,
+top to bottom in the order the controls appear — the header strip, ROOM, SHAPE
+(all three room shapes and what each does on screen), BUILD-UP, CEILING, FLOOR,
+FLASHING, every control on a wall card, and what comes out on the right. It
+replaces the short summary table that was there, rather than sitting beside it,
+because two lists of the same thing drift apart.
+
 `npm run check` prints `ALL ROWS MATCH across 3 jobs` with the same **9
-deviations and 1 plan finding** across **244 tests**.
+deviations and 1 plan finding** across **252 tests**.
 
 ## What landed on 18 August
 

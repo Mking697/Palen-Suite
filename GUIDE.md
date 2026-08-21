@@ -75,6 +75,8 @@ tab chahiye jab kisi purane job ko verify karna ho.
 |---|---|
 | **Pehli baar chala rahe hain** | [Pehli baar? Ye 6 step kaafi hain](#pehli-baar-ye-6-step-kaafi-hain) |
 | Screen kaise chalti hai | [Sabse aasan raasta](#sabse-aasan-raasta--panel-calculator) |
+| **Har control kya karta hai** | [Screen par har control](#screen-par-har-control--ek-ek-karke) |
+| Ceiling ya floor nahi chahiye | [Ceiling](#ceiling--chhat-chahiye-ya-nahi) · [Floor](#floor--farsh-chahiye-ya-nahi) |
 | Saari drawings ek canvas par | [Drawing sheet](#drawing-sheet--sab-kuch-ek-canvas-par) |
 | 3D me dekhna | [2D / 3D](#2d--3d) |
 | Do room jodna | [Jude hue room](#jude-hue-room-kaise-banayein) |
@@ -104,23 +106,137 @@ Phone par bhi chalta hai — wahan form upar aur drawing neeche aa jaati hai.
 
 *(Apne computer par chalana ho to `npm run dev`, phir `http://127.0.0.1:5173`.)*
 
-| Form me | Kya karta hai |
+### Screen par har control — ek-ek karke
+
+Screen ke do hisse hain. **Bayein taraf form** — jo aap bharte hain. **Dayein
+taraf output** — jo apne aap banta hai. Neeche har control usi kram me hai
+jis kram me screen par aata hai.
+
+> **Sunhera niyam: koi number chupke se theek nahi hota.** Aap jo likhte hain,
+> wahi jaata hai. Kuchh galat lage to tool **bata deta hai**, badalta nahi.
+
+#### Sabse upar ki patti
+
+| Control | Kya karta hai |
 |---|---|
-| Width / Length / Height | Room ka external envelope. Walls isi se nikalti hain. |
-| **Room shape** | Rectangle, Notch (L), ya Custom — wall by wall (koi bhi 90° shape) |
-| Wall / Ceiling thickness | Panel ki motai |
-| Panel module | Standard panel width (1180, 1030 …) |
-| Corner leg | Corner panel ka ek leg (300 default) — **poore room ke liye**. Kisi ek corner ka alag ho to us corner ka apna box bharein, neeche dekhein |
-| Min panel | Isse chhota balance allowed nahi |
-| Ceiling panels run along | Ceiling kis direction me kate |
-| **L cut** | Rebate lagega ya nahi — 50mm se moti wall par by default on |
-| Floor type | Puf slab (ek tukda) ya panelised + ply — dono walls ke andar |
-| Floor panels run along | Floor kis direction me kate — sirf panelised floor par |
-| Floor build-up | Floor panel ki chaaron layers, har ek ka material + thickness |
-| **Neighbour's wall** | Us side padosi room ki wall hai |
-| **Door** | Us wall par door, clear opening ke saath |
-| **Door opens from** | LHS ya RHS — door kis taraf khulega |
-| **+ Room** | Ek aur room jodo |
+| **Job No** | Job ka number, jaise `HI-15191`. Sheet, Excel, PDF aur email ke subject — sab par yahi chhapta hai. Save karte waqt job isi naam se milta hai. |
+| **Density** kg/m³ | Puf ki density. **Sirf chemical weight** badalta hai — area, panel count, kuchh aur nahi hilta. Default 40. |
+| **File** | New / Open / Save / Save As / Delete. Job aapke apne account me save hota hai; kisi doosre estimator ko nahi dikhta. |
+| **Open job no…** | Job number likh kar Enter. Click karne par jo list khulti hai wo browser ki apni hai. Number na mile to box ke paas likh deta hai, kuchh badalta nahi. |
+| **Guide** | Yahi page, **naye tab me** — taaki aadha bhara hua form khoye nahi. |
+| **Print** | Browser ka print. Poora sheet + BOQ. |
+| **Email** | Job customer ko bhejna — Excel aur PDF dono apne aap attach hote hain. |
+
+#### ROOM — room kaun sa aur kitna bada
+
+| Control | Kya karta hai | Dhyan |
+|---|---|---|
+| **Room 1 / + Room** | Upar ke tab. Har room apna alag BOQ block banata hai. **+ Room** se naya room, jo baaki se hat kar rakha jaata hai. | Aisa room jodna ho jo **doosre room se juda** ho, to wall card wala **+ Room on this side** use kijiye |
+| **Room name** | Sheet par isi naam se block chhapta hai (`60mm (Chiller Room)`) | — |
+| **Width / Length / Height** | Room ka **external envelope** — bahar se bahar tak. Saari walls isi se nikalti hain. | Ye andar ka naap **nahi** hai. Andar ka naap engine khud wall thickness ghata kar nikaalta hai |
+
+#### SHAPE — room kis aakar ka hai
+
+Teeno option andar se **ek hi cheez** banate hain: ek **wall chain** — har wall
+ki length aur uske end par kis taraf mudna hai, bilkul jaise drawing par
+dimension chalti hai. Isliye mode badalne par kuchh khota nahi.
+
+| Option | Kab chunein | Screen par kya hota hai |
+|---|---|---|
+| **Rectangle** | Aam chaar-wall room. Zyadatar job yahi hai. | Sirf Width × Length. Chaar wall card banti hain — N·Top, E·Right, S·Bottom, W·Left. Chaaron corner par corner panel apne aap lag jaata hai. |
+| **Rectangle with a notch (L)** | Room ka **ek corner kata** ho (jaise HI-15223) | Teen aur box aate hain — kaunsa corner kata, notch ki width, notch ki depth. **4 walls 6 ho jaati hain**, har nayi wall ka apna card. Width/Length **poora rectangle hi rehta hai** — notch usme se katta hai, kyunki ceiling aur floor poore rectangle par bante hain. |
+| **Custom — wall by wall** | Baaki sab — U, T, seedhiyon jaisa stepped, kitni bhi walls | Har wall ki length aur uska turn khud likhiye. **+ Wall** se aur jodein, **×** se hataayein (teen se kam nahi). Neeche live likha rehta hai chain **band hui ya nahi** — na hui to **kitne mm se chooki** wo bata deta hai, aur khud kuchh adjust nahi karta. |
+
+> Notch aur Custom dono me, **andar ki taraf mudne wale corner** par corner
+> panel nahi lagta. Wahan ek wall seedhi nikalti hai aur doosri uske face me
+> rukti hai — aur usme se **ek wall thickness minus** ho jaati hai. Kaun si
+> seedhi jaati hai, ye tool **poochta hai**, guess nahi karta.
+
+#### BUILD-UP — panel kis cheez ka bana hai
+
+| Control | Kya karta hai | Dhyan |
+|---|---|---|
+| **Wall thickness** | Wall panel ki motai (60 / 100 / 120 …) | Yahi door ke blank aur butt end ka naap bhi tay karti hai |
+| **Ceiling thickness** | Ceiling panel ki motai | **Ye sirf ceiling ki nahi hai** — yahi **L cut ki depth** bhi hai, jo har wall ki *andar wali* skin ko chhota karti hai. Isliye ceiling na lene par bhi ye box rehta hai |
+| **Panel module** | Standard panel ki chaudai — 1180, 1030 … | Wall aur ceiling dono isi module par kate hain |
+| **Corner leg** | Corner panel ka ek leg, **poore room ke liye** (300 default). Panel `leg × 2` chauda banta hai | Kisi **ek** corner ka naap alag ho to us corner ka apna box hai — [Har corner ka apna leg](#har-corner-ka-apna-leg) |
+| **Min panel** | Isse chhota tukda banne nahi diya jayega | Balance itna chhota nikle to engine **ek poora module wapas de kar** bache hue ko barabar tukdon me baant deta hai — isi se `635+635` jaise jode bante hain, `1180 + 90` ka bekaar offcut nahi |
+| **L cut** | Rebate lagega ya nahi. 50mm se moti wall par **by default on** | Untick karne par teen cheezein badalti hain: andar wali skin poori height ki, corner ki andar wali skin apni outer ke barabar, aur ceiling poore external naap par |
+
+#### CEILING — chhat chahiye ya nahi
+
+| Control | Kya karta hai |
+|---|---|
+| **Ceiling required** | **Default on.** Untick karte hi Roof Panel ki row sheet se hat jaati hai, uski drawing nahi banti, aur 3D me bhi chhat nahi khadi hoti. Panel / PPGI / weight / area utne kam ho jaate hain. Walls par koi asar nahi. |
+| **Ceiling panels run along** | Ceiling kis direction me kate — Width ya Length. Doosra axis panel ki lambai ban jaata hai. Ceiling na lene par ye chhup jaata hai, kyunki kaatne ko kuchh bacha hi nahi. |
+
+> **Ceiling untick karne se L cut apne aap band nahi hota.** Ceiling thickness
+> abhi bhi L cut ki depth hai, isliye walls ki andar wali skin waise hi chhoti
+> rehti hai. Wo bhi nahi chahiye to **L cut khud untick kijiye** — tool aapke
+> click ke bagal wale box ko khud nahi badalta.
+
+#### FLOOR — farsh chahiye ya nahi
+
+| Control | Kya karta hai |
+|---|---|
+| **Floor required** | **Default on.** Untick karte hi floor ki row aur uski drawing dono chali jaati hain. Walls floor par khadi nahi hoti, isliye unka **ek bhi panel nahi hilta**. |
+| **Type** | **Puf slab (one piece)** — ek hi tukda; ya **Panelised + ply** — module par kata hua |
+| **Floor thickness** | Poore floor panel ki motai |
+| **Floor module** | Sirf panelised par — floor panel ki chaudai (1220 …) |
+| **Floor panels run along** | Sirf panelised par — floor kis direction me kate |
+| **Floor build-up** | Sirf panelised par — panel ki chaaron layer neeche se upar: bottom sheet, core, core ke upar wali sheet, top sheet. Har layer ka apna material aur thickness |
+
+> **Core ki motai kabhi khud nahi likhi jaati.** Wo baaki sheets ke baad jo
+> bachta hai wahi hai — 100mm floor me 12mm ply daaliye to core patla ho jayega
+> aur panel 100 hi rahega.
+>
+> Aur **floor hamesha walls ke *andar*** banta hai, kyunki wall floor par khadi
+> nahi hoti. Kuchh purani sheets poore external naap par chhapti hain — shop ne
+> kaha wo galat hai, isliye engine andar ka clear naap leta hai.
+
+#### FLASHING
+
+| Control | Kya karta hai |
+|---|---|
+| **Flashing sheet** | Kis sheet se flashing mudegi — material aur thickness |
+| **Add extra flashing** | Engine khud inner, outer aur U flashing gin leta hai. Uske **upar** koi row jodni ho to yahan — type, sheet, width, length. Jitni chahiye utni |
+
+> Flashing **running metre** me khareedi jaati hai aur panel count me kabhi
+> nahi jaati. Width wall thickness + 2 hoti hai. Butt joint par ek room-height
+> inner aur ek outer aur jud jaata hai.
+
+#### WALLS — har wall ka apna card
+
+Har card ke upar wall ka naam aur uski **length** likhi hoti hai (`N · Top —
+10476 mm`).
+
+| Control | Kya karta hai | Dhyan |
+|---|---|---|
+| **Shared with neighbour** | Us side ki wall **padosi room** ki hai. Wall aur uske **dono end ke corner panel** is room ke BOQ se hat jaate hain | Isi se ante room 4 wall / 4 corner ki jagah 3 wall / 2 corner par aata hai |
+| **Door** | Us wall par door. Tick karte hi clear opening, module, frame, leaf, lift — sab poochha jaata hai | Ek wall par abhi ek hi door |
+| **Door opens from** | LHS ya RHS. Label par bhi chhapta hai aur plan par swing bhi wahi banti hai | Na batayein to label waise ka waisa chhapta hai aur swing banti hi nahi |
+| **+ Room on this side** | Isi wall se juda hua naya room. Dono ke beech ki wall apne aap set ho jaati hai | Alag-thalag room chahiye to upar wala **+ Room** |
+| **Corner at start / end** | Us junction par corner panel lagega ya nahi. **Default on** | Untick karte hi poochha jayega ki **kaun si wall seedhi jaati hai** — doosri uske face me butt karegi aur ek wall thickness khoyegi |
+| **Leg at start / end** | Us **ek corner** ka apna leg. Khaali chhodiye to room wala figure lagta hai | Ek corner do walls ka hota hai, isliye wahi box dono cards par dikhta hai aur ek jagah badalne se dono badalte hain |
+| **Outer sheet / Inner sheet** | Us wall ki dono skin ka material aur thickness. Room ki default se alag ho to yahan | — |
+| **Butt joint panel** | Poori wall hi butt joint panel hai — blank +100 (aam +40 ki jagah), aur andar wali skin 50 patli | Ye wall ka *end* nahi, poori wall hai |
+| **Panel split** | Wall kaise kate: **Auto — the shop rule** (upar wala Min panel niyam), **Equal pieces** (poore run ko itne barabar tukdon me), **Exact widths off the drawing** (jo drawing par likha hai wahi, jaisa likha hai) | Exact wali value **jaisi likhi hai waisi hi** chhapti hai aur sheet par alag se marked hoti hai — nikaali hui aur likhi hui do alag cheezein kabhi ek jaisi nahi dikhengi |
+
+#### Dayein taraf — jo apne aap banta hai
+
+| Cheez | Kya hai |
+|---|---|
+| **PANELS / PPGI SKINS / CHEMICAL / AREA** | Poore job ka total. Har keystroke par update |
+| **DRAWING SHEET** | Job ki saari drawings **ek canvas par** — layout, har wall ki elevation, ceiling, floor, door. Kisi bhi view par click karke use poora khol sakte hain |
+| **2D / 3D** | Wahi panels khade karke. Ghuma kar dekhiye, kisi panel par click karke uska naap dekhiye |
+| **DXF — whole sheet** | 1:1 file, jo machine kaatti hai |
+| **PDF — whole sheet** | Har view apne page par, **apna scale chhapa hua**. Customer ko bhejne wali file |
+| **Excel — whole BOQ** | Poori SHEET FABRICATION, har room ka apna worksheet |
+| **SHEET FABRICATION** | Line-by-line BOQ. Jo estimator ne khud likha hai wo alag se marked hota hai |
+
+> Agar koi wall kisi ke bhi BOQ me nahi aa rahi — jaise dono room ne ek hi wall
+> ko padosi ki keh diya — to totals ke **neeche saaf likh** deta hai, aur **kitne
+> mm ka nuksaan** hai wo bhi. Chupchap 0 nahi banata.
 
 ### Apna account, apne job
 

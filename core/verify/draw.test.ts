@@ -135,6 +135,33 @@ t('the 3D model stands up a corner panel of each stated size', () => {
   );
 });
 
+t('a ceiling or floor nobody bought is not drawn, and not stood up', () => {
+  /*
+   * The shop, 21 August 2026: a customer sometimes takes the room without one.
+   * A sheet showing a panel nobody is buying is a sheet somebody cuts from, so
+   * the view goes with the row — and so does the face in the 3D model, which
+   * is the same panels stood up.
+   */
+  const room = structuredClone(HI_15191.rooms[0]) as RoomSpec;
+  const titles = () => roomDrawings(room).map((d) => d.title);
+  const kinds = () =>
+    new Set(model3d({ jobNo: 'X', density: 40, rooms: [room] }).faces.map((f) => f.kind));
+
+  assert.ok(titles().some((x) => /Ceiling/.test(x)), 'a fitted ceiling is drawn');
+  assert.ok(titles().some((x) => /Floor/.test(x)), 'a fitted floor is drawn');
+  assert.ok(kinds().has('ceiling') && kinds().has('floor'));
+
+  room.ceiling.fitted = false;
+  assert.equal(titles().some((x) => /Ceiling/.test(x)), false, 'no ceiling, no ceiling view');
+  assert.equal(kinds().has('ceiling'), false, 'no ceiling, no ceiling face');
+  assert.ok(titles().some((x) => /Floor/.test(x)), 'the floor is still there');
+
+  room.floor.fitted = false;
+  assert.equal(titles().some((x) => /Floor/.test(x)), false, 'no floor, no floor view');
+  assert.equal(kinds().has('floor'), false, 'no floor, no floor face');
+  assert.ok(kinds().has('wall'), 'the walls are still drawn');
+});
+
 for (const [name, room] of DRAWABLE) {
   t(`${name} — every wall panel on the drawing is a priced panel`, () => {
     const L = layoutRoom(room);

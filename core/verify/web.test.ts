@@ -797,6 +797,69 @@ await t('a leg of nothing is the room figure, not a corner panel of zero', async
   );
 });
 
+await t('a ceiling and a floor are both required until somebody says otherwise', async () => {
+  /*
+   * The shop, 21 August 2026: a customer sometimes takes the room without one,
+   * or without either. Both ticks default on, because that is nearly every job,
+   * and `fitted` is only ever sent when it is false — so a job saved before
+   * this existed opens as the room it always was.
+   */
+  const ceilingTick = boxOf(labelled(form(), 'Ceiling required'));
+  const floorTick = boxOf(labelled(form(), 'Floor required'));
+  assert.ok(ceilingTick && floorTick, 'both ticks must be on the form');
+  assert.equal(ceilingTick!.checked, true, 'a ceiling is built unless said otherwise');
+  assert.equal(floorTick!.checked, true, 'so is a floor');
+
+  const sent = () =>
+    (app.posts.at(-1)!.body as {
+      rooms: Array<{ ceiling: { fitted?: boolean }; floor: { fitted?: boolean } }>;
+    }).rooms[0];
+  assert.equal(sent().ceiling.fitted, undefined, 'nothing is stated while both are on');
+  assert.equal(sent().floor.fitted, undefined);
+});
+
+await t('unticking either one says so, and says it only about that one', async () => {
+  const untick = async (label: string) => {
+    const box = boxOf(labelled(form(), label))!;
+    box.checked = false;
+    box.fire('change');
+    await settle();
+  };
+  const sent = () =>
+    (app.posts.at(-1)!.body as {
+      rooms: Array<{ ceiling: { fitted?: boolean }; floor: { fitted?: boolean } }>;
+    }).rooms[0];
+
+  await untick('Ceiling required');
+  assert.equal(sent().ceiling.fitted, false);
+  assert.equal(sent().floor.fitted, undefined, 'the floor was not asked about');
+
+  await untick('Floor required');
+  assert.equal(sent().floor.fitted, false);
+
+  // and the thickness box stays, because it is also the depth of the L cut
+  assert.equal(
+    dimensionsLike(form(), 'Ceiling thickness').length,
+    1,
+    'the ceiling thickness must stay — it sets the L cut depth whether or not a ceiling is fitted',
+  );
+  assert.equal(
+    dimensionsLike(form(), 'Floor thickness').length,
+    0,
+    'a floor nobody is building has no thickness to type',
+  );
+
+  // put them back for the tests that follow
+  for (const label of ['Ceiling required', 'Floor required']) {
+    const box = boxOf(labelled(form(), label))!;
+    box.checked = true;
+    box.fire('change');
+    await settle();
+  }
+  assert.equal(sent().ceiling.fitted, undefined, 'ticking it back states nothing again');
+  assert.equal(sent().floor.fitted, undefined);
+});
+
 await t('signed out, opening a job asks for a sign in rather than failing', async () => {
   const before = app.posts.length;
   const box = app.ids.get('#jobSearch')!;

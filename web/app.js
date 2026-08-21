@@ -160,6 +160,13 @@ const newRoom = (n = 1) => ({
   cornerLeg: 300,
   minPanelWidth: 150,
   splitAxis: 'l',
+  /**
+   * Whether a ceiling and a floor are built at all. A customer sometimes takes
+   * the room without one, or without either — the shop, 21 August 2026. Both
+   * default on, because that is what nearly every job is.
+   */
+  ceilingOn: true,
+  floorOn: true,
   floorKind: 'pufSlab',
   floorTh: 100,
   floorModule: 1220,
@@ -447,6 +454,8 @@ function createRoomOn(edgeIndex) {
   r.cornerLegs = [];
   r.minPanelWidth = parent.minPanelWidth;
   r.splitAxis = parent.splitAxis;
+  r.ceilingOn = parent.ceilingOn !== false;
+  r.floorOn = parent.floorOn !== false;
   r.floorKind = parent.floorKind;
   r.floorTh = parent.floorTh;
   r.floorModule = parent.floorModule;
@@ -640,9 +649,15 @@ function roomSpec(r) {
     cornerLeg: +r.cornerLeg,
     minPanelWidth: +r.minPanelWidth,
     maxSplitPieces: 2,
+    /*
+     * `fitted` is only ever sent when it is false. Absent means fitted, so a
+     * job saved before this existed opens as the room it always was, and the
+     * three verified jobs are untouched.
+     */
     floor:
       r.floorKind === 'panelised'
         ? {
+            ...(r.floorOn === false ? { fitted: false } : {}),
             kind: 'panelised',
             th: +r.floorTh,
             module: +r.floorModule,
@@ -656,10 +671,16 @@ function roomSpec(r) {
             })),
             desc: 'Bottom PPGI + Puf + 12 mm Ply + 2mm AL. CHQ',
           }
-        : { kind: 'pufSlab', th: +r.floorTh, desc: 'Puf Slab With Single Layer Tarfelt.' },
+        : {
+            ...(r.floorOn === false ? { fitted: false } : {}),
+            kind: 'pufSlab',
+            th: +r.floorTh,
+            desc: 'Puf Slab With Single Layer Tarfelt.',
+          },
     // the ceiling notch and the floor's clear span both follow from which
     // walls this room owns, so marking a wall shared is all the user does
     ceiling: {
+      ...(r.ceilingOn === false ? { fitted: false } : {}),
       splitAxis: r.splitAxis,
       wEnds: [sideEnd('W'), sideEnd('E')],
       lEnds: [sideEnd('N'), sideEnd('S')],
@@ -1252,7 +1273,6 @@ function renderForm() {
         field('Corner leg', r.cornerLeg, set('cornerLeg'), { unit: 'mm' }),
         field('Min panel', r.minPanelWidth, set('minPanelWidth'), { unit: 'mm' }),
       ]),
-      select('Ceiling panels run along', r.splitAxis, [['w', 'Width'], ['l', 'Length']], set('splitAxis')),
       toggle('L cut', lCutOf(r), (v) => {
         r.lCut = v;
         renderForm();
@@ -1268,24 +1288,81 @@ function renderForm() {
     ]),
   );
 
+  /* ceiling */
+  parts.push(
+    el('div', { class: 'group' }, [
+      el('h3', { text: 'Ceiling' }),
+      toggle('Ceiling required', r.ceilingOn !== false, (v) => {
+        r.ceilingOn = v;
+        renderForm();
+        refresh();
+      }),
+      /*
+       * Untick it and no roof panel is bought, priced or drawn. The thickness
+       * box stays either way, and that is not an oversight: it is also the
+       * depth of the L cut, so it goes on shortening the walls' inner skins
+       * whether or not anything drops into the rebate. Unticking the ceiling
+       * never quietly unticks the L cut — the estimator decides that.
+       */
+      r.ceilingOn === false
+        ? el('p', {
+            class: 'hint',
+            text:
+              'No ceiling: no roof panel on the sheet and none on the drawing. ' +
+              'Ceiling thickness in Build-up above is still read, because it is ' +
+              'also the depth of the L cut — the walls’ inner skins go on being ' +
+              'shortened by it. Untick L cut if that is not wanted either.',
+          })
+        : null,
+      // The thickness itself stays up in Build-up beside the wall's, because it
+      // is not only the ceiling's: it is the depth of the L cut. Only the split
+      // direction goes, and only because there is nothing left to split.
+      r.ceilingOn === false
+        ? null
+        : select(
+            'Ceiling panels run along',
+            r.splitAxis,
+            [['w', 'Width'], ['l', 'Length']],
+            set('splitAxis'),
+          ),
+    ]),
+  );
+
   /* floor */
   parts.push(
     el('div', { class: 'group' }, [
       el('h3', { text: 'Floor' }),
-      select(
+      toggle('Floor required', r.floorOn !== false, (v) => {
+        r.floorOn = v;
+        renderForm();
+        refresh();
+      }),
+      r.floorOn === false
+        ? el('p', {
+            class: 'hint',
+            text:
+              'No floor: nothing on the sheet and nothing on the drawing. The walls ' +
+              'do not stand on the floor, so none of their panels move.',
+          })
+        : null,
+      r.floorOn === false
+        ? null
+        : select(
         'Type',
         r.floorKind,
         [['pufSlab', 'Puf slab (one piece)'], ['panelised', 'Panelised + ply']],
         setRedraw('floorKind'),
       ),
-      el('div', { class: 'row2' }, [
-        field('Floor thickness', r.floorTh, set('floorTh'), { unit: 'mm' }),
-        r.floorKind === 'panelised'
-          ? field('Floor module', r.floorModule, set('floorModule'), { unit: 'mm' })
-          : null,
-      ]),
+      r.floorOn === false
+        ? null
+        : el('div', { class: 'row2' }, [
+            field('Floor thickness', r.floorTh, set('floorTh'), { unit: 'mm' }),
+            r.floorKind === 'panelised'
+              ? field('Floor module', r.floorModule, set('floorModule'), { unit: 'mm' })
+              : null,
+          ]),
       // a one-piece slab is not split, so it has no direction to run in
-      r.floorKind === 'panelised'
+      r.floorOn !== false && r.floorKind === 'panelised'
         ? select(
             'Floor panels run along',
             r.floorSplitAxis,
@@ -1293,7 +1370,7 @@ function renderForm() {
             set('floorSplitAxis'),
           )
         : null,
-      r.floorKind === 'panelised' ? floorBuildUp(r) : null,
+      r.floorOn !== false && r.floorKind === 'panelised' ? floorBuildUp(r) : null,
     ]),
   );
 
@@ -2540,6 +2617,9 @@ function loadExample(job) {
     r.cornerLeg = room.cornerLeg;
     r.minPanelWidth = room.minPanelWidth;
     r.splitAxis = room.ceiling.splitAxis;
+    // absent means fitted, which is what every job written before this says
+    r.ceilingOn = room.ceiling.fitted !== false;
+    r.floorOn = room.floor.fitted !== false;
     r.floorKind = room.floor.kind;
     r.floorTh = room.floor.th;
     r.floorModule = room.floor.module ?? 1220;

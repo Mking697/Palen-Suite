@@ -161,6 +161,16 @@ go and nothing else to press.
   corner inner matches its outer, and the ceiling runs the full external size.
   All four source sheets are 60, 100 or 120mm and every one carries the cut, so
   the default never moves a verified figure.
+- **A ceiling and a floor are each optional** — the shop, 21 August 2026: a
+  customer sometimes takes the room without one, or without either. Both are
+  fitted unless the job says otherwise (`ceiling.fitted` / `floor.fitted`), so
+  every job written before this is unchanged. Turning one off removes its rows
+  from the sheet, its view from the drawing and its faces from the 3D model,
+  and **nothing else moves**: the walls neither stand on the floor nor hang
+  from the ceiling. **It does not touch the L cut** — the ceiling thickness is
+  also the depth of the rebate, so the walls' inner skins go on being
+  shortened by it until the estimator unticks the cut themselves. A tool that
+  unticks the box beside the one you clicked is a tool nobody can check.
 - **Floor** — a one-piece puf slab at the external size, or panelised on its own
   module. A panelised floor also picks **which way its panels run**, width or
   length, the same choice the ceiling has; the slab has no direction because it

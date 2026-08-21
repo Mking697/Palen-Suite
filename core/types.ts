@@ -225,6 +225,16 @@ export interface ExtraFlashing {
 }
 
 export interface FloorSpec {
+  /**
+   * Whether a floor is built at all. A customer sometimes takes the room
+   * without one — the shop, 21 August 2026 — and then nothing about the floor
+   * is bought, priced or drawn. Omitted means fitted, so every job written
+   * before this existed is unchanged and so are the verified sheets.
+   *
+   * It removes only the floor: walls, corners and flashing are counted off the
+   * wall perimeter and do not know a floor is there.
+   */
+  fitted?: boolean;
   /** pufSlab = one slab item at external size; panelised = split into modules */
   kind: 'pufSlab' | 'panelised';
   th: Mm;
@@ -254,6 +264,15 @@ export interface FloorSpec {
 }
 
 export interface CeilingSpec {
+  /**
+   * Whether a ceiling is built at all — the same as `FloorSpec.fitted`, and
+   * asked for at the same time. Omitted means fitted.
+   *
+   * The L cut is unaffected: it also shortens a wall's inner skin and narrows
+   * a corner panel's inner skin, and those are still cut whether or not a
+   * ceiling drops into the rebate.
+   */
+  fitted?: boolean;
   /** which axis the ceiling panels are split along; the other axis is panel length */
   splitAxis: 'w' | 'l';
   /** what sits at each end of the w axis / l axis */

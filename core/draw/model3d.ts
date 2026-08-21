@@ -229,8 +229,10 @@ function roomFaces(room: RoomSpec): Face3[] {
     }
   }
 
-  out.push(...ceilingFaces(room, pts, L, edges));
-  out.push(...floorFaces(room, pts, L, edges));
+  // a ceiling or floor the customer did not take is not stood up either — the
+  // model is the same panels as the sheet, so it holds none the sheet has not
+  if (room.ceiling.fitted !== false) out.push(...ceilingFaces(room, pts, L, edges));
+  if (room.floor.fitted !== false) out.push(...floorFaces(room, pts, L, edges));
   return out;
 }
 

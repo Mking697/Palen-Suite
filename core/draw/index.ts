@@ -33,8 +33,10 @@ export function roomDrawings(room: RoomSpec): Drawing[] {
   return [
     ...wallElevations(room),
     ...doorElevations(room),
-    ceilingPlan(room),
-    floorPlan(room),
+    // a ceiling or a floor the customer did not take is not drawn either: a
+    // sheet showing a panel nobody is buying is a sheet somebody cuts from
+    ...(room.ceiling.fitted === false ? [] : [ceilingPlan(room)]),
+    ...(room.floor.fitted === false ? [] : [floorPlan(room)]),
   ];
 }
 

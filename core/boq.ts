@@ -102,7 +102,12 @@ export function buildRoomBlock(
   const lCut = room.lCut ?? lCutDefault(room.wallTh);
 
   // ---- floor -------------------------------------------------------------
-  if (room.floor.kind === 'pufSlab') {
+  // A room can be taken without one (the shop, 21 August 2026). Nothing else
+  // moves: the walls do not stand on the floor and the flashing is counted off
+  // the wall perimeter.
+  if (room.floor.fitted === false) {
+    // nothing bought, nothing priced, nothing drawn
+  } else if (room.floor.kind === 'pufSlab') {
     const a = area(L.floor.w, L.floor.l, 1);
     rows.push({
       desc: room.floor.desc,
@@ -139,7 +144,8 @@ export function buildRoomBlock(
   }
 
   // ---- ceiling / roof ----------------------------------------------------
-  for (const { w, qty } of tally(L.ceiling.widths)) {
+  // and the same for the ceiling, asked for at the same time
+  for (const { w, qty } of room.ceiling.fitted === false ? [] : tally(L.ceiling.widths)) {
     const a = area(w, L.ceiling.panelLength, qty);
     rows.push({
       desc: lbl.roof,

@@ -658,6 +658,72 @@ t('two walls claiming different legs for one corner is said, not halved', () => 
   assert.throws(() => layoutRoom(room), /is claimed by 1 wall end/);
 });
 
+/*
+ * A room taken without a ceiling, or without a floor, or without either — the
+ * shop, 21 August 2026. Nothing about the walls moves either way: they do not
+ * stand on the floor and they do not hang from the ceiling.
+ */
+const without = (what: { ceiling?: false; floor?: false }) => {
+  const r = structuredClone(HI_15191.rooms[0]);
+  if (what.ceiling === false) r.ceiling.fitted = false;
+  if (what.floor === false) r.floor.fitted = false;
+  return buildRoomBlock(r, 40);
+};
+const descs = (b: ReturnType<typeof buildRoomBlock>) => b.rows.map((x) => x.desc);
+
+t('saying nothing about a ceiling or a floor still builds both', () => {
+  // the whole of the guarantee that no job written before this moved
+  const b = without({});
+  assert.equal(b.totals.panelQty, base.totals.panelQty);
+  assert.ok(descs(b).includes('Roof Panel'), 'the roof is still priced');
+  assert.ok(descs(b).some((d) => d.startsWith('Puf Slab')), 'the floor is still priced');
+});
+
+t('no ceiling drops the roof panels and touches nothing else', () => {
+  const b = without({ ceiling: false });
+  assert.equal(descs(b).includes('Roof Panel'), false, 'a roof nobody bought is priced');
+  assert.equal(b.totals.panelQty, base.totals.panelQty - 4, 'four roof panels');
+  assert.equal(b.totals.ppgiQty, base.totals.ppgiQty - 8, 'two skins each');
+  assert.deepEqual(
+    b.rows.filter((x) => x.desc.startsWith('Wall Panels')),
+    base.rows.filter((x) => x.desc.startsWith('Wall Panels')),
+    'the walls must not move',
+  );
+});
+
+t('no floor drops the slab and touches nothing else', () => {
+  const b = without({ floor: false });
+  assert.equal(descs(b).some((d) => d.startsWith('Puf Slab')), false);
+  assert.equal(b.totals.panelQty, base.totals.panelQty - 1, 'one slab');
+  assert.equal(b.totals.ppgiQty, base.totals.ppgiQty, 'a puf slab carries no PPGI');
+  assert.deepEqual(
+    b.rows.filter((x) => x.desc.startsWith('Corner Panel')),
+    base.rows.filter((x) => x.desc.startsWith('Corner Panel')),
+    'the corners must not move',
+  );
+});
+
+t('neither one leaves a room that is only its walls', () => {
+  const b = without({ ceiling: false, floor: false });
+  assert.equal(b.totals.panelQty, base.totals.panelQty - 5);
+  assert.equal(
+    descs(b).some((d) => d === 'Roof Panel' || d.startsWith('Puf Slab')),
+    false,
+  );
+});
+
+t('no ceiling does not quietly take the L cut with it', () => {
+  /*
+   * The ceiling thickness is also the depth of the L cut, so the walls' inner
+   * skins go on being shortened by it. Deciding otherwise is the estimator's,
+   * through the L cut tick — a tool that unticks the box next to the one you
+   * clicked is a tool nobody can check.
+   */
+  const b = without({ ceiling: false });
+  const inner = (x: { desc: string }) => x.desc === 'Wall Panels (Inner)';
+  assert.deepEqual(b.rows.filter(inner), base.rows.filter(inner));
+});
+
 t('density 40 -> 42 raises chemical weight by exactly 5%', () => {
   const b = buildRoomBlock(HI_15191.rooms[0], 42);
   assert.equal(round2(b.totals.chemWeight), round2(base.totals.chemWeight * 1.05));
