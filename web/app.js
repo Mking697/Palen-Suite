@@ -167,6 +167,12 @@ const newRoom = (n = 1) => ({
    */
   ceilingOn: true,
   floorOn: true,
+  /**
+   * Wall elevations (Wall N/E/S/W) are off by default — the shop, 5 October
+   * 2026: they cluttered every sheet and are wanted only when asked for. The
+   * door elevation is unaffected; it is still drawn whenever the room has one.
+   */
+  showElevations: false,
   floorKind: 'pufSlab',
   floorTh: 100,
   floorModule: 1220,
@@ -456,6 +462,7 @@ function createRoomOn(edgeIndex) {
   r.splitAxis = parent.splitAxis;
   r.ceilingOn = parent.ceilingOn !== false;
   r.floorOn = parent.floorOn !== false;
+  r.showElevations = parent.showElevations === true;
   r.floorKind = parent.floorKind;
   r.floorTh = parent.floorTh;
   r.floorModule = parent.floorModule;
@@ -685,6 +692,8 @@ function roomSpec(r) {
       wEnds: [sideEnd('W'), sideEnd('E')],
       lEnds: [sideEnd('N'), sideEnd('S')],
     },
+    // wall elevations are off unless the estimator asks for them
+    ...(r.showElevations ? { showElevations: true } : {}),
     at: [+r.x, +r.y],
     outline: {
       points: g.points,
@@ -1284,6 +1293,18 @@ function renderForm() {
           `Fitted by default above ${RULES.lCutMinWallTh}mm. Untick it and the ` +
           `inner skins run the full height, the corner inner matches its outer, ` +
           `and the ceiling runs the full external size.`,
+      }),
+      toggle('Add elevation', r.showElevations === true, (v) => {
+        r.showElevations = v;
+        renderForm();
+        refresh();
+      }),
+      el('p', {
+        class: 'hint',
+        text:
+          'Off by default: a Wall N/E/S/W elevation per wall is not on the ' +
+          'sheet unless ticked. The Wall Panel Layout, ceiling, floor and ' +
+          'any door elevation are unaffected.',
       }),
     ]),
   );
@@ -2620,6 +2641,7 @@ function loadExample(job) {
     // absent means fitted, which is what every job written before this says
     r.ceilingOn = room.ceiling.fitted !== false;
     r.floorOn = room.floor.fitted !== false;
+    r.showElevations = room.showElevations === true;
     r.floorKind = room.floor.kind;
     r.floorTh = room.floor.th;
     r.floorModule = room.floor.module ?? 1220;

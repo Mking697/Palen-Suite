@@ -4,7 +4,25 @@ Read this first if you are picking the project up — on this machine or another
 `README.md` says what the engine does, `DESIGN.md` says where it is going, this
 file says what has actually happened and what is next.
 
-Last updated: 21 August 2026.
+Last updated: 5 October 2026.
+
+## What landed on 5 October 2026
+
+**Wall elevations are off by default.** The shop: a Wall N/E/S/W elevation per
+wall cluttered every sheet, and it is wanted only when asked for. A new
+per-room tick, **Add elevation** (off by default), gates `wallElevations` in
+`roomDrawings` (`core/draw/index.ts`); the sheet now opens with just the Wall
+Panel Layout, Ceiling and Floor views until it is ticked. Nothing else moved:
+the door elevation is unaffected and still draws whenever the room has a
+door, and Ceiling/Floor keep their own existing `fitted` ticks untouched.
+
+`RoomSpec.showElevations` (`core/types.ts`) is the new optional field — absent
+or false means off, so every job file written before this is unchanged and so
+are the three verified sheets. `npm run check` still prints `ALL ROWS MATCH
+across 3 jobs` with the same 9 deviations; no BOQ figure moved, only what
+draws by default. Checked in a live browser, not just headless: the default
+sheet shows Wall Panel Layout + Ceiling + Floor only, and ticking **Add
+elevation** adds Wall N/E/S/W back.
 
 ## What exists and works
 

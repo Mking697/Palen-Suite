@@ -207,9 +207,13 @@ go and nothing else to press.
   PPGI 0.4, which is what all four source sheets use throughout.
 - **Output** — every view of the job on **one drawing sheet**, the way a drawing
   office issues them: the WALL PANEL LAYOUT first, with the rooms where they
-  actually sit — sharing a wall means touching along it — then each room's plan,
-  one elevation per wall, the ceiling, the floor and the door, each in its own
-  framed cell with its title under it. `core/draw/sheet.ts` composes it by
+  actually sit — sharing a wall means touching along it — then each room's
+  ceiling, floor and door. **A wall elevation per wall is off by default**
+  (the shop, 5 October 2026) — tick **Add elevation** on a room to put its
+  Wall N/E/S/W elevations on the sheet too. The door elevation is unaffected
+  by that tick and is drawn whenever the room has a door, exactly as before.
+  Each view sits in its own framed cell with its title under it.
+  `core/draw/sheet.ts` composes it by
   **translation only**: nothing is scaled or redrawn, so the sheet is 1:1 in
   millimetres and exports as one DXF. A cell is sized from what a view really
   occupies — dimension chains and labels included, not just the room — so no

@@ -162,6 +162,7 @@ dimension chalti hai. Isliye mode badalne par kuchh khota nahi.
 | **Corner leg** | Corner panel ka ek leg, **poore room ke liye** (300 default). Panel `leg × 2` chauda banta hai | Kisi **ek** corner ka naap alag ho to us corner ka apna box hai — [Har corner ka apna leg](#har-corner-ka-apna-leg) |
 | **Min panel** | Isse chhota tukda banne nahi diya jayega | Balance itna chhota nikle to engine **ek poora module wapas de kar** bache hue ko barabar tukdon me baant deta hai — isi se `635+635` jaise jode bante hain, `1180 + 90` ka bekaar offcut nahi |
 | **L cut** | Rebate lagega ya nahi. 50mm se moti wall par **by default on** | Untick karne par teen cheezein badalti hain: andar wali skin poori height ki, corner ki andar wali skin apni outer ke barabar, aur ceiling poore external naap par |
+| **Add elevation** | Is room ki Wall N/E/S/W elevation drawing sheet par aayegi ya nahi. **Default off** | Off hone par sheet par sirf Wall Panel Layout, Ceiling aur Floor dikhte hain — har wall ki alag elevation nahi. Tick karne par chaaron wall elevation (jo bhi wall room ke paas hai) sheet par aa jaati hain. Door elevation iske bina bhi hamesha aata hai, agar room me door hai |
 
 #### CEILING — chhat chahiye ya nahi
 

@@ -308,6 +308,15 @@ export interface RoomSpec {
   extraFlashing?: ExtraFlashing[];
   floor: FloorSpec;
   ceiling: CeilingSpec;
+  /**
+   * Draw this room's wall elevations (Wall N/E/S/W) on the sheet. Omitted or
+   * false means off — the shop, 5 October 2026: a wall elevation per wall
+   * cluttered every sheet by default, and it is wanted only when asked for.
+   * The door elevation, the Wall Panel Layout, the ceiling plan and the floor
+   * plan are unaffected; the door is drawn whenever the room has one, exactly
+   * as before.
+   */
+  showElevations?: boolean;
   walls: WallSpec[];
   /**
    * The room's plan geometry. `walls` is compiled from this by

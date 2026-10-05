@@ -31,7 +31,11 @@ export { model3d, type Face3, type FaceKind, type Model3, type Pt3 } from './mod
  */
 export function roomDrawings(room: RoomSpec): Drawing[] {
   return [
-    ...wallElevations(room),
+    // off by default — the shop, 5 October 2026: a wall elevation per wall
+    // cluttered every sheet, and it is wanted only when `showElevations` asks
+    // for it. The door elevation is unaffected and is still drawn below
+    // whenever the room has a door.
+    ...(room.showElevations ? wallElevations(room) : []),
     ...doorElevations(room),
     // a ceiling or a floor the customer did not take is not drawn either: a
     // sheet showing a panel nobody is buying is a sheet somebody cuts from
