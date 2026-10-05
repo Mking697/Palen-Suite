@@ -124,7 +124,13 @@ export function brevoBody(req: MailRequest, fallbackFrom: string) {
     ...(req.replyTo ? { replyTo: { email: req.replyTo } } : {}),
     subject: req.subject,
     textContent: req.text,
-    attachment: req.attachments.map((a) => ({ name: a.name, content: toBase64(a.bytes) })),
+    // Brevo rejects an empty `attachment` array with "attachment is missing"
+    // (400) — found when the OTP email, which carries none, started failing
+    // after accounts moved onto server/auth.ts's own sendMail call. Left out
+    // entirely when there is nothing to attach, same as cc/bcc above.
+    ...(req.attachments.length
+      ? { attachment: req.attachments.map((a) => ({ name: a.name, content: toBase64(a.bytes) })) }
+      : {}),
   };
 }
 

@@ -239,6 +239,31 @@ function renderSheet(job: JobSpec) {
   };
 }
 
+const send = (res: ServerResponse, code: number, body: string, type: string) => {
+  res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
+  res.end(body);
+};
+const json = (res: ServerResponse, code: number, data: unknown) =>
+  send(res, code, JSON.stringify(data), MIME['.json']);
+
+/**
+ * An error's message, never blank.
+ *
+ * Node's own `AggregateError` — what `mysql2` throws when it cannot reach
+ * MySQL at all, trying every DNS result in turn — has an *empty* `.message`;
+ * the real reason sits one level down, in `.errors[0]`. Without this, a
+ * database that is unreachable turned into a sign-up form saying nothing
+ * but "Request failed (400)", found testing against Hostinger's MySQL from
+ * a machine it will not accept a connection from.
+ */
+const errorMessage = (err: unknown): string => {
+  if (err instanceof AggregateError && err.errors?.length) {
+    return err.errors.map((e) => (e instanceof Error ? e.message : String(e))).join('; ');
+  }
+  if (err instanceof Error) return err.message || err.constructor.name;
+  return String(err);
+};
+
 /** The job's single WALL PANEL LAYOUT, or why it cannot be drawn. */
 function renderLayout(job: JobSpec) {
   try {
@@ -248,13 +273,6 @@ function renderLayout(job: JobSpec) {
     return { drawable: false, reason: err instanceof Error ? err.message : String(err) };
   }
 }
-
-const send = (res: ServerResponse, code: number, body: string, type: string) => {
-  res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
-  res.end(body);
-};
-const json = (res: ServerResponse, code: number, data: unknown) =>
-  send(res, code, JSON.stringify(data), MIME['.json']);
 
 /**
  * A file rather than a page. `content-disposition` carries the name, so the
@@ -377,7 +395,7 @@ const server = createServer(async (req, res) => {
         await signUp(email, password);
         return json(res, 200, { ok: true });
       } catch (err) {
-        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        return json(res, 400, { error: errorMessage(err) });
       }
     }
 
@@ -389,7 +407,7 @@ const server = createServer(async (req, res) => {
         const { accessToken, expiresAt, user } = await verifyOtp(email, token);
         return json(res, 200, { accessToken, expiresAt, user });
       } catch (err) {
-        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        return json(res, 400, { error: errorMessage(err) });
       }
     }
 
@@ -404,7 +422,7 @@ const server = createServer(async (req, res) => {
         const { accessToken, expiresAt, user } = await signIn(email, password);
         return json(res, 200, { accessToken, expiresAt, user });
       } catch (err) {
-        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        return json(res, 400, { error: errorMessage(err) });
       }
     }
 
@@ -416,7 +434,7 @@ const server = createServer(async (req, res) => {
         await resendConfirmation(email);
         return json(res, 200, { ok: true });
       } catch (err) {
-        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        return json(res, 400, { error: errorMessage(err) });
       }
     }
 
@@ -442,7 +460,7 @@ const server = createServer(async (req, res) => {
         const profile = await getProfile(caller.id);
         return json(res, 200, { profile });
       } catch (err) {
-        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        return json(res, 400, { error: errorMessage(err) });
       }
     }
 
@@ -465,7 +483,7 @@ const server = createServer(async (req, res) => {
         await setAccess(id, until ?? null);
         return json(res, 200, { ok: true });
       } catch (err) {
-        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        return json(res, 400, { error: errorMessage(err) });
       }
     }
 
@@ -757,7 +775,7 @@ const server = createServer(async (req, res) => {
         await saveJob(gate.caller!.id, jobNo, spec);
         return json(res, 200, { ok: true });
       } catch (err) {
-        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        return json(res, 400, { error: errorMessage(err) });
       }
     }
 
@@ -916,7 +934,7 @@ const server = createServer(async (req, res) => {
 
     return serveStatic(res, WEB, path === '/' ? 'index.html' : path);
   } catch (err) {
-    json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    json(res, 500, { error: errorMessage(err) });
   }
 });
 

@@ -3338,6 +3338,17 @@ async function openAdmin() {
 let pendingEmail = '';
 
 /**
+ * Whether the estimator has already picked Create or Upload this session.
+ * renderGate() shows the landing chooser the moment the gate comes down —
+ * once, not on every re-render — and this is what stops a later renderGate()
+ * call (a profile refresh, a tab regaining focus) snapping someone back to
+ * the chooser while they are mid-upload or mid-calculator. Reset to false
+ * whenever the gate goes back up, so the next sign-in starts at the chooser
+ * again rather than wherever they last were.
+ */
+let landingDismissed = false;
+
+/**
  * The sign in / sign up controls. Built here rather than written into the page
  * so there is one of them, wherever it is shown.
  */
@@ -3513,6 +3524,31 @@ function renderGate() {
       ? ''
       : `Accounts are not set up on this server — ${window.Auth ? Auth.reason : ''} Nothing can be saved.`;
   }
+
+  /*
+   * The landing chooser (Create / Upload) sits in front of the calculator,
+   * not in front of the sign-in gate — an estimator picks what they are
+   * doing only once they are actually in. While the gate is up, both the
+   * landing card and the calculator stay hidden and the gate alone shows;
+   * the moment it comes down for the first time this session, the chooser
+   * takes over from showCalculator()'s default. A server with no accounts
+   * configured never locks (see the file comment above), so this is also
+   * what shows the chooser on first boot there.
+   */
+  if (locked) {
+    landingDismissed = false;
+    const landing = $('#landing');
+    const upload = $('#upload');
+    const top = document.querySelector('header.top');
+    const app = document.querySelector('.app');
+    if (landing) landing.hidden = true;
+    if (upload) upload.hidden = true;
+    if (top) top.hidden = true;
+    if (app) app.hidden = true;
+  } else if (!landingDismissed) {
+    showLanding();
+  }
+
   if (!locked) return;
 
   if (sub) {
@@ -4003,6 +4039,7 @@ function renderUpload() {
       state.jobNo = uploadState.result.jobNo || state.jobNo;
       state.rooms = [room];
       state.active = 0;
+      landingDismissed = true;
       showCalculator();
       renderForm();
       refresh();
@@ -4027,7 +4064,10 @@ function wireLanding() {
   const upload = $('#landingUpload');
   const uploadBack = $('#uploadBack');
   if (create) {
-    create.addEventListener('click', () => showCalculator());
+    create.addEventListener('click', () => {
+      landingDismissed = true;
+      showCalculator();
+    });
   }
   if (upload) {
     upload.addEventListener('click', () => openUpload());
