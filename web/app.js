@@ -100,6 +100,8 @@ const newDoor = () => ({
   /** off until the estimator says which way it is hung — see doorLabel */
   handOn: false,
   hand: 'LHS',
+  /** which way the leaf opens; outward is the shop's default */
+  swing: 'out',
   chqOn: true,
   chqHeight: 600,
   liftOn: true,
@@ -548,6 +550,8 @@ const state = {
   rooms: [newRoom()],
   active: 0,
   lastPayload: null,
+  /** what an uploaded drawing printed, to hold the BOQ against — see drawingCheckPanel */
+  drawingCheck: null,
   /** the title of the one view opened off the sheet, or null for the sheet */
   openView: null,
 };
@@ -570,6 +574,7 @@ function roomSpec(r) {
         type: e.door.type,
         core: e.door.core,
         hand: e.door.handOn ? e.door.hand : undefined,
+        swing: e.door.handOn ? e.door.swing : undefined,
         clearW: Number(e.door.clearW),
         clearH: Number(e.door.clearH),
         moduleW: Number(e.door.moduleW),
@@ -1771,9 +1776,20 @@ function renderForm() {
               )
             : null,
           d.handOn
+            ? select(
+                'Door opens',
+                d.swing,
+                [
+                  ['out', 'Outward — out of the room'],
+                  ['in', 'Inward — into the room'],
+                ],
+                setD('swing'),
+              )
+            : null,
+          d.handOn
             ? el('p', {
                 class: 'hint',
-                text: 'The label\'s own (LHS)/(RHS) follows this, and the plan draws the leaf swinging into the room from that end.',
+                text: 'The label\'s own (LHS)/(RHS) follows the hand, and the plan draws the leaf from that end, swinging the way you pick — outward by default. The BOQ is the same either way.',
               })
             : null,
 
@@ -1840,6 +1856,48 @@ function refresh() {
   timer = setTimeout(render, 220);
 }
 
+/**
+ * An uploaded drawing's own figures, held against the BOQ the engine just built
+ * from them. The printed panel widths were never fed to the engine — only the
+ * room, its door and its corners were — so agreement is a real check: the
+ * engine's shop rule arrived at the same panels the drafter drew. A difference
+ * is stated, never adjusted away.
+ */
+function drawingCheckPanel(data) {
+  const chk = state.drawingCheck;
+  if (!chk) return null;
+  const rows = data.blocks.flatMap((b) => b.rows);
+  const expand = (prefix) =>
+    rows.filter((r) => r.desc.startsWith(prefix)).flatMap((r) => Array(r.panelQty || 0).fill(r.panelW));
+  const asc = (a) => [...a].sort((x, y) => x - y);
+  const same = (a, b) => a.length === b.length && asc(a).every((v, i) => v === asc(b)[i]);
+  const problems = [...(chk.warnings || [])];
+  const ok = [];
+  const exp = chk.expected;
+  if (exp) {
+    const test = (label, want, got) => {
+      if (!want.length) return;
+      if (same(want, got)) ok.push(label);
+      else problems.push(`${label}: the drawing prints ${asc(want).join(', ')} but the BOQ has ${asc(got).join(', ') || 'none'}.`);
+    };
+    test('Wall panels', exp.wallPanels, expand('Wall Panel (Outer)'));
+    test('Corner panels', exp.cornerPanels, expand('Corner Panel (Outer)'));
+    if (exp.roof) {
+      const roof = rows.find((r) => r.desc.startsWith('Roof Panel'));
+      const got = roof ? [roof.panelW, roof.panelL] : [];
+      test('Roof panel', exp.roof, got);
+    }
+  }
+  const children = [el('h3', { text: problems.length ? 'Checked against the uploaded drawing — please look' : 'Checked against the uploaded drawing' })];
+  if (ok.length) {
+    children.push(el('p', { class: 'hint', text: `✓ Same as the drawing: ${ok.join(', ')}.` }));
+  }
+  if (problems.length) {
+    children.push(el('ul', {}, problems.map((p) => el('li', { text: p }))));
+  }
+  return el('section', { class: problems.length ? 'problems' : 'drawing-check' }, children);
+}
+
 async function render() {
   const spec = jobSpec();
   const res = await fetch('/api/render', {
@@ -1900,6 +1958,9 @@ async function render() {
       ]),
     );
   }
+
+  const check = drawingCheckPanel(data);
+  if (check) parts.push(check);
 
   // Every view of the job on one canvas, the way a drawing office issues a
   // sheet. The individual pictures are still exportable one by one underneath —
@@ -2002,7 +2063,9 @@ async function render() {
   data.blocks.forEach((block, i) => {
     parts.push(boqBlock(block, data.drawings[i]?.name));
   });
-  parts.push(grandTotal(data));
+  // one room has no job total, and a null pushed here prints as the word "null"
+  const total = grandTotal(data);
+  if (total) parts.push(total);
 
   // bought by the running metre, so it is its own table and its own total
   if (data.flashing?.rooms?.length) parts.push(flashingBlock(data.flashing));
@@ -2703,6 +2766,7 @@ function loadExample(job) {
               fromRight: e.door.fromRight ?? '',
               handOn: e.door.hand != null,
               hand: e.door.hand ?? 'LHS',
+              swing: e.door.swing ?? 'out',
               chqOn: e.door.chqHeight != null,
               chqHeight: e.door.chqHeight ?? 600,
               liftOn: e.door.liftAboveFloor != null || e.door.liftAboveGround != null,
@@ -3589,6 +3653,7 @@ async function fileAction(what) {
     savedAs = '';
     state.jobNo = 'HI-';
     state.rooms = [newRoom()];
+    state.drawingCheck = null;
     state.active = 0;
     $('#jobNo').value = state.jobNo;
     renderForm();
@@ -4020,6 +4085,12 @@ function renderUpload() {
           : []),
       ]),
     );
+    const warns = uploadState.result.form?.warnings ?? [];
+    if (warns.length) {
+      parts.push(
+        el('div', { class: 'upload-notes', text: `Check before relying on this:\n${warns.join('\n')}` }),
+      );
+    }
     if (uploadState.result.notes) {
       parts.push(
         el('div', {
@@ -4031,24 +4102,41 @@ function renderUpload() {
     const openIt = el('button', { class: 'btn primary', type: 'button', text: 'Open in the calculator' });
     openIt.addEventListener('click', () => {
       const room = newRoom();
+      const f = uploadState.result.form;
       room.name = r.name || 'Room 1';
       if (r.w) room.w = r.w;
       if (r.l) room.l = r.l;
       if (r.h) room.h = r.h;
       if (r.wallTh) room.wallTh = r.wallTh;
       if (r.ceilTh) room.ceilTh = r.ceilTh;
-      if (d && (d.clearW || d.clearH || d.moduleW)) {
-        // the first wall card's door — the estimator places it properly and
-        // confirms the hand; this only carries over what the drawing gave
-        room.edges[0].door = newDoor();
-        if (d.clearW) room.edges[0].door.clearW = d.clearW;
-        if (d.clearH) room.edges[0].door.clearH = d.clearH;
-        if (d.moduleW) room.edges[0].door.moduleW = d.moduleW;
-        if (d.hand) {
-          room.edges[0].door.handOn = true;
-          room.edges[0].door.hand = d.hand;
+      if (f) {
+        // everything below was worked out from the printed chains by
+        // server/vision.ts, never decided by the reading model
+        if (f.floorKind) room.floorKind = f.floorKind;
+        if (f.floorTh) room.floorTh = f.floorTh;
+        room.corners = f.corners.slice();
+        room.through = f.through.slice();
+        room.cornerLegs = f.cornerLegs.map((x) => (x === '' ? '' : String(x)));
+        if (f.door) {
+          const fd = f.door;
+          const door = newDoor();
+          if (fd.clearW) door.clearW = fd.clearW;
+          if (fd.clearH) door.clearH = fd.clearH;
+          if (fd.moduleW) door.moduleW = fd.moduleW;
+          door.frame = Math.round((door.moduleW - door.clearW) / 2);
+          if (fd.fromLeft != null) door.fromLeft = fd.fromLeft;
+          door.label = fd.label;
+          if (fd.hand) {
+            door.handOn = true;
+            door.hand = fd.hand;
+            door.swing = fd.swing;
+          }
+          if (fd.skinOuter) door.skinOuter = { ...fd.skinOuter };
+          if (fd.skinInner) door.skinInner = { ...fd.skinInner };
+          room.edges[fd.edge].door = door;
         }
       }
+      state.drawingCheck = f ? { expected: f.expected, warnings: f.warnings } : null;
       state.jobNo = uploadState.result.jobNo || state.jobNo;
       state.rooms = [room];
       state.active = 0;

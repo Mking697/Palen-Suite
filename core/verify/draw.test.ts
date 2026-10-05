@@ -467,10 +467,10 @@ const leafOf = (d: ReturnType<typeof roomPlan>) =>
   d.lines.filter((l) => l.layer === 'DOOR' && l.x1 === l.x2 && !l.dash);
 
 /** The freezer with its door hung the stated way. */
-const handed = (hand?: string) => {
+const handed = (hand?: string, swing?: 'in' | 'out') => {
   const room = structuredClone(HI_15191.rooms[0]);
   const edge = room.outline!.edges![0];
-  edge.door = { ...edge.door!, hand };
+  edge.door = { ...edge.door!, hand, swing };
   return roomPlan(room);
 };
 
@@ -480,15 +480,22 @@ t('no hand, no swing — the plan does not invent one', () => {
   assert.ok(handed(undefined).lines.some((l) => l.layer === 'DOOR'));
 });
 
-t('a stated hand draws the leaf open into the room, and the arc it sweeps', () => {
+t('a stated hand draws the leaf open outward by default, and the arc it sweeps', () => {
   const d = handed('LHS');
   const leaf = leafOf(d);
   assert.equal(leaf.length, 1, 'one leaf');
-  // the door is on the top wall, so into the room is down the drawing
-  assert.ok(leaf[0].y2 > leaf[0].y1, 'the leaf swings inwards');
+  // the door is on the top wall, so out of the room is up the drawing
+  assert.ok(leaf[0].y2 < leaf[0].y1, 'the leaf swings outwards');
   const door = HI_15191.rooms[0].walls.find((w) => w.door)!.door!;
   assert.equal(Math.round(Math.abs(leaf[0].y2 - leaf[0].y1)), door.clearW, 'a leaf wide');
   assert.equal(d.lines.filter((l) => l.layer === 'DOOR' && l.dash).length, 8, 'the arc');
+});
+
+t('swing "in" opens the leaf into the room, the same hinge end', () => {
+  const out = leafOf(handed('LHS'))[0];
+  const inn = leafOf(handed('LHS', 'in'))[0];
+  assert.ok(inn.y2 > inn.y1, 'the leaf swings inwards');
+  assert.equal(inn.x1, out.x1, 'hinge stays where the hand puts it');
 });
 
 t('LHS and RHS hinge at opposite jambs, one leaf width apart', () => {

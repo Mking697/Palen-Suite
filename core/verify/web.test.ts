@@ -598,6 +598,7 @@ await tick('Door opens from');
 
 await t('the hand control appears, and stating it sends the hand', () => {
   assert.equal(postedDoors()[0].hand, 'LHS', 'the default hand should go through');
+  assert.equal((postedDoors()[0] as { swing?: string }).swing, 'out', 'and it opens outward by default');
 });
 
 await t('the verified jobs are not offered to an estimator', () => {

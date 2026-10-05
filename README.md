@@ -279,6 +279,13 @@ go and nothing else to press.
   a half-typed job is not lost. The page renders the file itself rather than
   repeating it: two sets of the same instructions drift apart, and the one that
   gets read is the one on the screen.
+- **Upload a drawing** — the landing screen reads a WALL PANEL LAYOUT (PNG, JPEG
+  or PDF) through Anthropic's vision API (`ANTHROPIC_API_KEY`, optional
+  `VISION_MODEL`) and fills the form: room, floor, door wall / position / hand
+  (opens outward), butt-joint corners. The model only transcribes printed
+  figures; code derives the settings, and warns when a chain does not add up.
+  After opening, the BOQ's panels are held against the drawing's printed ones
+  and any difference is shown. It never builds a BOQ by itself.
 - **Catalog** — a button beside Guide opens a standalone door/panel sheet
   generator (HK-009, HI-15822, HI-15469 style): type one or several door or
   panel types and draw them onto their own sheet, SVG and DXF, **outside any

@@ -215,7 +215,7 @@ Har card ke upar wall ka naam aur uski **length** likhi hoti hai (`N · Top —
 |---|---|---|
 | **Shared with neighbour** | Us side ki wall **padosi room** ki hai. Wall aur uske **dono end ke corner panel** is room ke BOQ se hat jaate hain | Isi se ante room 4 wall / 4 corner ki jagah 3 wall / 2 corner par aata hai |
 | **Door** | Us wall par door. Tick karte hi clear opening, module, frame, leaf, lift — sab poochha jaata hai | Ek wall par abhi ek hi door |
-| **Door opens from** | LHS ya RHS. Label par bhi chhapta hai aur plan par swing bhi wahi banti hai | Na batayein to label waise ka waisa chhapta hai aur swing banti hi nahi |
+| **Door opens from** | LHS ya RHS. Label par bhi chhapta hai aur plan par swing bhi wahi banti hai | Na batayein to label waise ka waisa chhapta hai aur swing banti hi nahi. Hand tick karte hi **Door opens** aata hai — **Outward (default)** ya Inward |
 | **+ Room on this side** | Isi wall se juda hua naya room. Dono ke beech ki wall apne aap set ho jaati hai | Alag-thalag room chahiye to upar wala **+ Room** |
 | **Corner at start / end** | Us junction par corner panel lagega ya nahi. **Default on** | Untick karte hi poochha jayega ki **kaun si wall seedhi jaati hai** — doosri uske face me butt karegi aur ek wall thickness khoyegi |
 | **Leg at start / end** | Us **ek corner** ka apna leg. Khaali chhodiye to room wala figure lagta hai | Ek corner do walls ka hota hai, isliye wahi box dono cards par dikhta hai aur ek jagah badalne se dono badalte hain |
@@ -581,7 +581,10 @@ Do cheezein isse chalti hain:
 - **BOQ ke label ka apna `(LHS)`/`(RHS)` token** khud badal jaata hai. Label me
   pehle se token ho to wahi badalta hai, na ho to peeche jud jaata hai.
 - **Plan drawing me door ka swing** banta hai — pat khula hua, aur uske saath wo
-  chauthai gola jo wo ghoomta hai.
+  chauthai gola jo wo ghoomta hai. **Door opens** dropdown se chunein: **Outward**
+  (room ke bahar — **default**, shop ka niyam, 6 October 2026) ya **Inward**
+  (room ke andar). Hand same rehta hai, sirf pat ki disha badalti hai. BOQ par
+  koi asar nahi.
 
 **Tick na karein to kuch nahi badalta** — label bilkul waisa hi chhapta hai
 jaisa aapne likha, aur plan par koi swing nahi banti. Wajah: jo baat drawing par

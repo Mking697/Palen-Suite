@@ -873,7 +873,11 @@ const server = createServer(async (req, res) => {
           return json(res, 400, { error: 'No image was sent.' });
         }
         const bytes = Buffer.from(body.imageBase64, 'base64');
-        const result = await extractDrawing({ bytes, mimeType: body.mimeType }, apiKey);
+        const result = await extractDrawing(
+          { bytes, mimeType: body.mimeType },
+          apiKey,
+          process.env.VISION_MODEL || undefined,
+        );
         return json(res, 200, result);
       } catch (err) {
         return json(res, 400, { error: err instanceof Error ? err.message : String(err) });

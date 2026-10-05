@@ -6,6 +6,53 @@ file says what has actually happened and what is next.
 
 Last updated: 5 October 2026.
 
+## What landed on 6 October 2026 — door opens outward by default
+
+**The shop:** a cold room door opens out of the room, not into it. `DoorSpec.swing`
+(`'in' | 'out'`, `core/types.ts`) is new; `drawSwing` in `core/draw/roomplan.ts`
+draws the leaf and arc on the outward side unless it says `'in'`, and the door
+card has a **Door opens** dropdown beside the hand (default Outward). The hand
+convention is unchanged — still read facing the wall from outside. Drawing only:
+the BOQ never reads it, so `npm run check` still prints `ALL ROWS MATCH across 3
+jobs`. The shop's instruction, not read off a sheet. Tests in `draw.test.ts` and
+`web.test.ts` updated: default is outward, `'in'` swings inward from the same hinge.
+
+## What landed on 6 October 2026 — drawing upload reads the whole plan
+
+`server/vision.ts` (`/api/extract-drawing`, the Upload button) used to read only
+w/l/h/thickness and one door, which it always put on wall N, so a drawing came
+out as a different room. It now transcribes each wall's **printed dimension
+chain** (corner / panel / door figures), the butt-joint corners, the floor row,
+the ceiling layout's size and the door note (wall, hand, sheets). Nothing is
+*decided* by the model: `deriveForm` works out, in code, which wall the door is
+on and how far along it, which corners are butt joints and which wall runs
+through (the chain that adds to the full length), per-corner legs, floor kind
+and thickness. A chain that does not add to its wall (less 0-2 wall
+thicknesses) is a warning naming the figures — never adjusted. The door opens
+outward (the 6 October default above).
+
+**A check that is not an input:** the printed panel widths are *not* fed to the
+engine. After Open in the calculator, `drawingCheckPanel` in `web/app.js` holds
+the engine's own wall, corner and roof panels against what the drawing printed
+and says so beside the totals, or lists the difference. On HI-12378 (chiller
+2082 x 1143 x 2440, door bottom wall, butt joint SW) the engine's panels —
+1180, 912, 843, 543, 302; three 600 corners; roof 1083 x 2022 — are exactly the
+drawing's. `core/verify/vision.test.ts` (11 tests) holds `deriveForm` on that
+drawing. The read itself is a network call and is not tested.
+
+Model: `VISION_MODEL`, default `claude-opus-5-5`, falling back to
+`claude-sonnet-4-5` on a 404 (a key that cannot see the newer one). **Not run
+against the live key from here** — the local `.env` key answers 401. Also
+fixed: a single-room job printed the word "null" above the flashing table
+(`grandTotal` returned null into `replaceChildren`).
+
+**Not done, and says so on the screen where it can:** asymmetric door frames
+(HI-12378 prints 165 | 520 | 125; the engine draws equal frames, 145 each);
+wall sheet materials (PP/SS in the spec box — order outer/inner unconfirmed);
+SS thickness (not printed, 0.5 assumed and flagged); multi-room and L-shape
+drawings (walls: null, defaults stay, notes say so); panelised floor build-up.
+
+
 ## What landed on 5 October 2026 — seventh change: accounts moved off Supabase, onto Hostinger's own MySQL
 
 **The shop:** run the database on Hostinger itself rather than a third-party

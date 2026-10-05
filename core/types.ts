@@ -125,6 +125,13 @@ export interface DoorSpec {
    * `doorLabel` in core/rules.ts.
    */
   hand?: string;
+  /**
+   * Which way the leaf opens — 'out' of the room or 'in' to it. Drawing only,
+   * the BOQ never reads it, and it matters only once a hand is stated.
+   * Unstated means 'out': the shop's own default, 6 October 2026 (a cold
+   * room door opens outward). It is an instruction, not read off a sheet.
+   */
+  swing?: 'in' | 'out';
   /** skins on the door leaf; defaults to the room's */
   skin?: Partial<SkinPair>;
   /** clear opening */

@@ -39,8 +39,11 @@ const SWING_STEPS = 8;
  * shop:** facing a wall from outside the room, the left hand points along that
  * edge's own direction — the outlines run clockwise, so this holds on every
  * wall — which puts an LHS hinge at the start of the opening and an RHS hinge
- * at its end. The leaf is drawn swinging *into* the room. If the shop hangs
- * them the other way, this function is the only place that changes.
+ * at its end. The leaf swings *out of* the room unless `DoorSpec.swing` says
+ * 'in' — outward is the default, stated by the shop on 6 October 2026. The
+ * hand is the same either way: it is read facing the wall from outside. If
+ * the shop hangs them the other way, this function is the only place that
+ * changes.
  */
 function drawSwing(d: Drawing, door: DoorSpec, p0: Pt, p1: Pt, u: Pt, n: Pt): void {
   if (!door.hand) return;
@@ -55,7 +58,9 @@ function drawSwing(d: Drawing, door: DoorSpec, p0: Pt, p1: Pt, u: Pt, n: Pt): vo
   const r = length([jamb[0] - hinge[0], jamb[1] - hinge[1]]);
   if (r < 1) return;
 
-  const open: Pt = [hinge[0] + n[0] * r, hinge[1] + n[1] * r];
+  // `n` points into the room; outward is the other way
+  const s = door.swing === 'in' ? 1 : -1;
+  const open: Pt = [hinge[0] + n[0] * r * s, hinge[1] + n[1] * r * s];
   d.lines.push({ x1: hinge[0], y1: hinge[1], x2: open[0], y2: open[1], layer: 'DOOR' });
 
   const a0 = Math.atan2(jamb[1] - hinge[1], jamb[0] - hinge[0]);
