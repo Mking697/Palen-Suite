@@ -1888,6 +1888,7 @@ function drawingCheckPanel(data) {
       test('Roof panel', exp.roof, got);
     }
   }
+  const notes = chk.notes ? el('p', { class: 'hint', text: `The reading tool noted: ${chk.notes}` }) : null;
   const children = [el('h3', { text: problems.length ? 'Checked against the uploaded drawing — please look' : 'Checked against the uploaded drawing' })];
   if (ok.length) {
     children.push(el('p', { class: 'hint', text: `✓ Same as the drawing: ${ok.join(', ')}.` }));
@@ -1895,6 +1896,7 @@ function drawingCheckPanel(data) {
   if (problems.length) {
     children.push(el('ul', {}, problems.map((p) => el('li', { text: p }))));
   }
+  if (notes) children.push(notes);
   return el('section', { class: problems.length ? 'problems' : 'drawing-check' }, children);
 }
 
@@ -3966,6 +3968,7 @@ const uploadState = { file: null, result: null, error: '', busy: false };
 function renderUpload() {
   const body = $('#uploadBody');
   if (!body) return;
+  let openNow = null;
 
   if (!VISION.on) {
     body.replaceChildren(
@@ -4051,6 +4054,7 @@ function renderUpload() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'could not read the drawing');
         uploadState.result = data;
+        uploadState.autoOpen = true;
       } catch (err) {
         uploadState.error = err.message;
         uploadState.result = null;
@@ -4100,7 +4104,7 @@ function renderUpload() {
       );
     }
     const openIt = el('button', { class: 'btn primary', type: 'button', text: 'Open in the calculator' });
-    openIt.addEventListener('click', () => {
+    const openResult = () => {
       const room = newRoom();
       const f = uploadState.result.form;
       room.name = r.name || 'Room 1';
@@ -4117,6 +4121,10 @@ function renderUpload() {
         room.corners = f.corners.slice();
         room.through = f.through.slice();
         room.cornerLegs = f.cornerLegs.map((x) => (x === '' ? '' : String(x)));
+        for (const e of room.edges) {
+          if (f.wallSkin.outer) e.skinOuter = { ...f.wallSkin.outer };
+          if (f.wallSkin.inner) e.skinInner = { ...f.wallSkin.inner };
+        }
         if (f.door) {
           const fd = f.door;
           const door = newDoor();
@@ -4133,10 +4141,18 @@ function renderUpload() {
           }
           if (fd.skinOuter) door.skinOuter = { ...fd.skinOuter };
           if (fd.skinInner) door.skinInner = { ...fd.skinInner };
+          if (fd.chqHeight) {
+            door.chqOn = true;
+            door.chqHeight = fd.chqHeight;
+          }
+          if (fd.lift != null) {
+            door.liftOn = true;
+            door.liftAboveFloor = fd.lift;
+          }
           room.edges[fd.edge].door = door;
         }
       }
-      state.drawingCheck = f ? { expected: f.expected, warnings: f.warnings } : null;
+      state.drawingCheck = f ? { expected: f.expected, warnings: f.warnings, notes: uploadState.result.notes || '' } : null;
       state.jobNo = uploadState.result.jobNo || state.jobNo;
       state.rooms = [room];
       state.active = 0;
@@ -4144,11 +4160,20 @@ function renderUpload() {
       showCalculator();
       renderForm();
       refresh();
-    });
+    };
+    openIt.addEventListener('click', openResult);
+    openNow = openResult;
     parts.push(openIt);
   }
 
   body.replaceChildren(...parts);
+  // a drawing that has just been read goes straight to the calculator: the BOQ
+  // is the point, and everything it was built from is shown there, checked
+  // against the drawing, rather than on a screen of its own
+  if (uploadState.autoOpen && openNow) {
+    uploadState.autoOpen = false;
+    openNow();
+  }
 }
 
 function openUpload() {

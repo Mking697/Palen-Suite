@@ -30,7 +30,7 @@ const HI_12378 = JSON.stringify({
     ceilTh: 60,
     floor: { kind: 'pufSlab', th: 60 },
     ceiling: { w: 2022, l: 1083 },
-    door: { wall: 'bottom', clearW: 520, clearH: 1980, moduleW: 810, hand: 'RHS', skinOuter: 'SS', skinInner: 'SS' },
+    door: { wall: 'bottom', clearW: 520, clearH: 1980, moduleW: 810, hand: 'RHS', skinOuter: 'SS', skinInner: 'SS', chqHeight: 600, lift: 110 },
     walls: {
       top: [{ kind: 'corner', mm: 300 }, { kind: 'panel', mm: 1180 }, { kind: 'panel', mm: 302 }, { kind: 'corner', mm: 300 }],
       right: [{ kind: 'corner', mm: 300 }, { kind: 'panel', mm: 543 }, { kind: 'corner', mm: 300 }],
@@ -38,6 +38,7 @@ const HI_12378 = JSON.stringify({
       left: [{ kind: 'corner', mm: 300 }, { kind: 'panel', mm: 843 }],
     },
     buttJoints: ['SW'],
+    wallSheets: { outer: 'PPGI', inner: 'SS' },
   },
   notes: '',
 });
@@ -46,9 +47,17 @@ console.log('\n  drawing upload — HI-12378\n');
 
 const f = parseExtraction(HI_12378).form!;
 
-t('the printed figures add up; the only thing to confirm is the SS thickness, which no drawing prints', () => {
-  assert.equal(f.warnings.length, 1);
-  assert.match(f.warnings[0], /SS.*thickness is not printed/);
+t('the printed figures add up; what is left to confirm is the SS thickness and the unsettable roof sheet', () => {
+  assert.equal(f.warnings.length, 2);
+  assert.match(f.warnings[0], /SS sheet: thickness is not printed/);
+  assert.match(f.warnings[1], /roof, corner and floor sheets/);
+});
+
+t('walls are PPGI outside and SS inside, as the plan marks them; the door is SS with its CHQ sheet and lift', () => {
+  assert.equal(f.wallSkin.outer!.material, 'PPGI');
+  assert.equal(f.wallSkin.inner!.material, 'SS');
+  assert.equal(f.door!.chqHeight, 600);
+  assert.equal(f.door!.lift, 110);
 });
 
 t('the door is on the bottom wall (edge 2), as drawn — not defaulted to the top', () => {
@@ -93,7 +102,7 @@ t('what the drawing prints is kept to check the BOQ against, panel by panel', ()
 t('a misread figure is named, never absorbed', () => {
   const bad = JSON.parse(HI_12378);
   bad.room.walls.right[1].mm = 534; // 300 + 534 + 300 = 1134, not 1143
-  const w = parseExtraction(JSON.stringify(bad)).form!.warnings.filter((x) => !/thickness/.test(x));
+  const w = parseExtraction(JSON.stringify(bad)).form!.warnings.filter((x) => /add to/.test(x));
   assert.equal(w.length, 1);
   assert.match(w[0], /right.*1134.*1143/);
 });

@@ -68,6 +68,9 @@ export interface ExtractedDoor {
   hand: 'LHS' | 'RHS' | null;
   skinOuter: string | null;
   skinInner: string | null;
+  /** printed height of the chequered sheet up the leaf, and the door lift off the slab */
+  chqHeight: number | null;
+  lift: number | null;
 }
 
 export interface ExtractedRoom {
@@ -86,6 +89,8 @@ export interface ExtractedRoom {
   walls: Record<WallName, ExtractedSeg[]> | null;
   /** corners the drawing marks as a butt joint */
   buttJoints: CornerName[];
+  /** the sheet marked on the OUTSIDE and the INSIDE of the walls, as the plan labels them */
+  wallSheets: { outer: string | null; inner: string | null } | null;
 }
 
 export interface ExtractionResult {
@@ -109,6 +114,8 @@ const RANGES: Record<string, [number, number]> = {
   clearH: [1200, 3000],
   moduleW: [400, 3000],
   seg: [20, 6000],
+  chq: [50, 2000],
+  lift: [0, 500],
 };
 
 const inRange = (key: string, v: unknown): number | null => {
@@ -140,7 +147,9 @@ Answer with ONLY a JSON object, no other text, in exactly this shape (null where
       "moduleW": number or null,    // the door's overall width in the wall chain (frame + opening + frame), e.g. the 810 over a 165+520+125 chain
       "hand": "LHS" or "RHS" or null,   // from the door note, e.g. "1 NO RHS OPENING"
       "skinOuter": string or null,  // door sheet, e.g. "SS" or "PPGI", from the door note (SS/SS means both SS)
-      "skinInner": string or null
+      "skinInner": string or null,
+      "chqHeight": number or null,  // "SS. CHQ. SHEET BOTH SIDE-600MM" -> 600
+      "lift": number or null        // "DOOR LIFT :- 110 MM" -> 110
     } or null,
     "walls": {
       "top":    [ {"kind": "corner"|"panel"|"door", "mm": number}, ... ],
@@ -148,7 +157,8 @@ Answer with ONLY a JSON object, no other text, in exactly this shape (null where
       "bottom": [ ... ],
       "left":   [ ... ]
     } or null,
-    "buttJoints": [ "NW" | "NE" | "SE" | "SW" ]   // corners the drawing marks "Butt joint"
+    "buttJoints": [ "NW" | "NE" | "SE" | "SW" ],   // corners the drawing marks "Butt joint"
+    "wallSheets": { "outer": string or null, "inner": string or null } or null   // the sheet labelled on the OUTSIDE face of the walls (e.g. "PPGI") and on the INSIDE face (inside the room, e.g. "SS"), as the plan marks them. If the plan marks different sheets on different parts of one wall, give the main one and say so in "notes".
   },
   "notes": string   // plain text: anything unclear, any figure you are unsure of, any view or room you did not transcribe. Empty string if nothing to flag.
 }
@@ -218,6 +228,8 @@ export function parseExtraction(raw: string): ExtractionResult {
           hand: d.hand === 'LHS' || d.hand === 'RHS' ? d.hand : null,
           skinOuter: typeof d.skinOuter === 'string' ? d.skinOuter : null,
           skinInner: typeof d.skinInner === 'string' ? d.skinInner : null,
+          chqHeight: inRange('chq', d.chqHeight),
+          lift: inRange('lift', d.lift),
         }
       : null,
     walls: wallsIn
@@ -226,6 +238,12 @@ export function parseExtraction(raw: string): ExtractionResult {
     buttJoints: Array.isArray(r.buttJoints)
       ? r.buttJoints.filter((c: unknown) => CORNERS.includes(c as CornerName))
       : [],
+    wallSheets: r.wallSheets
+      ? {
+          outer: typeof r.wallSheets.outer === 'string' ? r.wallSheets.outer : null,
+          inner: typeof r.wallSheets.inner === 'string' ? r.wallSheets.inner : null,
+        }
+      : null,
   };
   return {
     jobNo: typeof parsed.jobNo === 'string' && parsed.jobNo.trim() ? parsed.jobNo.trim() : null,
@@ -252,8 +270,12 @@ export interface DerivedForm {
     swing: 'out';
     skinOuter: { material: string; thickness: number } | null;
     skinInner: { material: string; thickness: number } | null;
+    chqHeight: number | null;
+    lift: number | null;
     label: string;
   };
+  /** the sheet on each face of every wall; null leaves the form's default */
+  wallSkin: { outer: { material: string; thickness: number } | null; inner: { material: string; thickness: number } | null };
   /** per vertex NW, NE, SE, SW — a butt joint means no corner panel there */
   corners: boolean[];
   through: Array<'prev' | 'next'>;
@@ -290,6 +312,7 @@ export function deriveForm(room: ExtractedRoom): DerivedForm {
     floorKind: room.floor?.kind ?? null,
     floorTh: room.floor?.th ?? null,
     door: null,
+    wallSkin: { outer: null, inner: null },
     corners: [true, true, true, true],
     through: ['prev', 'prev', 'prev', 'prev'],
     cornerLegs: ['', '', '', ''],
@@ -367,6 +390,26 @@ export function deriveForm(room: ExtractedRoom): DerivedForm {
     if (leg != null && leg !== common) out.cornerLegs[v] = leg;
   });
 
+  // the sheet on each face of the walls, as the plan labels them
+  const assumed = new Set<string>();
+  const skin = (name: string | null, what: string) => {
+    const m = name ? SKIN_NAMES[name.trim().toUpperCase().replace(/\.$/, '')] : undefined;
+    if (name && !m) warnings.push(`${what} "${name}" is not a stocked material — left at the default.`);
+    if (m && m !== 'PPGI' && !assumed.has(m)) {
+      assumed.add(m);
+      warnings.push(`${m} sheet: thickness is not printed, ${SKIN_THICKNESS[m]}mm assumed — confirm it.`);
+    }
+    return m ? { material: m, thickness: SKIN_THICKNESS[m] } : null;
+  };
+  if (room.wallSheets) {
+    out.wallSkin = { outer: skin(room.wallSheets.outer, 'Wall outer sheet'), inner: skin(room.wallSheets.inner, 'Wall inner sheet') };
+    if (out.wallSkin.outer || out.wallSkin.inner) {
+      warnings.push(
+        'Wall sheets are read as marked on the plan (outer / inner) and set on every wall; the roof, corner and floor sheets cannot be set on the form and stay PPGI 0.4.',
+      );
+    }
+  }
+
   // the door
   const door = room.door;
   if (door?.wall) {
@@ -379,19 +422,8 @@ export function deriveForm(room: ExtractedRoom): DerivedForm {
     } else {
       fromLeft = segs.slice(0, at).filter((s) => s.kind === 'panel').reduce((t, s) => t + s.mm, 0);
     }
-    const skin = (name: string | null) => {
-      const m = name ? SKIN_NAMES[name.trim().toUpperCase().replace(/\.$/, '')] : undefined;
-      if (name && !m) warnings.push(`Door sheet "${name}" is not a stocked material — left at the default.`);
-      return m ? { material: m, thickness: SKIN_THICKNESS[m] } : null;
-    };
-    const outer = skin(door.skinOuter);
-    const inner = skin(door.skinInner);
-    for (const s of [outer, inner]) {
-      if (s && s.material !== 'PPGI') {
-        warnings.push(`Door sheet ${s.material}: thickness is not printed, ${s.thickness}mm assumed — confirm it.`);
-        break;
-      }
-    }
+    const outer = skin(door.skinOuter, 'Door sheet');
+    const inner = skin(door.skinInner, 'Door sheet');
     const tag = (s: { material: string } | null) => (s ? (SHORT[s.material] ?? s.material) : 'PP');
     const sheets = tag(outer) === tag(inner) ? tag(outer) : `${tag(outer)}/${tag(inner)}`;
     out.door = {
@@ -404,6 +436,8 @@ export function deriveForm(room: ExtractedRoom): DerivedForm {
       swing: 'out',
       skinOuter: outer,
       skinInner: inner,
+      chqHeight: door.chqHeight,
+      lift: door.lift,
       label: `Flush Door ${sheets}`,
     };
   } else if (door) {

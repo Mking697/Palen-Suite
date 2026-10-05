@@ -46,9 +46,18 @@ against the live key from here** — the local `.env` key answers 401. Also
 fixed: a single-room job printed the word "null" above the flashing table
 (`grandTotal` returned null into `replaceChildren`).
 
+**Same day, second pass (after the first live upload):** the wall sheets are read
+as the plan marks them (PPGI outside, SS inside on HI-12378) and set on every
+wall's outer/inner; the door's CHQ height (600) and lift (110) are read and set.
+Roof, corner and floor sheets have no control on the form (room-level skin is
+not exposed), so they stay PPGI 0.4 and the screen says so. A drawing that has
+just been read now opens straight in the calculator — warnings and the model's
+notes sit in the "Checked against the uploaded drawing" box beside the BOQ.
+12 tests in `vision.test.ts`.
+
 **Not done, and says so on the screen where it can:** asymmetric door frames
 (HI-12378 prints 165 | 520 | 125; the engine draws equal frames, 145 each);
-wall sheet materials (PP/SS in the spec box — order outer/inner unconfirmed);
+one wall marked SS on part of its outer face and PP on the rest (the engine has one outer sheet per wall);
 SS thickness (not printed, 0.5 assumed and flagged); multi-room and L-shape
 drawings (walls: null, defaults stay, notes say so); panelised floor build-up.
 
