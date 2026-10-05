@@ -53,6 +53,7 @@
         <span id="jobSearchMsg" class="top-msg"></span>
         <!-- a new tab, so a job half typed into the form is not lost -->
         <a class="btn" id="guideBtn" href="/guide" target="_blank" rel="noopener">Guide</a>
+        <button class="btn" id="catalogBtn">Catalog</button>
         <button class="btn" id="printBtn">Print</button>
         <button class="btn" id="mailBtn">Email</button>
 
@@ -102,6 +103,16 @@
         <button class="btn" type="button" id="mailBack">&larr; Back to the calculator</button>
       </div>
       <div id="mailBody"></div>
+    </div>
+
+    <!-- standalone door / panel catalog sheets — HK-009, HI-15822, HI-15469
+         style. Not part of any job; the job on screen is untouched behind it. -->
+    <div class="admin" id="catalog" hidden>
+      <div class="admin-head">
+        <h2>Door &amp; panel catalog</h2>
+        <button class="btn" type="button" id="catalogBack">&larr; Back to the calculator</button>
+      </div>
+      <div id="catalogBody"></div>
     </div>
 
     <div class="app">

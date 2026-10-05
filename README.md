@@ -272,6 +272,13 @@ go and nothing else to press.
   a half-typed job is not lost. The page renders the file itself rather than
   repeating it: two sets of the same instructions drift apart, and the one that
   gets read is the one on the screen.
+- **Catalog** — a button beside Guide opens a standalone door/panel sheet
+  generator (HK-009, HI-15822, HI-15469 style): type one or several door or
+  panel types and draw them onto their own sheet, SVG and DXF, **outside any
+  job**. Nothing typed here reaches a BOQ or a job file — it is for the
+  drawing office to print a reference sheet, the same way those four
+  reference drawings are not tied to any room. The job on screen behind it is
+  untouched.
 
 - **Walls in nobody's BOQ** — connected rooms need not be the same size, and
   when they are not, the whole wall between them belongs to the deeper room.
@@ -305,6 +312,8 @@ core/draw/spec.ts           room specification box (WALL/CEILING/FLOOR/DOOR),
                             tinted per room -> translation only, nothing counted
 core/draw/detail.ts         panel joint ("camlock") detail -- derived from
                             samples, see README "Open items"
+core/draw/catalog.ts        standalone door/panel catalog sheets, not tied to
+                            any job or room -- prices nothing
 core/draw/sheet.ts          many drawings -> one 1:1 sheet, by translation only
 core/draw/model3d.ts        the job as flat faces in space, for the 3D toggle
 core/export/zip.ts          a stored ZIP and CRC32 — no compressor, no package
@@ -432,16 +441,20 @@ engine worthless — see `CLAUDE.md`.
 ## Open items
 
 - **Drawing types from the shop's reference sheets, not yet built**, requested
-  5 October 2026 alongside the room specification box (built) and the panel
-  joint detail / AL. CHQ layout (also now built — see below). Remaining:
-  - **Standalone door catalog sheets** (HK-009, HI-15822, HI-15821 style) and
-    **standalone single-panel component sheets** (HI-15469 style) — these are
-    not part of a job's drawing set; they are a separate small tool an
-    estimator would use to print one or several door/panel types on their
-    own, without building a room around them.
+  5 October 2026 alongside the room specification box, panel joint detail and
+  AL. CHQ layout (all now built). Remaining:
   - **Non-rectangular site plans** (HI-15815 style, walls at odd angles) — the
     biggest of the four. `core/plan.ts` only compiles right-angled outlines
     today; this needs real geometry work and must not move any BOQ figure.
+
+- **The door/panel catalog does not price anything, by design.** The Catalog
+  button (`core/draw/catalog.ts`, `/api/catalog`) draws HK-009/HI-15822/
+  HI-15469 style sheets for a door or panel type on its own — not part of a
+  job, no BOQ row, no job file. If a catalog door is wanted in a job's BOQ, it
+  is entered on a room the ordinary way; the two are not linked. Worth a
+  second look once an estimator has used it: does typing the same door twice
+  — once to print the catalog sheet, once on the room — need a "copy to room"
+  shortcut, or is keeping the two forms wholly separate the right call.
 
 - **The camlock step is read off three samples, not stated by the shop.**
   `core/draw/detail.ts`'s `camlockStep` is half the panel thickness — HI-14516D

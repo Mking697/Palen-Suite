@@ -3618,6 +3618,205 @@ async function fileAction(what) {
   }
 }
 
+/* ---------- standalone door / panel catalog ---------- */
+
+/**
+ * Door and panel catalog sheets — HK-009, HI-15822, HI-15821, HI-15469
+ * style. Not part of any job: the doors/panels typed here never touch the
+ * job on screen or reach a BOQ. `/api/catalog` composes them into their own
+ * sheet, exactly as `core/draw/catalog.ts` draws a single door or panel
+ * on its own.
+ */
+const catalogState = {
+  doors: [],
+  panels: [],
+  result: null,
+  error: '',
+};
+
+function newCatalogDoor() {
+  return {
+    label: 'Flush Door 60 MM Thk. PP/PP.',
+    thickness: 60,
+    clearW: 860,
+    clearH: 1980,
+    frameW: 1180,
+    frameH: 2900,
+    hand: 'LHS',
+    qty: 1,
+    chqHeight: 600,
+    doorLift: 0,
+  };
+}
+
+function newCatalogPanel() {
+  return { width: 1180, length: 2840, thickness: 60, qty: 1, lCut: true, camlock: true, flashingRequired: false };
+}
+
+async function renderCatalog() {
+  const body = $('#catalogBody');
+  if (!body) return;
+
+  const form = el('div', { class: 'settings-form' });
+
+  const doorsBox = el('div', { class: 'group' }, [el('h3', { text: 'Doors' })]);
+  catalogState.doors.forEach((d, i) => {
+    doorsBox.append(
+      el('div', { class: 'chain-row' }, [
+        field('Label', d.label, (v) => (d.label = v), { type: 'text' }),
+        field('Thickness', d.thickness, (v) => (d.thickness = v), { unit: 'mm' }),
+        field('Clear W', d.clearW, (v) => (d.clearW = v), { unit: 'mm' }),
+        field('Clear H', d.clearH, (v) => (d.clearH = v), { unit: 'mm' }),
+        field('Frame W', d.frameW, (v) => (d.frameW = v), { unit: 'mm' }),
+        field('Frame H', d.frameH, (v) => (d.frameH = v), { unit: 'mm' }),
+        select('Hand', d.hand, [['LHS', 'LHS'], ['RHS', 'RHS']], (v) => (d.hand = v)),
+        field('Qty', d.qty, (v) => (d.qty = v)),
+        field('AL. CHQ height', d.chqHeight, (v) => (d.chqHeight = v), { unit: 'mm' }),
+        field('Door lift', d.doorLift, (v) => (d.doorLift = v), { unit: 'mm' }),
+        (() => {
+          const del = el('button', { class: 'chain-del', type: 'button', text: '×', title: 'remove this door' });
+          del.addEventListener('click', () => {
+            catalogState.doors.splice(i, 1);
+            renderCatalog();
+          });
+          return del;
+        })(),
+      ]),
+    );
+  });
+  const addDoor = el('button', { class: 'add-room', type: 'button', text: '+ Door' });
+  addDoor.addEventListener('click', () => {
+    catalogState.doors.push(newCatalogDoor());
+    renderCatalog();
+  });
+  doorsBox.append(addDoor);
+
+  const panelsBox = el('div', { class: 'group' }, [el('h3', { text: 'Wall panels' })]);
+  catalogState.panels.forEach((p, i) => {
+    panelsBox.append(
+      el('div', { class: 'chain-row' }, [
+        field('Width', p.width, (v) => (p.width = v), { unit: 'mm' }),
+        field('Length', p.length, (v) => (p.length = v), { unit: 'mm' }),
+        field('Thickness', p.thickness, (v) => (p.thickness = v), { unit: 'mm' }),
+        field('Qty', p.qty, (v) => (p.qty = v)),
+        toggle('L cut', p.lCut, (v) => (p.lCut = v)),
+        toggle('Camlock', p.camlock, (v) => (p.camlock = v)),
+        toggle('Flashing required', p.flashingRequired, (v) => (p.flashingRequired = v)),
+        (() => {
+          const del = el('button', { class: 'chain-del', type: 'button', text: '×', title: 'remove this panel' });
+          del.addEventListener('click', () => {
+            catalogState.panels.splice(i, 1);
+            renderCatalog();
+          });
+          return del;
+        })(),
+      ]),
+    );
+  });
+  const addPanel = el('button', { class: 'add-room', type: 'button', text: '+ Panel' });
+  addPanel.addEventListener('click', () => {
+    catalogState.panels.push(newCatalogPanel());
+    renderCatalog();
+  });
+  panelsBox.append(addPanel);
+
+  form.append(doorsBox, panelsBox);
+
+  const msg = el('p', { class: 'settings-msg' });
+  const draw = el('button', { class: 'btn primary', type: 'button', text: 'Draw sheet' });
+  draw.addEventListener('click', async () => {
+    draw.disabled = true;
+    msg.textContent = 'Drawing…';
+    try {
+      const res = await fetch('/api/catalog', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'CATALOG',
+          doors: catalogState.doors.map((d) => ({
+            ...d,
+            thickness: +d.thickness,
+            clearW: +d.clearW,
+            clearH: +d.clearH,
+            frameW: +d.frameW,
+            frameH: +d.frameH,
+            qty: +d.qty,
+            chqHeight: d.chqHeight ? +d.chqHeight : undefined,
+            doorLift: d.doorLift ? +d.doorLift : undefined,
+          })),
+          panels: catalogState.panels.map((p) => ({
+            ...p,
+            width: +p.width,
+            length: +p.length,
+            thickness: +p.thickness,
+            qty: +p.qty,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'could not draw the catalog sheet');
+      catalogState.result = data;
+      catalogState.error = '';
+      msg.textContent = '';
+    } catch (err) {
+      catalogState.error = err.message;
+      catalogState.result = null;
+      msg.textContent = err.message;
+    }
+    draw.disabled = false;
+    renderCatalog();
+  });
+
+  const resultBox = el('div', { class: 'block draw sheet' });
+  if (catalogState.result?.drawable) {
+    const holder = el('div', { class: 'draw-svg' });
+    holder.innerHTML = catalogState.result.svg;
+    const dxf = el('button', { class: 'btn', type: 'button', text: 'DXF — whole sheet' });
+    dxf.addEventListener('click', async () => {
+      const res = await fetch('/api/catalog-dxf', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'CATALOG',
+          doors: catalogState.doors.map((d) => ({ ...d, thickness: +d.thickness, clearW: +d.clearW, clearH: +d.clearH, frameW: +d.frameW, frameH: +d.frameH, qty: +d.qty })),
+          panels: catalogState.panels.map((p) => ({ ...p, width: +p.width, length: +p.length, thickness: +p.thickness, qty: +p.qty })),
+        }),
+      });
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'catalog.dxf';
+      a.click();
+    });
+    resultBox.append(
+      el('div', { class: 'draw-head' }, [
+        el('div', {}, [el('h3', { text: catalogState.result.title }), el('p', { text: catalogState.result.subtitle })]),
+        dxf,
+      ]),
+      holder,
+    );
+  }
+
+  body.replaceChildren(form, draw, msg, resultBox);
+}
+
+function openCatalog() {
+  const back = $('#catalogBack');
+  const panel = $('#catalog');
+  if (!panel) return;
+  panel.hidden = false;
+  if (back && !back.dataset.wired) {
+    back.dataset.wired = '1';
+    back.addEventListener('click', () => {
+      panel.hidden = true;
+    });
+  }
+  if (!catalogState.doors.length && !catalogState.panels.length) {
+    catalogState.doors.push(newCatalogDoor());
+  }
+  renderCatalog();
+}
+
 /* ---------- boot ---------- */
 
 $('#jobNo').addEventListener('input', (e) => {
@@ -3632,6 +3831,10 @@ $('#printBtn').addEventListener('click', () => window.print());
 $('#mailBtn').addEventListener('click', () => {
   closeMenus();
   openMail();
+});
+$('#catalogBtn').addEventListener('click', () => {
+  closeMenus();
+  openCatalog();
 });
 
 for (const b of document.querySelectorAll('#fileMenu [data-file]')) {

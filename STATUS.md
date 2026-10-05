@@ -6,6 +6,41 @@ file says what has actually happened and what is next.
 
 Last updated: 5 October 2026.
 
+## What landed on 5 October 2026 — fourth change: standalone door/panel catalog
+
+**Phase D of the 5 October drawing-types list.** A new **Catalog** button
+beside Guide opens a screen wholly separate from the job on screen: type one
+or several door or panel types and draw them onto their own sheet — HK-009's
+three doors side by side, HI-15822's single door, HI-15469's single panel.
+`core/draw/catalog.ts` (`doorCatalogView`, `panelCatalogView`) takes its own
+small spec types rather than `RoomSpec`, because a catalog door shares
+nothing with a job except the shape of the drawing. **Nothing here reaches a
+BOQ** — no job file, no room, no price; a door wanted in a job's BOQ is typed
+on a room the ordinary way, same as before.
+
+New routes: `POST /api/catalog` composes the posted doors/panels into one
+sheet (SVG + click-cells, same `composeSheet` every job sheet uses) and
+`POST /api/catalog-dxf` returns the DXF. `web/app.js` gained the whole screen
+— `catalogState`, `renderCatalog`, `openCatalog` — with its own add/remove
+rows for doors and panels, mirroring the Email screen's shape. `web/index.html`
+gained the button and the `#catalog` panel; `core/verify/web.test.ts`'s
+`APP_IDS` had to grow the four new ids or the harness's stub DOM throws on
+`$('#catalogBtn').addEventListener` the moment the script runs — found by
+running the suite, the way `CLAUDE.md` says every browser script must be.
+
+`npm run check` still prints `ALL ROWS MATCH across 3 jobs`, same 9
+deviations — nothing here could move a BOQ figure, since the catalog never
+calls `buildJob`. All 252 tests pass. Checked by posting a real doors array
+to `/api/catalog` over curl (got back a composed SVG) and `/api/catalog-dxf`
+(got back a DXF), then in a live browser: the Catalog screen opens with one
+pre-filled door, Draw sheet renders a door elevation with HINGE / HANDLE &
+LOCK / EMERGENCY BUTTON labels and the 1180×2900 / 860×1980 dimensions, the
+job on screen behind it untouched.
+
+**What is left of the 5 October drawing-types list**: non-rectangular site
+plans (HI-15815 style) — the one item that needs real geometry work, not a
+new view. See README.md "Open items".
+
 ## What landed on 5 October 2026 — third change: panel joint detail and AL. CHQ layout
 
 **Two more views from the shop's reference sheets.** `core/draw/detail.ts`

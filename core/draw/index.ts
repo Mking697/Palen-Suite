@@ -26,6 +26,12 @@ export { doorElevations, doorElevation, defaultFrame } from './door.ts';
 export { composeSheet, boundsOf, type Box, type Sheet, type SheetCell, type SheetOptions } from './sheet.ts';
 export { roomSpecTable, roomTileColour } from './spec.ts';
 export { panelJointDetail, camlockStep } from './detail.ts';
+export {
+  doorCatalogView,
+  panelCatalogView,
+  type CatalogDoorSpec,
+  type CatalogPanelSpec,
+} from './catalog.ts';
 export { model3d, type Face3, type FaceKind, type Model3, type Pt3 } from './model3d.ts';
 
 /**

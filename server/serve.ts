@@ -25,11 +25,15 @@ import {
   canDraw,
   composeSheet,
   type Drawing,
+  doorCatalogView,
   jobPlan,
   model3d,
+  panelCatalogView,
   roomDrawings,
   toDxf,
   toSvg,
+  type CatalogDoorSpec,
+  type CatalogPanelSpec,
 } from '../core/draw/index.ts';
 import { compileWalls } from '../core/plan.ts';
 import { toXlsx, xlsxFileName, XLSX_MIME } from '../core/export/xlsx.ts';
@@ -678,6 +682,58 @@ const server = createServer(async (req, res) => {
       try {
         const spec = JSON.parse(await readBody(req)) as JobSpec;
         return json(res, 200, buildPayload(spec));
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    /**
+     * Standalone door/panel catalog sheets (HK-009, HI-15822, HI-15469
+     * style) — not part of any job. Posted doors/panels become their own
+     * composed sheet, for an estimator who wants to print one or several
+     * door or panel types on their own without building a room around them.
+     * Nothing here reaches a BOQ; see core/draw/catalog.ts.
+     */
+    if (path === '/api/catalog' && req.method === 'POST') {
+      try {
+        const body = JSON.parse(await readBody(req)) as {
+          title?: string;
+          doors?: CatalogDoorSpec[];
+          panels?: CatalogPanelSpec[];
+        };
+        const views: Drawing[] = [
+          ...(body.doors ?? []).map((d) => doorCatalogView(d)),
+          ...(body.panels ?? []).map((p) => panelCatalogView(p)),
+        ];
+        if (!views.length) return json(res, 400, { error: 'no doors or panels given' });
+        const { drawing, cells } = composeSheet(views, { title: body.title ?? 'CATALOG' });
+        return json(res, 200, {
+          drawable: true,
+          title: drawing.title,
+          subtitle: `${views.length} view(s) · every dimension in mm at 1:1`,
+          svg: toSvg(drawing, { maxWidth: 1400 }),
+          cells,
+        });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    /** One catalog view as a DXF download. */
+    if (path === '/api/catalog-dxf' && req.method === 'POST') {
+      try {
+        const body = JSON.parse(await readBody(req)) as {
+          title?: string;
+          doors?: CatalogDoorSpec[];
+          panels?: CatalogPanelSpec[];
+        };
+        const views: Drawing[] = [
+          ...(body.doors ?? []).map((d) => doorCatalogView(d)),
+          ...(body.panels ?? []).map((p) => panelCatalogView(p)),
+        ];
+        if (!views.length) return json(res, 400, { error: 'no doors or panels given' });
+        const { drawing } = composeSheet(views, { title: body.title ?? 'CATALOG' });
+        return send(res, 200, toDxf(drawing), 'image/vnd.dxf');
       } catch (err) {
         return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
       }
