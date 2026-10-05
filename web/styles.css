@@ -43,6 +43,11 @@ body {
   top: 0;
   z-index: 20;
 }
+/* the landing screen hides this with [hidden] — CSS specificity does not
+   sort attribute selectors before class selectors by itself, so without this
+   `.top { display: flex }` above would win and the header would stay on
+   screen under the landing card. Same trap `.gate` was already fixed for. */
+.top[hidden] { display: none; }
 
 .brand { display: flex; gap: 11px; align-items: center; flex: none; }
 .brand-mark {
@@ -80,6 +85,7 @@ body {
   grid-template-columns: 350px 1fr;
   align-items: start;
 }
+.app[hidden] { display: none; }
 
 /* ---------- form ---------- */
 
@@ -302,6 +308,50 @@ body.signed-out .gate {
 }
 .admin-head { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
 .admin-head h2 { margin: 0; font-size: 20px; flex: 1; }
+
+/* ---------- the landing screen: Create or Upload ---------- */
+
+#landing {
+  display: grid; place-items: center; min-height: 100vh; padding: 40px 20px;
+}
+/* #landing (specificity 100) would otherwise outrank [hidden] (specificity
+   10), the exact trap CLAUDE.md records for .gate — the card would stay on
+   screen, empty, under whatever was shown after it. */
+#landing[hidden] { display: none; }
+.landing-card {
+  width: 100%; max-width: 520px; text-align: center;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; padding: 40px 34px 34px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 8%);
+}
+.landing-card .brand-mark { width: 50px; height: 50px; font-size: 17px; margin: 0 auto 16px; }
+.landing-card h1 { margin: 0 0 8px; font-size: 24px; letter-spacing: -.3px; }
+.landing-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 26px; }
+.landing-btn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  text-align: left; padding: 16px 18px; border-radius: 12px; width: 100%;
+}
+.landing-btn strong { font-size: 15px; }
+.landing-btn span { font-size: 12px; opacity: .85; font-weight: 400; }
+.landing-btn.primary span { opacity: .9; }
+
+/* ---------- upload a drawing ---------- */
+
+.upload-drop {
+  border: 2px dashed var(--line-2); border-radius: 14px; padding: 36px 20px;
+  text-align: center; cursor: pointer; background: var(--card);
+}
+.upload-drop.is-over { border-color: var(--accent); background: #f3fbfa; }
+.upload-drop input[type="file"] { display: none; }
+.upload-preview { max-width: 100%; max-height: 360px; border-radius: 10px; margin: 16px auto 0; display: block; }
+.upload-notes {
+  margin-top: 16px; padding: 12px 14px; background: #fff8ea;
+  border: 1px solid #f0d29a; border-radius: 10px; font-size: 12.5px; color: var(--dev);
+  white-space: pre-wrap;
+}
+.upload-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 16px; }
+.upload-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--ink-3); }
+.upload-fields input { font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 8px; }
 .admin .scroller { border: 1px solid var(--line); border-radius: 11px; background: var(--card); }
 .admin td, .admin th { text-align: left; white-space: nowrap; }
 .admin td:last-child { display: flex; gap: 6px; flex-wrap: wrap; }

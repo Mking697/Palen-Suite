@@ -40,6 +40,26 @@ import { toXlsx, xlsxFileName, XLSX_MIME } from '../core/export/xlsx.ts';
 import { toPdfPages, pdfFileName, PDF_MIME } from '../core/export/pdf.ts';
 import { binding, environmentReport } from './config.ts';
 import { defaultSubject, parseAddresses, sendMail } from './mail.ts';
+import { extractDrawing } from './vision.ts';
+import { dbAvailable, dbReason } from './db.ts';
+import {
+  deleteJob,
+  deleteUser,
+  getProfile,
+  hasAccess,
+  listJobs,
+  listUsers,
+  loadJob,
+  resendConfirmation,
+  saveJob,
+  saveProfile,
+  setAccess,
+  signIn,
+  signOut,
+  signUp,
+  userFromRequest,
+  verifyOtp,
+} from './auth.ts';
 import {
   DEFAULT_FLOOR_LAYERS,
   DEFAULT_SKIN,
@@ -263,59 +283,6 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 /**
- * Who is making this request, according to Supabase — not according to the
- * request.
- *
- * `/auth/v1/user` answers for the token it is given and for nobody else, so
- * this cannot be told a different name by the browser. It is used for the
- * Reply-To on an email (which has to be a real person) and for the
- * administrator check on a delete.
- *
- * It replaced `profiles?select=…&limit=1` in both places. That was correct
- * while every caller could read exactly one row and quietly wrong the moment an
- * admin could read all of them — "give me one row" then hands back whichever
- * comes first, which is somebody else. The same mistake had already been found
- * and fixed once in `web/auth.js`; `STATUS.md` records it as the thing to watch
- * when a policy is widened. Naming the row is not enough here, because the
- * caller's own id is exactly what we are trying to learn — so this asks the
- * one endpoint whose entire answer is "you".
- */
-async function whoIsCalling(
-  req: IncomingMessage,
-): Promise<{ id: string; email: string } | null> {
-  const url = process.env.SUPABASE_URL ?? '';
-  const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
-  const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-  if (!url || !anonKey || !token) return null;
-
-  const res = await fetch(`${url}/auth/v1/user`, {
-    headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) return null;
-  const user = (await res.json()) as { id?: string; email?: string };
-  return user.id ? { id: user.id, email: user.email ?? '' } : null;
-}
-
-/** That caller's own profile row, asked for by id rather than by "one row". */
-async function profileOf(id: string, token: string) {
-  const url = process.env.SUPABASE_URL ?? '';
-  const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
-  const res = await fetch(
-    `${url}/rest/v1/profiles?id=eq.${encodeURIComponent(id)}` +
-      '&select=id,is_admin,mail_from,display_name&limit=1',
-    { headers: { apikey: anonKey, Authorization: `Bearer ${token}` } },
-  );
-  if (!res.ok) return null;
-  const rows = (await res.json()) as Array<{
-    id: string;
-    is_admin: boolean;
-    mail_from: string | null;
-    display_name: string | null;
-  }>;
-  return rows.length ? rows[0] : null;
-}
-
-/**
  * Run the real verifier and hand its output to the browser verbatim.
  *
  * The verifier's fixtures are not shipped in a build — they are ground truth
@@ -366,75 +333,152 @@ const server = createServer(async (req, res) => {
 
   try {
     /*
-     * What the browser needs to reach Supabase, from the environment rather
-     * than from the repo — this repository is public and nothing that looks
-     * like a key belongs in it.
-     *
-     * The anon key is *meant* to be here: it identifies the project, not a
-     * person, and row level security is what protects the data. The
-     * service_role key would bypass all of that and must never be read here,
-     * or set on this host at all.
+     * What the browser needs to know before it does anything accounts-related.
+     * Never a secret — just whether the database is reachable at all, read
+     * from the environment rather than from the repo, which is public.
      *
      * Both absent, the calculator still works and simply cannot sign anyone
      * in — the engine is the product and an account is a convenience on top.
      */
     if (path === '/api/config') {
-      const url = process.env.SUPABASE_URL ?? '';
-      const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
+      const accounts = dbAvailable();
       /*
        * Whether email can be sent — a boolean, never the key. The browser needs
        * to know so the Email button can say what is missing instead of opening
        * a form that cannot post anywhere. Same reasoning as `accountsReason`.
        */
       const mail = !!(process.env.BREVO_API_KEY && process.env.MAIL_FROM);
+      /*
+       * Whether a drawing can be read, same reasoning: a boolean, never the
+       * key. The Upload button says what is missing instead of accepting a
+       * file it cannot do anything with.
+       */
+      const vision = !!process.env.ANTHROPIC_API_KEY;
       return json(res, 200, {
-        supabase: url && anonKey ? { url, anonKey } : null,
-        accountsReason: url && anonKey ? '' : 'SUPABASE_URL / SUPABASE_ANON_KEY are not set',
+        accounts,
+        accountsReason: accounts ? '' : dbReason(),
         mail,
         mailReason: mail ? '' : 'BREVO_API_KEY / MAIL_FROM are not set on the server',
+        vision,
+        visionReason: vision ? '' : 'ANTHROPIC_API_KEY is not set on the server',
       });
     }
 
+    /* ---------- accounts: our own MySQL, not Supabase ---------- */
+
+    if (path === '/api/auth/signup' && req.method === 'POST') {
+      if (!dbAvailable()) return json(res, 501, { error: dbReason() });
+      try {
+        const { email, password } = JSON.parse(await readBody(req)) as {
+          email?: string;
+          password?: string;
+        };
+        if (!email || !password) return json(res, 400, { error: 'Email and password are required.' });
+        await signUp(email, password);
+        return json(res, 200, { ok: true });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    if (path === '/api/auth/verify' && req.method === 'POST') {
+      if (!dbAvailable()) return json(res, 501, { error: dbReason() });
+      try {
+        const { email, token } = JSON.parse(await readBody(req)) as { email?: string; token?: string };
+        if (!email || !token) return json(res, 400, { error: 'Email and code are required.' });
+        const { accessToken, expiresAt, user } = await verifyOtp(email, token);
+        return json(res, 200, { accessToken, expiresAt, user });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    if (path === '/api/auth/signin' && req.method === 'POST') {
+      if (!dbAvailable()) return json(res, 501, { error: dbReason() });
+      try {
+        const { email, password } = JSON.parse(await readBody(req)) as {
+          email?: string;
+          password?: string;
+        };
+        if (!email || !password) return json(res, 400, { error: 'Email and password are required.' });
+        const { accessToken, expiresAt, user } = await signIn(email, password);
+        return json(res, 200, { accessToken, expiresAt, user });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    if (path === '/api/auth/resend' && req.method === 'POST') {
+      if (!dbAvailable()) return json(res, 501, { error: dbReason() });
+      try {
+        const { email } = JSON.parse(await readBody(req)) as { email?: string };
+        if (!email) return json(res, 400, { error: 'Which email?' });
+        await resendConfirmation(email);
+        return json(res, 200, { ok: true });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    if (path === '/api/auth/signout' && req.method === 'POST') {
+      const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+      if (token) await signOut(token);
+      return json(res, 200, { ok: true });
+    }
+
+    if (path === '/api/auth/profile' && req.method === 'GET') {
+      const caller = await userFromRequest(req);
+      if (!caller) return json(res, 401, { error: 'Not signed in.' });
+      const profile = await getProfile(caller.id);
+      return json(res, 200, { profile });
+    }
+
+    if (path === '/api/auth/profile' && req.method === 'PATCH') {
+      const caller = await userFromRequest(req);
+      if (!caller) return json(res, 401, { error: 'Not signed in.' });
+      try {
+        const fields = JSON.parse(await readBody(req));
+        await saveProfile(caller.id, fields);
+        const profile = await getProfile(caller.id);
+        return json(res, 200, { profile });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    /* ---------- admin: our own database, our own check ---------- */
+
+    if (path === '/api/admin/users' && req.method === 'GET') {
+      const caller = await userFromRequest(req);
+      if (!caller) return json(res, 401, { error: 'Not signed in.' });
+      if (!caller.isAdmin) return json(res, 403, { error: 'Only an administrator can list users.' });
+      return json(res, 200, { users: await listUsers() });
+    }
+
+    if (path === '/api/admin/access' && req.method === 'PATCH') {
+      const caller = await userFromRequest(req);
+      if (!caller) return json(res, 401, { error: 'Not signed in.' });
+      if (!caller.isAdmin) return json(res, 403, { error: 'Only an administrator can change access.' });
+      try {
+        const { id, until } = JSON.parse(await readBody(req)) as { id?: string; until?: string | null };
+        if (!id) return json(res, 400, { error: 'Which user?' });
+        await setAccess(id, until ?? null);
+        return json(res, 200, { ok: true });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     /*
-     * Remove a user for good. The only route that touches a real secret.
-     *
-     * Deleting an account needs Supabase's **service key**, which bypasses
-     * every row level policy — so it can never reach a browser, and this is
-     * the reason the server exists in the accounts story at all.
-     *
-     * Being an admin is **checked against the database, not believed from the
-     * request**: the caller's own token is used to read their profile, and row
-     * level security means that token can only ever return their own row. A
-     * request that claims to be an admin and is not gets its own row back with
-     * `is_admin` false, and is refused.
+     * Remove a user for good. Unlike the Supabase version, no second secret
+     * key is needed — deleting a row is an ordinary query once the caller is
+     * confirmed to be an admin, checked against the database rather than
+     * believed from the request, exactly as before.
      */
     if (path === '/api/admin/user' && req.method === 'DELETE') {
-      const url = process.env.SUPABASE_URL ?? '';
-      const anonKey = process.env.SUPABASE_ANON_KEY ?? '';
-      const serviceKey = process.env.SUPABASE_SERVICE_KEY ?? '';
-      if (!url || !anonKey) return json(res, 501, { error: 'Accounts are not configured here.' });
-      if (!serviceKey) {
-        return json(res, 501, {
-          error:
-            'Deleting a user needs SUPABASE_SERVICE_KEY on the server. ' +
-            'Until it is set, use Stop — it ends access and keeps the account.',
-        });
-      }
-
-      const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-      if (!token) return json(res, 401, { error: 'Not signed in.' });
-
-      /*
-       * Who is asking, from Supabase rather than from the request — and then
-       * their own row by id. This used to be `profiles?select=id,is_admin&
-       * limit=1`, which is the row that comes first and not the caller's: an
-       * admin may read every profile, so the check could be made against a
-       * stranger. Same mistake `web/auth.js` was fixed for on 17 August.
-       */
-      const caller = await whoIsCalling(req);
+      const caller = await userFromRequest(req);
       if (!caller) return json(res, 401, { error: 'Not signed in.' });
-      const me = await profileOf(caller.id, token);
-      if (!me?.is_admin) {
+      if (!caller.isAdmin) {
         return json(res, 403, { error: 'Only an administrator can delete a user.' });
       }
 
@@ -444,13 +488,7 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { error: 'An administrator cannot delete their own account.' });
       }
 
-      const gone = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-      });
-      if (!gone.ok) {
-        return json(res, 502, { error: `Supabase refused: ${(await gone.text()).slice(0, 200)}` });
-      }
+      await deleteUser(id);
       return json(res, 200, { ok: true });
     }
 
@@ -609,7 +647,7 @@ const server = createServer(async (req, res) => {
         });
       }
 
-      const caller = await whoIsCalling(req);
+      const caller = await userFromRequest(req);
       if (!caller) return json(res, 401, { error: 'Sign in to send an email.' });
 
       try {
@@ -624,8 +662,7 @@ const server = createServer(async (req, res) => {
         if (!body.job) return json(res, 400, { error: 'no job' });
         const job = normalise(body.job);
 
-        const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-        const me = await profileOf(caller.id, token);
+        const me = await getProfile(caller.id);
 
         const views = sheetViews(job);
         const attachments = [
@@ -687,6 +724,60 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    /* ---------- the estimator's own saved jobs ---------- */
+
+    /**
+     * Every saved-job route below gates on `hasAccess`, the same check the
+     * Postgres policy `apne hi job, access rehte hue` used to make for us —
+     * there is no database-level backstop for this on MySQL, so it is made
+     * here, once, before each handler touches `jobs`.
+     */
+    async function requireAccess(req: IncomingMessage) {
+      const caller = await userFromRequest(req);
+      if (!caller) return { error: json(res, 401, { error: 'Not signed in.' }) };
+      const profile = await getProfile(caller.id);
+      if (!profile || !hasAccess(profile)) {
+        return { error: json(res, 403, { error: 'Your access has ended.' }) };
+      }
+      return { caller };
+    }
+
+    if (path === '/api/jobs/saved' && req.method === 'GET') {
+      const gate = await requireAccess(req);
+      if (gate.error) return gate.error;
+      return json(res, 200, { jobs: await listJobs(gate.caller!.id) });
+    }
+
+    if (path === '/api/jobs/saved' && req.method === 'POST') {
+      const gate = await requireAccess(req);
+      if (gate.error) return gate.error;
+      try {
+        const { jobNo, spec } = JSON.parse(await readBody(req)) as { jobNo?: string; spec?: unknown };
+        if (!jobNo || !spec) return json(res, 400, { error: 'jobNo and spec are required.' });
+        await saveJob(gate.caller!.id, jobNo, spec);
+        return json(res, 200, { ok: true });
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    if (path.startsWith('/api/jobs/saved/') && req.method === 'GET') {
+      const gate = await requireAccess(req);
+      if (gate.error) return gate.error;
+      const jobNo = decodeURIComponent(path.slice('/api/jobs/saved/'.length));
+      const spec = await loadJob(gate.caller!.id, jobNo);
+      if (!spec) return json(res, 404, { error: `No job ${jobNo}` });
+      return json(res, 200, { spec });
+    }
+
+    if (path.startsWith('/api/jobs/saved/') && req.method === 'DELETE') {
+      const gate = await requireAccess(req);
+      if (gate.error) return gate.error;
+      const jobNo = decodeURIComponent(path.slice('/api/jobs/saved/'.length));
+      await deleteJob(gate.caller!.id, jobNo);
+      return json(res, 200, { ok: true });
+    }
+
     /**
      * Standalone door/panel catalog sheets (HK-009, HI-15822, HI-15469
      * style) — not part of any job. Posted doors/panels become their own
@@ -743,6 +834,32 @@ const server = createServer(async (req, res) => {
       const job = JOBS.find((j) => j.jobNo === url.searchParams.get('job'));
       if (!job) return json(res, 404, { error: 'unknown job' });
       return json(res, 200, job);
+    }
+
+    /**
+     * Read an uploaded WALL PANEL LAYOUT drawing and answer with the figures
+     * a single room's form asks for. Never a BOQ — see the note at the top of
+     * server/vision.ts. The estimator checks and edits the pre-filled form
+     * before pressing Build, the same as every other figure in this app.
+     */
+    if (path === '/api/extract-drawing' && req.method === 'POST') {
+      const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
+      if (!apiKey) {
+        return json(res, 501, {
+          error: 'Reading a drawing needs ANTHROPIC_API_KEY on the server. Until it is set, type the job in by hand.',
+        });
+      }
+      try {
+        const body = JSON.parse(await readBody(req)) as { imageBase64?: string; mimeType?: string };
+        if (!body.imageBase64 || !body.mimeType) {
+          return json(res, 400, { error: 'No image was sent.' });
+        }
+        const bytes = Buffer.from(body.imageBase64, 'base64');
+        const result = await extractDrawing({ bytes, mimeType: body.mimeType }, apiKey);
+        return json(res, 200, result);
+      } catch (err) {
+        return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
     }
 
     if (path === '/api/verify') {

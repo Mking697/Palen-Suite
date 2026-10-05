@@ -3045,6 +3045,9 @@ async function openSettings() {
 /** Set by boot() from /api/config: whether the server can send at all. */
 let MAIL = { on: false, reason: '' };
 
+/** Set by boot() from /api/config: whether the server can read a drawing. */
+let VISION = { on: false, reason: '' };
+
 /**
  * The boxes on the email form.
  *
@@ -3146,7 +3149,7 @@ function openMail() {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          Authorization: `Bearer ${session ? session.access_token : ''}`,
+          Authorization: `Bearer ${session ? session.accessToken : ''}`,
         },
         body: JSON.stringify({
           job: jobSpec(),
@@ -3817,6 +3820,228 @@ function openCatalog() {
   renderCatalog();
 }
 
+/* ---------- landing screen: Create or Upload ---------- */
+
+/** Hide the landing card and uncover the calculator, exactly as it always is. */
+function showCalculator() {
+  const landing = $('#landing');
+  const upload = $('#upload');
+  const top = document.querySelector('header.top');
+  const app = document.querySelector('.app');
+  if (landing) landing.hidden = true;
+  if (upload) upload.hidden = true;
+  if (top) top.hidden = false;
+  if (app) app.hidden = false;
+}
+
+function showLanding() {
+  const landing = $('#landing');
+  const upload = $('#upload');
+  const top = document.querySelector('header.top');
+  const app = document.querySelector('.app');
+  if (upload) upload.hidden = true;
+  if (top) top.hidden = true;
+  if (app) app.hidden = true;
+  if (landing) landing.hidden = false;
+}
+
+/** A File read as base64, without its data: URL prefix. */
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.onerror = () => reject(reader.error || new Error('could not read the file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+const uploadState = { file: null, result: null, error: '', busy: false };
+
+/**
+ * The upload screen: pick a drawing, read it, show what was found, open the
+ * calculator with the form pre-filled so the estimator checks and corrects
+ * before Build — never a BOQ straight from the image. See server/vision.ts.
+ */
+function renderUpload() {
+  const body = $('#uploadBody');
+  if (!body) return;
+
+  if (!VISION.on) {
+    body.replaceChildren(
+      el('p', { class: 'error', text: `Reading a drawing is not set up on this server. ${VISION.reason}` }),
+      el('p', {
+        class: 'hint',
+        text: 'ANTHROPIC_API_KEY goes in the host environment. Until it is set, use Create and type the job in by hand.',
+      }),
+    );
+    return;
+  }
+
+  const drop = el('div', { class: 'upload-drop' }, [
+    el('p', { text: uploadState.file ? uploadState.file.name : 'Click to choose a drawing, or drop one here' }),
+    el('p', { class: 'hint', text: 'PNG or JPEG, up to 5MB — a photo or scan of a WALL PANEL LAYOUT drawing works.' }),
+  ]);
+  const input = el('input', { type: 'file', accept: 'image/png,image/jpeg' });
+  drop.append(input);
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    drop.classList.add('is-over');
+  });
+  drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('is-over');
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      uploadState.file = file;
+      uploadState.result = null;
+      uploadState.error = '';
+      renderUpload();
+    }
+  });
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (file) {
+      uploadState.file = file;
+      uploadState.result = null;
+      uploadState.error = '';
+      renderUpload();
+    }
+  });
+
+  const parts = [drop];
+
+  if (uploadState.file) {
+    const preview = el('img', { class: 'upload-preview', src: URL.createObjectURL(uploadState.file) });
+    parts.push(preview);
+
+    const msg = el('p', { class: 'settings-msg' });
+    const read = el('button', {
+      class: 'btn primary',
+      type: 'button',
+      text: uploadState.busy ? 'Reading…' : 'Read this drawing',
+    });
+    read.disabled = uploadState.busy;
+    read.addEventListener('click', async () => {
+      uploadState.busy = true;
+      uploadState.error = '';
+      renderUpload();
+      try {
+        const imageBase64 = await fileToBase64(uploadState.file);
+        const res = await fetch('/api/extract-drawing', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ imageBase64, mimeType: uploadState.file.type || 'image/png' }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'could not read the drawing');
+        uploadState.result = data;
+      } catch (err) {
+        uploadState.error = err.message;
+        uploadState.result = null;
+      }
+      uploadState.busy = false;
+      renderUpload();
+    });
+    parts.push(read, msg);
+  }
+
+  if (uploadState.error) {
+    parts.push(el('p', { class: 'error', text: uploadState.error }));
+  }
+
+  if (uploadState.result) {
+    const r = uploadState.result.room || {};
+    const d = r.door || null;
+    parts.push(
+      el('h3', { text: 'What was read' }),
+      el('div', { class: 'upload-fields' }, [
+        field('Width', r.w ?? '', (v) => (r.w = v), { unit: 'mm' }),
+        field('Length', r.l ?? '', (v) => (r.l = v), { unit: 'mm' }),
+        field('Height', r.h ?? '', (v) => (r.h = v), { unit: 'mm' }),
+        field('Wall thickness', r.wallTh ?? '', (v) => (r.wallTh = v), { unit: 'mm' }),
+        field('Ceiling thickness', r.ceilTh ?? '', (v) => (r.ceilTh = v), { unit: 'mm' }),
+        ...(d
+          ? [
+              field('Door clear W', d.clearW ?? '', (v) => (d.clearW = v), { unit: 'mm' }),
+              field('Door clear H', d.clearH ?? '', (v) => (d.clearH = v), { unit: 'mm' }),
+              field('Door module', d.moduleW ?? '', (v) => (d.moduleW = v), { unit: 'mm' }),
+            ]
+          : []),
+      ]),
+    );
+    if (uploadState.result.notes) {
+      parts.push(
+        el('div', {
+          class: 'upload-notes',
+          text: `The reading tool was not sure about some of this:\n${uploadState.result.notes}`,
+        }),
+      );
+    }
+    const openIt = el('button', { class: 'btn primary', type: 'button', text: 'Open in the calculator' });
+    openIt.addEventListener('click', () => {
+      const room = newRoom();
+      room.name = r.name || 'Room 1';
+      if (r.w) room.w = r.w;
+      if (r.l) room.l = r.l;
+      if (r.h) room.h = r.h;
+      if (r.wallTh) room.wallTh = r.wallTh;
+      if (r.ceilTh) room.ceilTh = r.ceilTh;
+      if (d && (d.clearW || d.clearH || d.moduleW)) {
+        // the first wall card's door — the estimator places it properly and
+        // confirms the hand; this only carries over what the drawing gave
+        room.edges[0].door = newDoor();
+        if (d.clearW) room.edges[0].door.clearW = d.clearW;
+        if (d.clearH) room.edges[0].door.clearH = d.clearH;
+        if (d.moduleW) room.edges[0].door.moduleW = d.moduleW;
+        if (d.hand) {
+          room.edges[0].door.handOn = true;
+          room.edges[0].door.hand = d.hand;
+        }
+      }
+      state.jobNo = uploadState.result.jobNo || state.jobNo;
+      state.rooms = [room];
+      state.active = 0;
+      showCalculator();
+      renderForm();
+      refresh();
+    });
+    parts.push(openIt);
+  }
+
+  body.replaceChildren(...parts);
+}
+
+function openUpload() {
+  const landing = $('#landing');
+  const panel = $('#upload');
+  if (!panel) return;
+  if (landing) landing.hidden = true;
+  panel.hidden = false;
+  renderUpload();
+}
+
+function wireLanding() {
+  const create = $('#landingCreate');
+  const upload = $('#landingUpload');
+  const uploadBack = $('#uploadBack');
+  if (create) {
+    create.addEventListener('click', () => showCalculator());
+  }
+  if (upload) {
+    upload.addEventListener('click', () => openUpload());
+  }
+  if (uploadBack) {
+    uploadBack.addEventListener('click', () => {
+      const landing = $('#landing');
+      const panel = $('#upload');
+      if (panel) panel.hidden = true;
+      if (landing) landing.hidden = false;
+    });
+  }
+}
+
 /* ---------- boot ---------- */
 
 $('#jobNo').addEventListener('input', (e) => {
@@ -3853,8 +4078,10 @@ async function boot() {
   try {
     const cfg = await (await fetch('/api/config')).json();
     MAIL = { on: !!cfg.mail, reason: cfg.mailReason || '' };
+    VISION = { on: !!cfg.vision, reason: cfg.visionReason || '' };
   } catch {
     MAIL = { on: false, reason: 'the server did not answer /api/config' };
+    VISION = { on: false, reason: 'the server did not answer /api/config' };
   }
 
   // an account is a convenience on top of the calculator, never a gate in
@@ -3876,6 +4103,7 @@ async function boot() {
   renderForm();
   initJobSearch();
   render();
+  wireLanding();
 }
 
 boot();

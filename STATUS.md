@@ -6,6 +6,71 @@ file says what has actually happened and what is next.
 
 Last updated: 5 October 2026.
 
+## What landed on 5 October 2026 — seventh change: accounts moved off Supabase, onto Hostinger's own MySQL
+
+**The shop:** run the database on Hostinger itself rather than a third-party
+Supabase project. Accounts, sessions, OTP email and saved jobs all moved.
+
+**New dependency, the first and only one in the repo:** `mysql2`, because
+Node has no built-in MySQL client. Everything else stays zero-dependency —
+see CLAUDE.md. `server/db.ts` holds the one connection pool, created lazily
+from `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME`; absent,
+`/api/config` answers `accounts: false` with the missing names, the same
+shape `mail`/`vision` already used for a missing Brevo or Anthropic key.
+
+`server/auth.ts` replaces Supabase Auth by hand: password hashing with
+`node:crypto` scrypt, a six-digit OTP (hashed, 60-minute expiry, sent through
+the same `sendMail` the BOQ button uses — no more Supabase SMTP relay),
+opaque bearer session tokens with a sliding 30-day expiry
+(`userFromRequest` extends it on every authenticated call), and
+`hasAccess`/`listJobs`/`saveJob`/etc. with every query carrying its own
+`WHERE user_id = ?` or `WHERE id = ?` by hand — **there is no database-level
+backstop for this on MySQL**, unlike the Postgres row level security this
+replaced. That discipline living in application code, not the schema, is the
+one real trade-off of this migration and is written at the top of
+`sql/mysql-schema.sql` and in `server/auth.ts`'s own file comment.
+
+`server/serve.ts` gained `/api/auth/{signup,verify,signin,resend,signout,
+profile}` and `/api/admin/{users,access}`, replacing the old `/auth/v1/*` and
+`/rest/v1/*` calls `web/auth.js` used to make straight to Supabase. Added
+`/api/jobs/saved` (GET list, POST save) and `/api/jobs/saved/:jobNo` (GET
+one, DELETE), gated by a `requireAccess` helper that checks `hasAccess`
+again server-side on every call — mirroring what the Postgres `jobs` policy
+used to do, just moved into the handler. `/api/admin/user` DELETE no longer
+needs a second secret (`SUPABASE_SERVICE_KEY` is gone); deleting a row is an
+ordinary query once `caller.isAdmin` is confirmed from the session.
+
+`web/auth.js` was rewritten end to end: `window.Auth`'s public shape
+(`.user`, `.profile()`, `.saveJob()`, etc.) is unchanged, so `web/app.js`
+needed exactly one fix — `session.access_token` → `session.accessToken`,
+the field Supabase named one way and our own `/api/auth/signin` names
+another. Everything else in `app.js` (the gate, the OTP form, Save/Save As,
+the admin screen, settings) worked against the new backend with no changes,
+because it was always talking to `Auth`'s interface, never to Supabase
+directly.
+
+`sql/01-tables.sql`, `02-access-and-admin.sql`, `03-make-admin.sql`,
+`04-profile-fields.sql` (all Postgres) were deleted; `sql/mysql-schema.sql`
+replaces all four with one file: `users`, `otps`, `sessions`, `jobs`. Run
+once by hand in Hostinger's phpMyAdmin — confirmed live on 5 October 2026
+against `u441144416_PanelSuite`, all four `CREATE TABLE` queries returning
+green.
+
+`core/verify/web.test.ts`'s entire "accounts" and "access, and the
+administrator" sections (close to 400 lines) were rewritten against the new
+`/api/auth/*` / `/api/jobs/saved` shape rather than the old Supabase-shaped
+stub routes (`${SUPA}/auth/v1/...`, `${SUPA}/rest/v1/...`). All 50 tests in
+that file pass, and `npm run check` is unchanged otherwise — same 9
+deviations, same `ALL ROWS MATCH across 3 jobs`. 258 tests total, all green.
+
+**Still open:** Hostinger's `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/
+`DB_NAME` environment variables were added in hPanel but not yet saved/
+redeployed as of this entry — do that, then sign up on the live site, verify
+with the OTP email, and run the `UPDATE users SET is_admin = 1, ...` from
+`sql/mysql-schema.sql`'s own comment to become admin. The old
+`SUPABASE_URL`/`SUPABASE_ANON_KEY` Hostinger variables are now unused and can
+be deleted (harmless if left, since nothing reads them anymore).
+
 ## What landed on 5 October 2026 — sixth change: the drawing prints and downloads on A4
 
 **The shop:** the PDF drawing sheet (download button, email attachment) and

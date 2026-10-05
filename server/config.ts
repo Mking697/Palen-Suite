@@ -67,6 +67,10 @@ export function environmentReport(env: Record<string, string | undefined>): stri
   const shown = ['PORT', 'HOST', 'NODE_ENV', 'NODE_OPTIONS'];
   const lines = shown.map((k) => `    ${k} = ${env[k] ?? '(not set)'}`);
 
+  // names only, never values — DB_PASSWORD in particular must never print
+  const present = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'].filter((k) => env[k]);
+  lines.push(`    database: ${present.length ? present.join(', ') + ' set' : 'not configured'}`);
+
   // anything else the platform may be using to say "listen here" — names only
   // for the values, since these are not ours to print
   const others = Object.keys(env)

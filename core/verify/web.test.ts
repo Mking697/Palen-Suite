@@ -499,8 +499,8 @@ const APP_IDS = [
 const APP_SOURCES = [read('web/auth.js'), read('web/app.js')];
 
 const app = harness(APP_SOURCES, APP_IDS, {
-  // accounts off: no Supabase configured on this server
-  '/api/config': { supabase: null, accountsReason: 'SUPABASE_URL / SUPABASE_ANON_KEY are not set' },
+  // accounts off: no database configured on this server
+  '/api/config': { accounts: false, accountsReason: 'DB_HOST, DB_USER, DB_PASSWORD, DB_NAME is not set' },
   '/api/rules': {
     materials: { PPGI: [0.4] },
     defaultSkin: { material: 'PPGI', thickness: 0.4 },
@@ -890,7 +890,7 @@ await t('with no accounts configured the calculator runs, unlocked, and says why
   assert.equal(app.ids.get('#gate')!.hidden, true, 'the gate should be hidden');
   assert.ok(app.ids.get('#form')!.children.length > 0, 'the form is gone');
   const said = app.ids.get('#gateReason')!.ownText;
-  assert.ok(said.includes('SUPABASE_URL'), `it should say why: ${said}`);
+  assert.ok(said.includes('DB_HOST'), `it should say why: ${said}`);
   assert.ok(said.includes('Nothing can be saved'));
 });
 
@@ -903,12 +903,10 @@ await t('Save without an account says so instead of failing quietly', async () =
 
 console.log('\n  accounts — each estimator their own jobs\n');
 
-const SUPA = 'https://demo.supabase.co';
 const SESSION = {
-  access_token: 'token-for-asha',
-  refresh_token: 'refresh-for-asha',
-  expires_in: 3600,
-  user: { id: 'user-asha', email: 'asha@example.com' },
+  accessToken: 'token-for-asha',
+  expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+  user: { id: 'user-asha', email: 'asha@example.com', isAdmin: false },
 };
 
 /** What the estimator has saved, as the database would hand it back. */
@@ -946,24 +944,38 @@ const PROFILE = {
   is_admin: false,
 };
 
+/** A function route, differentiating methods on the same path. */
+const savedJobsRoutes = (list: unknown, specByJob: (jobNo: string) => unknown) => ({
+  // exact '/api/jobs/saved' — GET lists, POST saves
+  '/api/jobs/saved': (url: string, init?: { method?: string; body?: string }) => {
+    if (init?.method === 'POST') return { ok: true };
+    return { jobs: list };
+  },
+  // longer prefix wins for anything with a job number after the slash
+  '/api/jobs/saved/': (url: string, init?: { method?: string }) => {
+    if (init?.method === 'DELETE') return { ok: true };
+    const jobNo = decodeURIComponent(url.split('/api/jobs/saved/')[1] ?? '');
+    const spec = specByJob(jobNo);
+    return spec ? { spec } : null;
+  },
+});
+
 const acct = harness(APP_SOURCES, [
     ...APP_IDS,
     '#admin', '#adminBody', '#adminBack',
     '#settings', '#settingsBody', '#settingsBack',
     '#mail', '#mailBody', '#mailBack',
   ], {
-  '/api/config': { supabase: { url: SUPA, anonKey: 'anon-key' } },
+  '/api/config': { accounts: true },
   '/api/rules': { materials: { PPGI: [0.4] }, defaultSkin: { material: 'PPGI', thickness: 0.4 }, doorTypes: [], doorCores: ['Puf'], doorHands: ['LHS', 'RHS'], lCutMinWallTh: 50, doorTopMinWallHeight: 3050, floorMaterials: ['PPGI'], floorLayers: [], flashingTypes: ['U Flashing'] },
   '/api/jobs': [{ jobNo: 'HI-15191', rooms: [{ name: 'Freezer Room' }] }],
   '/api/render': RENDER_REPLY,
-  [`${SUPA}/auth/v1/token`]: SESSION,
-  [`${SUPA}/auth/v1/signup`]: { user: { id: 'new', email: 'newcomer@example.com' } }, // no token: a code goes out
-  [`${SUPA}/auth/v1/verify`]: SESSION,
-  [`${SUPA}/rest/v1/profiles`]: [PROFILE],
-  [`${SUPA}/rest/v1/jobs`]: (url: string, init?: { method?: string }) => {
-    if (init?.method && init.method !== 'GET') return null; //  saved or deleted
-    return url.includes('select=spec') ? [{ spec: SAVED_SPEC }] : SAVED;
-  },
+  '/api/auth/signup': { ok: true }, // no token: a code goes out
+  '/api/auth/verify': SESSION,
+  '/api/auth/signin': SESSION,
+  '/api/auth/signout': { ok: true },
+  '/api/auth/profile': { profile: PROFILE },
+  ...savedJobsRoutes(SAVED, (jobNo) => (jobNo === 'HI-20001' ? SAVED_SPEC : null)),
 });
 
 await settle();
@@ -988,12 +1000,10 @@ await t('signed out, the gate is up and the calculator is not reachable', () => 
   assert.ok(acctButton('Sign in') && acctButton('Sign up'), 'no buttons');
 });
 
-await t('empty fields are answered here, not by Supabase', async () => {
+await t('empty fields are answered here, not by the server', async () => {
   const before = acct.posts.length;
   acctButton('Sign in')!.fire('click');
   await settle();
-  // sent empty, Supabase replies "Anonymous sign-ins are disabled" — true, and
-  // useless to somebody who simply has not typed anything yet
   assert.ok(
     textOf(acct.ids.get('#gateForm')).includes('Enter your email and a password'),
     'it should say what is missing',
@@ -1019,10 +1029,9 @@ await t('the code is what opens it — no link, so no Site URL to get wrong', as
   acctButton('Verify')!.fire('click');
   await settle();
 
-  const sent = acct.posts.find((p) => p.url.includes('/auth/v1/verify'));
+  const sent = acct.posts.find((p) => p.url.includes('/api/auth/verify'));
   assert.ok(sent, 'nothing was verified');
   assert.deepEqual(sent!.body, {
-    type: 'signup',
     email: 'newcomer@example.com',
     token: '123456',
   });
@@ -1061,15 +1070,14 @@ await t('Save stores the spec under the job number, as that user', async () => {
   acct.fileButtons.find((b) => b.attrs['data-file'] === 'save')!.fire('click');
   await settle();
 
-  const saved = acct.posts.slice(before).find((p) => p.url.includes('/rest/v1/jobs'));
+  const saved = acct.posts.slice(before).find((p) => p.url === '/api/jobs/saved');
   assert.ok(saved, 'nothing was saved');
-  const row = (saved!.body as Array<Record<string, unknown>>)[0];
-  assert.equal(row.job_no, 'HI-20002');
-  assert.equal(row.user_id, 'user-asha', 'saved as the signed-in user');
-  // the spec is stored and the BOQ is not — it is generated, and a stored
-  // figure is how a saved job and a fresh one start to disagree
-  assert.ok(row.spec && typeof row.spec === 'object');
-  assert.ok(!('blocks' in (row.spec as object)), 'a BOQ must never be stored');
+  const body = saved!.body as Record<string, unknown>;
+  assert.equal(body.jobNo, 'HI-20002');
+  // who it is saved as comes from the bearer token, not from the body —
+  // see userFromRequest in server/auth.ts, never trusted from the request
+  assert.ok(body.spec && typeof body.spec === 'object');
+  assert.ok(!('blocks' in (body.spec as object)), 'a BOQ must never be stored');
   assert.equal(acct.ids.get('#jobSearchMsg')!.ownText, 'saved HI-20002');
 });
 
@@ -1080,13 +1088,13 @@ await t('Save As asks for a number, and saves under that one', async () => {
   await settle();
 
   assert.ok(acct.asked.some((q) => q.includes('job number')), 'it should have asked');
-  const saved = acct.posts.slice(before).find((p) => p.url.includes('/rest/v1/jobs'));
-  assert.equal((saved!.body as Array<Record<string, unknown>>)[0].job_no, 'HI-20003');
+  const saved = acct.posts.slice(before).find((p) => p.url === '/api/jobs/saved');
+  assert.equal((saved!.body as Record<string, unknown>).jobNo, 'HI-20003');
 });
 
 await t('opening a job, changing its number and saving makes a new job', async () => {
-  // `unique (user_id, job_no)` means a different number is a different row, so
-  // the job that was opened is left exactly as it was — which is the point
+  // `(user_id, job_no)` unique means a different number is a different row,
+  // so the job that was opened is left exactly as it was — which is the point
   const box = acct.ids.get('#jobSearch')!;
   box.value = 'HI-20001';
   box.fire('change');
@@ -1101,8 +1109,8 @@ await t('opening a job, changing its number and saving makes a new job', async (
   acct.fileButtons.find((b) => b.attrs['data-file'] === 'save')!.fire('click');
   await settle();
 
-  const saved = acct.posts.slice(before).find((p) => p.url.includes('/rest/v1/jobs'));
-  assert.equal((saved!.body as Array<{ job_no: string }>)[0].job_no, 'HI-20009');
+  const saved = acct.posts.slice(before).find((p) => p.url === '/api/jobs/saved');
+  assert.equal((saved!.body as { jobNo: string }).jobNo, 'HI-20009');
   assert.equal(
     acct.ids.get('#jobSearchMsg')!.ownText,
     'saved as a new job HI-20009',
@@ -1121,9 +1129,9 @@ await t('an estimator can delete their own job, after being asked', async () => 
   acct.confirmWith(true);
   del.fire('click');
   await settle();
-  const gone = acct.posts.slice(before).find((p) => p.url.includes('/rest/v1/jobs'));
+  const gone = acct.posts.slice(before).find((p) => p.url.includes('/api/jobs/saved/'));
   assert.ok(gone, 'nothing was deleted');
-  assert.ok(gone!.url.includes('job_no=eq.HI-20009'), `the open job: ${gone!.url}`);
+  assert.ok(gone!.url.includes('HI-20009'), `the open job: ${gone!.url}`);
   assert.equal(acct.ids.get('#jobSearchMsg')!.ownText, 'deleted HI-20009');
 });
 
@@ -1142,7 +1150,7 @@ await t('a session is kept, so a reload does not sign the estimator out', () => 
     'panelcalc.session',
   );
   assert.ok(kept, 'nothing was stored');
-  assert.ok(kept!.includes('refresh-for-asha'), 'the refresh token has to be kept');
+  assert.ok(kept!.includes('token-for-asha'), 'the access token has to be kept');
 });
 
 console.log('\n  access, and the administrator\n');
@@ -1164,20 +1172,24 @@ const signedInAs = (
     '#settings', '#settingsBody', '#settingsBack',
     '#mail', '#mailBody', '#mailBack',
   ], {
-    '/api/config': { supabase: { url: SUPA, anonKey: 'anon-key' }, ...mail },
+    '/api/config': { accounts: true, ...mail },
     '/api/rules': { materials: { PPGI: [0.4] }, defaultSkin: { material: 'PPGI', thickness: 0.4 }, doorTypes: [], doorCores: ['Puf'], doorHands: ['LHS'], lCutMinWallTh: 50, doorTopMinWallHeight: 3050, floorMaterials: ['PPGI'], floorLayers: [], flashingTypes: ['U Flashing'] },
     '/api/jobs': [],
     '/api/render': RENDER_REPLY,
     '/api/mail': { ok: true, attached: ['HI-20001-BOQ.xlsx', 'HI-20001-drawing.pdf'], replyTo: 'asha@example.com' },
-    [`${SUPA}/auth/v1/token`]: SESSION,
-    [`${SUPA}/rest/v1/profiles`]: (url: string) =>
-      url.includes('order=') ? (users ?? [profile]) : [profile],
-    [`${SUPA}/rest/v1/jobs`]: [],
+    '/api/auth/profile': { profile },
+    '/api/admin/users': { users: users ?? [profile] },
+    '/api/admin/access': { ok: true },
+    ...savedJobsRoutes([], () => null),
   });
   // a kept session, so boot() signs in without anyone typing
   (h.ctx.localStorage as { setItem(k: string, v: string): void }).setItem(
     'panelcalc.session',
-    JSON.stringify({ ...SESSION, expires_at: Math.floor(Date.now() / 1000) + 3600 }),
+    JSON.stringify({
+      accessToken: SESSION.accessToken,
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      user: SESSION.user,
+    }),
   );
   return h;
 };
@@ -1202,23 +1214,17 @@ await t('an admin is never locked out by a date', async () => {
   );
 });
 
-await t('the profile is asked for by id, not just "one row"', async () => {
+await t('the profile is asked for by the caller\'s own token, not just "one row"', async () => {
   /*
-   * An admin may read every profile, so `limit=1` hands them whichever row
-   * comes first — which showed the administrator somebody else's expiry date
-   * and no admin rights at all. It has to name the row it wants.
+   * An admin may list every user through /api/admin/users, but their own
+   * profile comes from /api/auth/profile, which `userFromRequest` resolves
+   * from the bearer token — never from a row chosen some other way.
    */
   const admin = signedInAs({ ...PROFILE, is_admin: true });
   await settle();
 
-  const asked = admin.reads.find(
-    (u) => u.includes('/rest/v1/profiles') && u.includes('select=id,email'),
-  );
+  const asked = admin.reads.find((u) => u === '/api/auth/profile');
   assert.ok(asked, 'the profile was never fetched');
-  assert.ok(
-    asked!.includes(`id=eq.${SESSION.user.id}`),
-    `it must ask for its own row: ${asked}`,
-  );
 });
 
 await t('only an admin is offered the users screen', async () => {
@@ -1254,9 +1260,9 @@ await t('the users screen lists everyone, and giving days writes a date', async 
   grant!.fire('click');
   await settle();
 
-  const patch = admin.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  const patch = admin.posts.slice(before).find((p) => p.url === '/api/admin/access');
   assert.ok(patch, 'nothing was written');
-  const until = (patch!.body as { access_until: string }).access_until;
+  const until = (patch!.body as { until: string }).until;
   const days = (new Date(until).getTime() - Date.now()) / 86400000;
   assert.ok(days > 29 && days < 31, `should be about 30 days, was ${days}`);
 });
@@ -1282,11 +1288,10 @@ await t('any number of days can be typed, for when the three buttons do not fit'
     .fire('click');
   await settle();
 
-  const patch = admin.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  const patch = admin.posts.slice(before).find((p) => p.url === '/api/admin/access');
   assert.ok(patch, 'nothing was written');
   const days =
-    (new Date((patch!.body as { access_until: string }).access_until).getTime() - Date.now()) /
-    86400000;
+    (new Date((patch!.body as { until: string }).until).getTime() - Date.now()) / 86400000;
   assert.ok(days > 89 && days < 91, `should be about 90 days, was ${days}`);
 });
 
@@ -1320,7 +1325,6 @@ const KITTED = {
   ...PROFILE,
   drive_folder_url: 'https://drive.google.com/drive/folders/abc123',
   sheet_url: 'https://docs.google.com/spreadsheets/d/sheet123/edit',
-  drive_script_url: 'https://script.google.com/macros/s/dep123/exec',
   mail_from: 'asha@example.com',
 };
 
@@ -1352,8 +1356,8 @@ await t('the Apps Script box is gone, and its column is left alone', async () =>
    * Phase 11 stopped being "an Apps Script each estimator deploys" on 18 August
    * — the shop asked for two links and one shared ID instead. The box came off
    * the form the same day, on this repo's rule that a control which does
-   * nothing is worse than no control. The column stays, and a save must not
-   * blank what an early tester already typed into it.
+   * nothing is worse than no control. saveProfile in server/auth.ts does not
+   * accept these columns at all anymore — there is no column left to blank.
    */
   const h = signedInAs(KITTED);
   await settle();
@@ -1363,13 +1367,13 @@ await t('the Apps Script box is gone, and its column is left alone', async () =>
   const before = h.posts.length;
   saveSettingsButton(h)!.fire('click');
   await settle();
-  const patch = h.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  const patch = h.posts.slice(before).find((p) => p.url === '/api/auth/profile');
   const body = patch!.body as Record<string, unknown>;
-  assert.ok(!('drive_script_url' in body), 'a column the screen does not show is not written');
-  assert.ok(!('sheet_script_url' in body), 'nor this one');
+  assert.ok(!('driveScriptUrl' in body), 'a field the screen does not show is not sent');
+  assert.ok(!('sheetScriptUrl' in body), 'nor this one');
 });
 
-await t('saving writes the four columns the screen shows, to that estimator\'s own row', async () => {
+await t('saving writes the four fields the screen shows, to that estimator\'s own row', async () => {
   const h = signedInAs(PROFILE);
   await settle();
   await openSettingsOn(h);
@@ -1384,24 +1388,20 @@ await t('saving writes the four columns the screen shows, to that estimator\'s o
   saveSettingsButton(h)!.fire('click');
   await settle();
 
-  const patch = h.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  const patch = h.posts.slice(before).find((p) => p.url === '/api/auth/profile');
   assert.ok(patch, 'nothing was saved');
-  assert.ok(
-    patch!.url.includes(`id=eq.${SESSION.user.id}`),
-    `it must name its own row: ${patch!.url}`,
-  );
   const body = patch!.body as Record<string, unknown>;
-  assert.equal(body.drive_folder_url, 'https://drive.google.com/drive/folders/newfolder');
-  assert.equal(body.sheet_url, 'https://docs.google.com/spreadsheets/d/newsheet/edit');
-  assert.equal(body.mail_from, 'asha@example.com');
+  assert.equal(body.driveFolderUrl, 'https://drive.google.com/drive/folders/newfolder');
+  assert.equal(body.sheetUrl, 'https://docs.google.com/spreadsheets/d/newsheet/edit');
+  assert.equal(body.mailFrom, 'asha@example.com');
   /*
-   * Neither of these may travel with a profile save. The database refuses them
-   * either way — `profiles_guard_privileges` in sql/04-profile-fields.sql — but
-   * the app has no business asking, and a request it does not send is one
-   * nobody has to reason about.
+   * Neither of these may travel with a profile save. The server refuses them
+   * either way — saveProfile in server/auth.ts writes exactly four named
+   * columns — but the app has no business asking, and a request it does not
+   * send is one nobody has to reason about.
    */
-  assert.ok(!('access_until' in body), 'a settings save must never carry access');
-  assert.ok(!('is_admin' in body), 'a settings save must never carry admin rights');
+  assert.ok(!('access_until' in body) && !('accessUntil' in body), 'a settings save must never carry access');
+  assert.ok(!('is_admin' in body) && !('isAdmin' in body), 'a settings save must never carry admin rights');
   assert.ok(textOf(h.ids.get('#settingsBody')).includes('Saved.'), 'it should say it saved');
 });
 
@@ -1422,10 +1422,10 @@ await t('a link that is not the one asked for is said, and still saved', async (
   saveSettingsButton(h)!.fire('click');
   await settle();
 
-  const patch = h.posts.slice(before).find((p) => p.url.includes('/rest/v1/profiles'));
+  const patch = h.posts.slice(before).find((p) => p.url === '/api/auth/profile');
   assert.ok(patch, 'what was typed must still be saved');
   assert.equal(
-    (patch!.body as Record<string, unknown>).drive_folder_url,
+    (patch!.body as Record<string, unknown>).driveFolderUrl,
     'https://docs.google.com/spreadsheets/d/sheet123/edit',
     'it must be stored exactly as typed, not corrected',
   );

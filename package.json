@@ -15,5 +15,8 @@
   },
   "engines": {
     "node": ">=22.6"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0"
   }
 }

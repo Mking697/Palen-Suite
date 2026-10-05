@@ -1,375 +1,114 @@
-# Setup — Supabase, Brevo aur Google
+# Setup — Hostinger MySQL, Brevo aur Google
 
-Ye guide un teen accounts ke liye hai jo login, email aur Google save ke liye
+Ye guide un accounts ke liye hai jo login, email aur Google save ke liye
 chahiye. Ek baar ka kaam hai. `DESIGN.md` ke Phase 9–12 isi par khade hain.
 
-**Ek baat pehle:** mujhe aapki koi bhi **secret key dene ki zaroorat nahi hai**.
-Har key aap khud Hostinger ke *Environment variables* me daalenge. Repo public
-hai — usme koi key kabhi nahi jayegi.
+**5 October 2026 ko accounts Supabase se Hostinger ki apni MySQL par chale
+gaye** — `server/auth.ts` aur `server/db.ts` ab login, session, OTP sab khud
+sambhalte hain. Isse koi teesra account (Supabase) nahi chahiye; database
+wahi hai jahan site khud hosted hai.
+
+**Ek baat pehle:** mujhe aapki koi bhi **secret key ya password dene ki
+zaroorat nahi hai**. Har key aap khud Hostinger ke *Environment variables*
+me daalenge. Repo public hai — usme koi key kabhi nahi jayegi.
 
 Ek key galti se kahin bhej di jaye — chat me, message me, screenshot me — to
-usse **badal dena hi sahi tareeka hai**. Brevo, Supabase, dono me key delete
-karke nayi banana ek minute ka kaam hai, aur purani us pal se bekaar ho jaati
-hai. Kaunsi key kaisi dikhti hai:
-
-| Kaisi dikhti hai | Kya hai | Secret? |
-|---|---|---|
-| `eyJhbGci…` (lambi, teen hisso me) — role `anon` | Supabase anon key | nahi — browser me jaati hi hai |
-| `eyJhbGci…` — role `service_role` | Supabase service key | **haan, sabse khatarnak** — RLS bypass karti hai |
-| `xkeysib-…` | Brevo API key | **haan** |
-| SMTP key | Brevo SMTP password | **haan** |
+usse **badal dena hi sahi tareeka hai**. Database password Hostinger ke
+*Databases* panel se, Brevo key Brevo se — dono jagah purani delete karke
+nayi banana ek minute ka kaam hai.
 
 | Kya | Kis kaam ka | Kab chahiye |
 |---|---|---|
-| [Supabase](#a--supabase--login-aur-database) | Login + har user ka apna database | Phase 9, sabse pehle |
+| [MySQL](#a--mysql--login-aur-database) | Login + har user ka apna database | Phase 9, sabse pehle |
 | [Brevo](#b--brevo--email) | Signup ki email verification, aur BOQ email bhejna | Phase 9 + 12 |
 | [Google Apps Script](#c--google--drive-folder-aur-sheet) | Drive me PDF, Sheet me BOQ | Phase 11 |
 
 ---
 
-## A — Supabase — login aur database
+## A — MySQL — login aur database
 
-### A1. Project banaiye
+### A1. Database banaiye
 
-1. [supabase.com](https://supabase.com) par account banaiye (GitHub se login ho
-   jayega).
-2. **New project**:
-   - **Name** — `panel-suite`
-   - **Database password** — strong rakhiye aur **kahin likh kar rakhiye**,
-     dobara nahi dikhega
-   - **Region** — **Mumbai / ap-south-1**, kyunki users India me hain
-3. Project ban-ne me 2–3 minute lagte hain.
+**hPanel → Databases → MySQL Databases**:
 
-### A2. Do value nikaliye
+1. **MySQL database name** — kuch bhi, jaise `panelsuite` (Hostinger khud
+   `u123456789_` jaisa prefix laga dega)
+2. **MySQL username** — kuch bhi, jaise `panelsuite` (isi tarah prefix lagega)
+3. **Password** — Generate dabaiye, ya khud strong password banaiye, aur
+   **turant kahin likh kar rakhiye** — dobara seedha nahi dikhega
+4. **Create** dabaiye
 
-**Project Settings → API**:
+Ban jaane par list me `u123456789_panelsuite` jaisa poora naam dikhega — wahi
+`DB_NAME` hai, aur username wahi `DB_USER` hai.
 
-| Kya | Kaisa dikhta hai | Ye kya hai |
+### A2. Schema chalaiye — SQL paste kar dijiye
+
+Database ki list wali row me **Enter phpMyAdmin** dabaiye. Upar **SQL** tab
+kholiye.
+
+Repo me **`sql/mysql-schema.sql`** hai — poora file kholiye, select all,
+copy, phpMyAdmin ke SQL box me paste, **Go** dabaiye. Chaar table banenge:
+`users`, `otps`, `sessions`, `jobs` — har ek ke saath uska comment ki wo
+kyun hai.
+
+Postgres ke "row level security" jaisa MySQL me kuch nahi hota — har query
+jo `jobs` padhti/likhti hai, ya `users` ka koi row jo apna nahi hai, apna
+`WHERE user_id = ?` khud saath leti hai. Ye discipline `server/auth.ts` me
+hai; schema khud koi doosri rok nahi lagata. `sql/mysql-schema.sql` ke upar
+wala comment yahi baat kehta hai.
+
+### A3. Hostinger me chaar value daaliye
+
+**hPanel → Environment variables** me:
+
+| Key | Kahan se milta hai | Secret? |
 |---|---|---|
-| **Project URL** | `https://abcdefgh.supabase.co` | secret nahi |
-| **Project ID / ref** | `abcdefgh` | URL ka hi hissa — URL hamesha `https://<project-id>.supabase.co` hota hai, to ek mil jaye to doosra bhi mil gaya |
-| **anon / public key** | lamba `eyJ...` token | **secret nahi** — ye browser me jaana hi hota hai, RLS iski hifazat karta hai |
-| ~~service_role key~~ | lamba `eyJ...` token | **ye kabhi kisi ko mat dijiye** — ye saari security bypass karti hai. Na browser me, na repo me, na chat me |
+| `DB_HOST` | **ek hi Hostinger server par hai to `localhost`**; phpMyAdmin ka "Server" field confirm karta hai | nahi, par value sahi honi chahiye |
+| `DB_PORT` | `3306` | nahi |
+| `DB_USER` | Database ki list wala poora username (`u123456789_...`) | **haan** |
+| `DB_PASSWORD` | A1 me banaya gaya password | **haan — sabse zaroori** |
+| `DB_NAME` | Database ki list wala poora naam (`u123456789_...`) | nahi, par secret ke saath hi rakhiye |
 
-Pehli do Hostinger me daalni hain (neeche batata hoon). Teesri ko haath mat
-lagaiye.
+Inke bina calculator poora chalta hai, bas accounts band rehte hain —
+`/api/config` `accounts: false` bolta hai aur panel khud keh deta hai kya
+set nahi hai.
 
-### A3. Tables banaiye — SQL paste kar dijiye
+### A4. Khud ko admin banaiye
 
-Supabase me **SQL Editor** kholiye, **New query**, ye paste karke **Run**.
-
-> **Sabse aasan raasta: repo ka `sql/` folder.** Wahan yahi SQL alag files me
-> hai — `01-tables.sql`, `02-access-and-admin.sql`, `03-make-admin.sql`,
-> `04-profile-fields.sql` — aur unme **koi fence nahi hai**. File kholiye, sab
-> select kijiye, copy, Run. Kram se chalaiye, 01 se 04 tak.
->
-> **`04-profile-fields.sql` chalana zaroori hai**, aur sirf naye columns ke liye
-> nahi. Wo ek asli chhed band karta hai: `profiles` ka update policy row-level
-> hai, column-level nahi — yaani koi bhi signed-in user apni hi row me
-> `is_admin: true` ya `access_until: 2099` PATCH kar sakta tha, aur Postgres
-> maan leta, kyunki row to unki apni hi hai. App ne wo request kabhi bheji nahi,
-> par haath se bhejna mushkil nahi tha. 04 wala trigger use rok deta hai.
->
-> Yahan neeche se copy karein to ` ``` ` wali pehli aur aakhri line **chhod
-> dijiye** — wo markdown ka nishaan hai, SQL nahi. Ye do baar phansa chuka hai,
-> aur dhyan dene layak baat ye hai: **Postgres poori script pehle padhta hai**,
-> to ek bhi galat line ka matlab hai **kuch bhi nahi chala** — aadha nahi, kuch
-> bhi nahi.
+Pehle apni email se **sign up karke OTP se verify** kar lijiye (A ka button
+site par hi hai). Phir phpMyAdmin ke SQL tab me:
 
 ```sql
--- har user ka profile: uske Drive/Sheet URLs yahan rahenge
-create table public.profiles (
-  id           uuid primary key references auth.users on delete cascade,
-  display_name text,
-  drive_script_url text,
-  sheet_script_url text,
-  mail_from    text,
-  created_at   timestamptz not null default now()
-);
-
--- save kiye hue job. spec wahi JobSpec hai jo form bhejta hai.
--- BOQ save nahi hoti — wo hamesha generate hoti hai, warna purana job aur naya
--- job ek din alag-alag bolne lagenge.
-create table public.jobs (
-  id         uuid primary key default gen_random_uuid(),
-  user_id    uuid not null references auth.users on delete cascade,
-  job_no     text not null,
-  spec       jsonb not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (user_id, job_no)
-);
-
-create index jobs_user_idx on public.jobs (user_id, job_no);
-
--- Row Level Security — YAHI wo cheez hai jo "har user sirf apna data dekhe"
--- ko sach banati hai. Ye database khud lagu karta hai, app ka vaada nahi hai.
-alter table public.profiles enable row level security;
-alter table public.jobs     enable row level security;
-
-create policy "apna hi profile" on public.profiles
-  for all using (auth.uid() = id) with check (auth.uid() = id);
-
-create policy "apne hi job" on public.jobs
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-
--- signup hote hi profile ki row apne aap ban jaye
-create function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  insert into public.profiles (id) values (new.id);
-  return new;
-end;
-$$;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
+UPDATE users SET is_admin = 1, access_until = DATE_ADD(NOW(), INTERVAL 100 YEAR)
+WHERE email = 'you@example.com';
 ```
 
-**Row Level Security sabse zaroori line hai.** Uske bina har user sabka data
-padh sakta hai, chahe app kitni bhi sahi likhi ho. Isse skip mat kijiyega.
+`sql/mysql-schema.sql` ke neeche bhi yahi likha hai, taaki dobara dhoondhna
+na pade.
 
-Chalne par neeche `Success. No rows returned` aayega. Phir **Table Editor** me
-`profiles` aur `jobs` dono dikhne chahiye, dono par **RLS enabled** ke saath.
+### A5. Local par test karna ho to
 
-Ye SQL **aapko hi chalana hai**. Table banane ke liye dashboard login ya database
-password chahiye — anon key se sirf wahi ho sakta hai jo ek aam browser kar sakta
-hai, jo theek bhi hai.
+Repo me `.env` file bana lijiye (wo gitignored hai), paanchon `DB_*` key
+daal dijiye, aur `node --env-file=.env server/serve.ts --local` chalaiye.
 
-### A3b. Admin, trial aur access — doosra SQL
-
-Ye pehle wale ke **baad** chalaiye. Isse teen cheezein aati hain: naye user ko
-**14 din ka trial**, ek **admin** jo sabka access badha/ghata sake, aur ye ki
-**access khatam hone par database khud rok de** — sirf screen par nahi.
-
-```sql
--- kis tareekh tak access hai, kaun admin hai, aur email (admin ko list me
--- dikhane ke liye — auth.users me hai par wahan se padha nahi ja sakta)
-alter table public.profiles
-  add column if not exists access_until timestamptz,
-  add column if not exists is_admin     boolean not null default false,
-  add column if not exists email        text;
-
--- naye user ko 14 din. Badalna ho to yahi ek number badliye.
-create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  insert into public.profiles (id, email, access_until)
-  values (new.id, new.email, now() + interval '14 days');
-  return new;
-end;
-$$;
-
--- purane user (jo pehle se bane hain) ko bhi email aur trial de dijiye
-update public.profiles p
-   set email = u.email,
-       access_until = coalesce(p.access_until, now() + interval '14 days')
-  from auth.users u
- where u.id = p.id;
-
-/*
- * Ye do function `security definer` hain — yaani ye RLS ke bahar chalte hain.
- * Ye zaroori hai: agar policy khud `profiles` ko padhegi to Postgres usi policy
- * ko dobara lagayega aur infinite recursion me phans jayega. Ye Supabase ki
- * sabse aam galti hai.
- */
-create or replace function public.is_admin()
-returns boolean language sql security definer stable set search_path = '' as $$
-  select coalesce((select p.is_admin from public.profiles p where p.id = auth.uid()), false);
-$$;
-
-create or replace function public.has_access()
-returns boolean language sql security definer stable set search_path = '' as $$
-  select coalesce(
-    (select p.is_admin or (p.access_until is not null and p.access_until > now())
-       from public.profiles p where p.id = auth.uid()),
-    false);
-$$;
-
--- profiles: apni row hamesha, aur admin ko sabki
-drop policy if exists "apna hi profile" on public.profiles;
-
-create policy "apni profile padho" on public.profiles
-  for select using (auth.uid() = id or public.is_admin());
-
-create policy "apni profile badlo" on public.profiles
-  for update using (auth.uid() = id) with check (auth.uid() = id);
-
--- sirf admin kisi aur ki row badal sakta hai (access_until yahin se badlega)
-create policy "admin sabki profile badle" on public.profiles
-  for update using (public.is_admin()) with check (public.is_admin());
-
-/*
- * jobs: apne hi job, AUR access chalu hona chahiye.
- * Access ki jaanch YAHAN hai, screen par nahi — screen par lagi rok ek
- * guzarish hoti hai, database ki rok asli hoti hai.
- */
-drop policy if exists "apne hi job" on public.jobs;
-
-create policy "apne hi job, access rehte hue" on public.jobs
-  for all using (auth.uid() = user_id and public.has_access())
-  with check (auth.uid() = user_id and public.has_access());
-```
-
-Ab **admin banaiye** — ye alag se, taaki naam saaf dikhe:
-
-```sql
-update public.profiles
-   set is_admin = true,
-       access_until = now() + interval '100 years'
- where email = 'nantultiwari697@gmail.com';
-```
-
-> Ye tabhi chalega jab us email se **ek baar sign up ho chuka ho** — profile row
-> signup par hi banti hai. Pehle us email se account bana lijiye, phir ye chalaiye.
-> Chalne par `UPDATE 1` aana chahiye; `UPDATE 0` aaya matlab wo account abhi hai
-> hi nahi.
-
-### A4. Email confirmation on kijiye
-
-**Authentication → Providers → Email**:
-
-- **Enable Email provider** — on
-- **Confirm email** — **on** (aapne yahi maanga hai: verify karke hi login)
-
-### A4b. OTP — link ki jagah 6-digit code
-
-Aapne kaha ki verification **OTP se** ho, link se nahi. Supabase ki email me
-dono bheje ja sakte hain; badalna sirf template me hai.
-
-**Authentication → Emails → Templates → Confirm signup** kholiye aur uska
-matn badal kar ye kar dijiye:
-
-```html
-<h2>Panel Suite</h2>
-<p>Aapka verification code:</p>
-<p style="font-size:28px;letter-spacing:6px;font-weight:700">{{ .Token }}</p>
-<p>Ye code 1 ghante me expire ho jayega. Aapne signup nahi kiya to is email ko
-   nazarandaz kar dijiye.</p>
-```
-
-`{{ .Token }}` hi wo 6-digit code hai. `{{ .ConfirmationURL }}` hata dijiye —
-app ab code maangti hai, link nahi.
-
-> **Ek faayda saath me:** link `Site URL` par nirbhar karta hai, jo is setup me
-> teen baar phansa chuka hai. Code kisi URL par nirbhar nahi karta, to wo poori
-> dikkat hi khatam ho jaati hai.
-
-> **Signup test karne se pehle Brevo SMTP laga lijiye (Part B).** Supabase ka
-> apna default mailer **ghante me sirf 3–4 email** bhejta hai aur production ke
-> liye hai hi nahi — bina Brevo ke signup to ho jayega, par **confirmation email
-> shayad kabhi na aaye**, aur bina us link ke login nahi hoga. Ye "kuch hua hi
-> nahi" wali soorat hai; asli wajah yahi hoti hai.
-
-Ek aur baat jo waqt bachayegi: Supabase **nakli domain reject karta hai**.
-`@example.com` jaise pate par `email_address_invalid` milega. Test ke liye apna
-asli email hi use kijiye.
-
-### A4. SQL chali ya nahi — teen check
-
-> **Pehle ye samajh lijiye ki kya kahan chalta hai.** Sirf **Check 2** SQL hai
-> aur Supabase SQL Editor me jaata hai. **Check 1 PowerShell hai** — wo aapke
-> apne terminal me chalta hai, aur **Check 3 JavaScript hai** — wo browser ke
-> console me. Check 1 ko SQL Editor me paste karne se
-> `syntax error at or near "$"` aata hai; ye ho chuka hai, aur galti command ki
-> nahi, usse galat jagah chalane ki hai.
-
-**Check 1 — naye columns aa gaye? (PowerShell, apne terminal me)**
-
-Koi credential nahi chahiye: anon key `/api/config` se aati hai, jo public hai
-hi — wo project ka naam batati hai, kisi vyakti ka nahi.
-
-```powershell
-$cfg = Invoke-RestMethod "https://panelsuite.online/api/config"
-$url = $cfg.supabase.url; $key = $cfg.supabase.anonKey
-foreach ($col in @('drive_folder_url','sheet_url')) {
-  try {
-    Invoke-RestMethod "$url/rest/v1/profiles?select=$col&limit=1" -Headers @{ apikey = $key } | Out-Null
-    "   $col -> EXISTS"
-  } catch { "   $col -> MISSING" }
-}
-```
-
-Dono `EXISTS` chahiye. 04 chalne se pehle dono `MISSING` bolte hain — isi se
-pata chalta hai ki check sach me kuch naap raha hai.
-
-**Check 2 — trigger laga? (SQL, Supabase SQL Editor me)**
-
-```sql
-select tgname from pg_trigger
-where tgrelid = 'public.profiles'::regclass and not tgisinternal;
-```
-
-`profiles_guard_privileges` dikhna chahiye.
-
-**Check 3 — chhed sach me band hua? (JavaScript, browser console me)**
-
-> **SQL Editor se ye test mat kijiye.** Wahan `auth.uid()` null hota hai aur
-> trigger us haalat me jaan-boojh kar skip karta hai (warna service key aur 02
-> ka backfill toot jaate). To SQL Editor me `update profiles set is_admin = true`
-> **chal jayega** — aur bilkul aisa lagega jaise fix fail ho gaya. Wo galat
-> nateeja hai.
-
-panelsuite.online par signed in rehte hue, console me:
-
-```js
-const s = JSON.parse(localStorage.getItem('panelcalc.session'));
-const cfg = await (await fetch('/api/config')).json();
-const r = await fetch(`${cfg.supabase.url}/rest/v1/profiles?id=eq.${s.user.id}`, {
-  method: 'PATCH',
-  headers: { apikey: cfg.supabase.anonKey, Authorization: `Bearer ${s.access_token}`,
-             'content-type': 'application/json' },
-  body: JSON.stringify({ access_until: '2099-01-01T00:00:00Z' }),
-});
-console.log(r.status, await r.text());
-```
-
-*Only an administrator may change access or admin rights.* aana chahiye. `204`
-aaya to 04 nahi lagi.
-
-**Ye sirf 04 chalane ke baad chalaiye.** Pehle chalayenge to request sach me
-kaam kar jayegi — yaani aap wahi escalation kar denge jo band karni thi.
-
-Aur ise **kisi normal account se** kijiye. Trigger administrator ko chhoot deta
-hai, isliye admin ke account par ye hamesha pass ho jayega aur kuch sabit nahi
-karega.
+**Dhyan:** Hostinger ka MySQL aam taur par sirf usi server se pahunch paata
+hai jahan wo hai — bahar se (jaise aapki apni machine se) seedha connect
+karna fail hoga (`ECONNREFUSED`), jab tak **Remote MySQL** me apna IP na
+jode ho. Production me `DB_HOST=localhost` chalta hai kyunki app bhi usi
+server par chalti hai.
 
 ---
 
 ## B — Brevo — email
 
-Brevo do kaam karega:
+Brevo ek hi kaam karega: **API se email bhejna** — OTP (signup verification)
+aur BOQ + drawing wali email, dono `server/mail.ts` ke through, `BREVO_API_KEY`
+se.
 
-1. **Supabase ki verification email bhejega** (SMTP ke through)
-2. **BOQ + drawing wali email bhejega** (API ke through, Phase 12 me)
-
-### Brevo se login nahi hota — ye baat pehle saaf kar lijiye
-
-**Brevo ek email bhejne wali service hai, login wali nahi.** Uske paas users ka
-database hai hi nahi — na password, na session, na koi "sign in". Login ke liye
-jo chahiye (user record, password hash, session token, refresh, forgot password)
-wo sab **Supabase Auth** karta hai.
-
-Aur **email pehle se hi Brevo se hi jaati hai** — "Custom SMTP" ka matlab hi
-yahi hai. Naam me Brevo nahi likha, isliye lagta hai Supabase bhej raha hai:
-
-| Kaam | Kaun |
-|---|---|
-| Account, password, session | **Supabase** |
-| Email ka matn banana | Supabase |
-| **Email sach me bhejna** | **Brevo** |
-| Kis pate se | `info@panelsuite.online` — aapka domain |
-| Kiska quota, kiska log | **Brevo ka** |
-
-Estimator ko email aapke apne pate se aati dikhegi; Supabase ka naam kahin nahi
-aata.
-
-> Brevo ka **API** use karna ho (SMTP ke bajaye) to Supabase me **Auth Hooks →
-> Send Email Hook** se ho sakta hai. Bhejta usme bhi Brevo hi hai, quota bhi
-> wahi — faayda sirf template par zyada control. SMTP 5 minute ka kaam hai, wo
-> naya code maangta hai. Isliye SMTP se shuru kijiye; hook baad me bhi lag sakta
-> hai, tab tak login chalu rahega.
+5 October 2026 ke migration se pehle Supabase Auth khud OTP bhejta tha
+(Brevo ko SMTP se jod kar); ab `server/auth.ts` khud OTP banata hai aur usi
+Brevo API se bhejta hai jo BOQ email bhejti hai — isliye **SMTP wala setup ab
+zaroori nahi**, sirf ek API key chahiye.
 
 ### B0. Is project ka apna Brevo account
 
@@ -377,8 +116,8 @@ aata.
 kisi maujooda account me ek aur domain jodne ke bajaye. Wajah quota hai: free
 plan ka **300 email/din poore account ka saanjha** hota hai. Us account se agar
 marketing campaign bhi jaati ho, to ek blast quota kha jaata hai — aur us din
-**koi estimator login hi nahi kar paata**, kyunki confirmation email hi nahi
-jaati. **Login email kisi doosre kaam ki marketing par nahi tik sakti.**
+**koi estimator login hi nahi kar paata**, kyunki OTP email hi nahi jaati.
+**Login email kisi doosre kaam ki marketing par nahi tik sakti.**
 
 Brevo ko har account ke liye alag email chahiye, to register bhi alag pate se
 hua hai.
@@ -408,83 +147,14 @@ lena zaroori hai:
    dijiye — authenticated domain ka koi bhi pata bina alag verification ke
    chalta hai
 
-> Domain authenticate hone tak signup ki email nahi jayegi. Wo intezaar DNS ka
-> hai, kisi setting ka nahi.
+> Domain authenticate hone tak signup ki OTP email nahi jayegi. Wo intezaar
+> DNS ka hai, kisi setting ka nahi.
 
-### B2. SMTP credentials — Supabase ke liye
-
-> **Brevo me do alag key hoti hain, aur ye aksar ulti pakdi jaati hai.**
->
-> | Key | Kis tab par | Kis kaam ki |
-> |---|---|---|
-> | **SMTP key** | `SMTP` | Supabase ki auth email — **abhi yahi chahiye** |
-> | **API key** (`xkeysib-…`) | `API keys & MCP` | Phase 12, jab app khud email bhejegi |
->
-> Supabase ke SMTP form me API key daalne se wo kabhi kaam nahi karega.
-
-**Brevo → SMTP & API → SMTP** tab. Upar *Your SMTP Settings* me teen cheezein
-pehle se likhi hoti hain — wahi Supabase me jaani hain:
-
-| Brevo par likha | Supabase me |
-|---|---|
-| SMTP Server `smtp-relay.brevo.com` | Host |
-| Port `587` | Port number |
-| **Login** `b5c3fe001@smtp-brevo.com` jaisa | **Username** ← ye dhoondhna padta hai |
-
-Password alag banani padti hai: usi tab par neeche *Your SMTP Keys* ki list
-khaali hoti hai aur **"Click here to generate an SMTP key"** likha hota hai.
-Wahi key Supabase ka **Password** hai — **ek hi baar dikhti hai**, turant copy
-kar lijiye.
-
-Ab **Supabase → Project Settings → Authentication → SMTP Settings**:
-
-- **Enable Custom SMTP** — on
-- **Sender email** — `info@panelsuite.online` (wahi jo Brevo me verify kiya — dusra pata
-  daalne par Brevo bhejne se mana kar dega)
-- **Sender name** — `Panel Suite`
-- **Host** — `smtp-relay.brevo.com` · **Port** — `587`
-- **Username / Password** — upar wale
-
-Save. Ab signup par verification email Brevo se jayegi, aur limit khatam nahi
-hogi.
-
-### B4. Site URL — ye chhoot jaata hai, aur phir "link kaam nahi karta"
-
-Confirmation email ka link user ko **kahan bhejega**, ye Supabase ki apni setting
-tay karti hai — aur uski default `http://localhost:3000` hoti hai. Theek na ki
-to link click karne par estimator ek marey hue page par pahunchega, aur lagega
-ki signup toota hua hai.
-
-**Supabase → Authentication → URL Configuration**:
-
-| | |
-|---|---|
-| **Site URL** | **`https://panelsuite.online`** |
-| **Redirect URLs** | wahi, `https://aqua-finch-257417.hostingersite.com`, aur test ke liye `http://127.0.0.1:5173` |
-
-Redirect URLs me ek se zyada rakh sakte hain, to temporary aur asli dono daal
-dijiye — phir domain badalne par link kabhi nahi tootega.
-
-> **Site URL alag cheez hai, aur wahi chhoot jaati hai.** Redirect URLs sahi
-> hone se kaam nahi banta: link *kahan bhejega* ye Site URL tay karti hai, aur
-> uski default `http://localhost:3000` hai. Wo rah gayi to signup hoga, email
-> jayegi, aur link ek aisi machine par jayega jahan kuch chal hi nahi raha.
-
-### B3. API key — app ki apni email ke liye
+### B2. API key — OTP aur BOQ email, dono isi se
 
 > ✅ **Ye ho chuka hai — 21 August 2026.** Domain authenticated hai (DNS se bhi
 > khud check kiya gaya), API key ban chuki hai, aur uske se ek asli email bhej
-> kar dekh liya gaya — attachment ke saath, Brevo ne accept kiya. Ab bas
-> Hostinger me `BREVO_API_KEY` aur `MAIL_FROM` daalna baaki hai (Part D).
->
-> **Do key ko aapas me mat milaiye** — ye galti sabse aam hai:
->
-> | Key | Kis tab par | Kiske liye |
-> |---|---|---|
-> | **SMTP key** | `SMTP` | Supabase ki signup / OTP email — pehle se chal rahi hai |
-> | **API key** `xkeysib-…` | **`API keys & MCP`** | App ka **Email button** |
->
-> SMTP key ko `BREVO_API_KEY` me daalne par Brevo `401` deta hai.
+> kar dekh liya gaya — attachment ke saath, Brevo ne accept kiya.
 >
 > **Key ko file me dekhe bina check karne ka tareeka**, jo yahan use hua:
 >
@@ -500,8 +170,8 @@ dijiye — phir domain badalne par link kabhi nahi tootega.
 Key ek hi baar dikhegi — copy karke rakhiye.
 
 Ye **asli secret hai**. Ise **sirf Hostinger ke Environment variables** me
-daaliye. Mujhe bhejne ki zaroorat nahi — main code aise likhunga ki wo
-`BREVO_API_KEY` environment se khud padh le.
+daaliye — `BREVO_API_KEY`. Mujhe bhejne ki zaroorat nahi — code environment se
+khud padh leta hai.
 
 ---
 
@@ -599,9 +269,11 @@ Environment Variables** me:
 | Key | Value | Secret? | Kab se chahiye |
 |---|---|---|---|
 | `HOST` | `0.0.0.0` | nahi | pehle se laga hai |
-| `SUPABASE_URL` | `https://kyzexsarilxkzwkntode.supabase.co` | nahi | **ab — login isi se chalega** |
-| `SUPABASE_ANON_KEY` | anon / public key | nahi — browser me jaati hi hai | **ab** |
-| `SUPABASE_SERVICE_KEY` | Supabase ki **service_role** key | **haan — sabse khatarnak** | sirf "user delete" ke liye |
+| `DB_HOST` | `localhost` (same server) | nahi | **ab — login isi se chalega** |
+| `DB_PORT` | `3306` | nahi | **ab** |
+| `DB_USER` | MySQL username (`u...`) | **haan** | **ab** |
+| `DB_PASSWORD` | MySQL password | **haan — sabse khatarnak** | **ab** |
+| `DB_NAME` | MySQL database name (`u...`) | nahi, par secret ke saath rakhiye | **ab** |
 | `BREVO_API_KEY` | Brevo API key | **haan — kisi ko mat dijiye** | **ab — Email button isi se chalega** |
 | `MAIL_FROM` |  `info@panelsuite.online` | nahi | **ab** |
 
@@ -610,46 +282,34 @@ Environment Variables** me:
 > hai ki kya nahi laga. Chupchap fail nahi hota. Key kabhi browser me nahi
 > jaati; isi wajah se `/api/mail` server par hai.
 
-> **`SUPABASE_SERVICE_KEY` sirf tab daaliye jab admin ko user *delete* karna
-> ho.** Wo key har policy ko bypass karti hai, isliye wo **kabhi browser me
-> nahi jaati** — server use rakhta hai aur use karne se pehle jaanchta hai ki
-> maangne wala sach me admin hai. Na daali jaye to sab kuch chalta hai, bas
-> Delete button keh dega ki wo set nahi hai; **Stop** phir bhi kaam karta hai
-> aur rozana ke liye wahi kaafi hai.
-
 Phir **Save and redeploy**.
 
-Ye do na daale jaayein to bhi calculator poora chalta hai — bas account panel
-keh dega ki accounts set nahi hain, aur Save kaam nahi karega. Engine hi asli
-cheez hai; account uske upar ki suvidha hai, uske aage ka darwaza nahi.
+Ye paanchon `DB_*` na daale jaayein to bhi calculator poora chalta hai — bas
+account panel keh dega ki accounts set nahi hain, aur Save kaam nahi karega.
+Engine hi asli cheez hai; account uske upar ki suvidha hai, uske aage ka
+darwaza nahi.
 
 Local par test karna ho to repo me `.env` file bana lijiye (wo gitignored hai)
-aur `node --env-file=.env app.cjs` chalaiye — Node khud padh leta hai, koi
-package nahi chahiye.
+aur `node --env-file=.env server/serve.ts --local` chalaiye — Node khud padh
+leta hai.
 
 ---
 
 ## E — Ab kya bacha hai
 
-**Login ban chuka hai** aur Supabase se juda hua hai. Ab kram se ye:
+**Login ab Hostinger ki apni MySQL se chalta hai**, Supabase se nahi — 5
+October 2026 ko migrate kiya gaya. Ab kram se ye:
 
-1. **Hostinger me `SUPABASE_URL` aur `SUPABASE_ANON_KEY` daal kar redeploy** —
-   iske bina live site par account panel kahega ki accounts set nahi hain.
-2. **Brevo SMTP laga dijiye** (Part B) — iske bina signup ki confirmation email
-   shayad na aaye, aur bina us link ke login nahi hoga.
-3. Phir apne email se **sign up → email me link → sign in → Save**. Ek job save
-   karke doosre account se dekhiye — dikhna nahi chahiye. Wahi asli test hai.
-
-4. ✅ **`04-profile-fields.sql`** — 18 August ko live project par chal chuki
-   hai. Profile ke naye columns aa gaye aur wo trigger lag gaya jo access/admin
-   ko apne aap badalne se rokta hai. Part A4 ke check se pakka kiya gaya.
+1. ✅ **MySQL database bana, `sql/mysql-schema.sql` chala, Hostinger me
+   paanchon `DB_*` daal diye gaye** — 5 October 2026.
+2. **Brevo SMTP laga dijiye** (Part B) agar abhi baaki hai — iske bina
+   signup ki OTP email shayad na aaye.
+3. Phir apne email se **sign up → email me code → verify → sign in → Save**.
+   Ek job save karke doosre account se dekhiye — dikhna nahi chahiye. Wahi
+   asli test hai.
+4. Apni email ko **admin banaiye** (Part A4).
 5. ✅ **`BREVO_API_KEY` aur `MAIL_FROM` Hostinger me daal diye gaye** — 21
-   August 2026. Live site par `/api/config` ab `mail: true` bolta hai aur
-   `/api/mail` **501 ki jagah 401** deta hai, yaani dono variable mil gaye.
-   **Dhyan:** 401 sirf itna kehta hai ki variable *set* hain — key sahi likhi
-   hai ya nahi ye tab pata chalega jab sign in karke Email button dabaya
-   jayega, kyunki sign-in gate pehle aata hai aur Brevo tak baat pahunchti hi
-   nahi.
+   August 2026. Live site par `/api/config` ab `mail: true` bolta hai.
 6. Phir **My settings** kholiye aur do link daal dijiye — Drive folder aur
    Google Sheet. Ye Phase 11 ke liye hain, jo abhi bana nahi hai (Part C ka
    warning padh lijiye).

@@ -7,7 +7,38 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <header class="top">
+    <!-- the landing screen: Create New or Upload a drawing. Shown over the
+         calculator until one is chosen; the calculator underneath is built
+         exactly as it always was and this never changes it. -->
+    <div class="admin" id="landing">
+      <div class="landing-card">
+        <span class="brand-mark">PS</span>
+        <h1>Panel Suite</h1>
+        <p class="gate-sub">Start a job from scratch, or upload a drawing to pre-fill the form.</p>
+        <div class="landing-actions">
+          <button class="btn primary landing-btn" type="button" id="landingCreate">
+            <strong>Create</strong>
+            <span>Open the calculator — a blank job, typed in by hand.</span>
+          </button>
+          <button class="btn landing-btn" type="button" id="landingUpload">
+            <strong>Upload a drawing</strong>
+            <span>Read a WALL PANEL LAYOUT drawing and pre-fill the form from it.</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- read a drawing: pick a file, see what was read, open it in the
+         calculator to check and correct before Build. -->
+    <div class="admin" id="upload" hidden>
+      <div class="admin-head">
+        <h2>Upload a drawing</h2>
+        <button class="btn" type="button" id="uploadBack">&larr; Back</button>
+      </div>
+      <div id="uploadBody"></div>
+    </div>
+
+    <header class="top" hidden>
       <div class="brand">
         <span class="brand-mark">PS</span>
         <span>
@@ -115,7 +146,7 @@
       <div id="catalogBody"></div>
     </div>
 
-    <div class="app">
+    <div class="app" hidden>
       <p class="gate-reason" id="gateReason"></p>
       <aside class="form" id="form"></aside>
       <main class="out" id="out">

@@ -247,15 +247,21 @@ go and nothing else to press.
   HI-15191. Only the job's **spec** is stored; the BOQ is always generated,
   because a stored figure is how a saved job and a fresh one start to disagree.
   **Signing in comes first**: the calculator is behind the account, not beside
-  it. Signup is verified by a **six digit code** rather than a link — a link
-  only works if Supabase's Site URL is right, and a code depends on no URL at
-  all. A new account gets **14 days**, and an **administrator** grants more,
-  stops an account without losing its jobs, or deletes one for good. **Access
-  is enforced by the database**: the `jobs` policy carries `has_access()`, so
-  an expired account is refused by Postgres whatever the screen does. The one exception is a server with no Supabase configured, which runs
-  unlocked and says so — gating there would lock everyone out, owner included,
-  with no way back in from the screen, and with no Supabase there is no saved
-  job to protect either. `SETUP.md` has the one-time setup.
+  it. Signup is verified by a **six digit code** rather than a link — a code
+  depends on no URL at all, where a link once depended on a Supabase setting
+  that broke three times. A new account gets **14 days**, and an
+  **administrator** grants more, stops an account without losing its jobs, or
+  deletes one for good. **Access is checked on every saved-job request**:
+  `server/auth.ts`'s `hasAccess` runs again on the server for every read or
+  write to `jobs`, so an expired account is refused whatever the screen does.
+  There is no database-level backstop for this on MySQL — unlike the Postgres
+  `has_access()` policy this replaced, which Postgres itself enforced — so the
+  discipline is in the server code: every `jobs` query carries its own
+  `WHERE user_id = ?`. The one exception is a server with no database
+  configured, which runs unlocked and says so — gating there would lock
+  everyone out, owner included, with no way back in from the screen, and with
+  no database there is no saved job to protect either. `SETUP.md` has the
+  one-time setup.
 - **Open job no** — type a job number in the header and one of **your own**
   saved jobs opens in the form. A search box rather than a picker because an
   estimator reads the number off the drawing, and a list stops being a way to
@@ -333,9 +339,15 @@ server/mail.ts              sending a job out through Brevo's HTTP API. One
 server/serve.ts             local dev server (node:http, no dependencies)
 server/config.ts            where the server binds, and why — its own file so
                             it can be tested, since serve.ts listens on import
-web/auth.js                 accounts and saved jobs — a Supabase client in
-                            fetch, no dependency. The database's row level
-                            security is what keeps one user's jobs their own
+server/db.ts                 the one MySQL connection pool — mysql2, the
+                            repo's single dependency, because Node has no
+                            built-in MySQL client
+server/auth.ts               accounts, sessions, OTP email, saved jobs —
+                            replaces Supabase Auth by hand, on our own MySQL
+web/auth.js                 accounts and saved jobs — talks to our own
+                            /api/auth/* and /api/jobs/saved endpoints, in
+                            fetch, no dependency. server/auth.ts enforces
+                            that a user only ever sees their own rows
 web/                        the viewer — plain HTML/CSS/JS, no build step
 web/guide.js                GUIDE.md rendered as the in-app guide page
 tools/build.ts              core/ + server/ -> dist/ as plain JavaScript, for a
@@ -608,7 +620,7 @@ engine worthless — see `CLAUDE.md`.
 ## Docs
 
 - `STATUS.md` — **start here**: what has happened, where the deploy got to, what is next
-- `SETUP.md` — the one-time accounts: Supabase, Brevo and the Google Apps Script, and which keys go where
+- `SETUP.md` — the one-time accounts: Hostinger MySQL, Brevo and the Google Apps Script, and which keys go where
 - `CLAUDE.md` — conventions and the rule about never fitting inputs to a sheet
 - `DESIGN.md` — the plan for drawings + BOQ from one job input, and the phases
 - `GUIDE.md` — how to add a new job (Hinglish, for the drawing office)
