@@ -6,6 +6,35 @@ file says what has actually happened and what is next.
 
 Last updated: 5 October 2026.
 
+## What landed on 5 October 2026 — sixth change: the drawing prints and downloads on A4
+
+**The shop:** the PDF drawing sheet (download button, email attachment) and
+the browser's own Print button must both come out on A4, not A3. Two
+unrelated paths carried the page size — fixed both.
+
+`core/export/pdf.ts`'s default paper, `A3_LANDSCAPE` (420×297mm), became
+`A4_LANDSCAPE` (297×210mm). Nothing else in the file changed: `pageOf`
+already turns the paper to suit each view (portrait for a tall elevation,
+landscape for a wide plan) and already states the scale it fitted at on the
+caption, so a page-per-view PDF built on HI-15191 now carries MediaBoxes of
+595.28×841.89 pt (A4 portrait) and 841.89×595.28 pt (A4 landscape) — checked
+by posting a real job to `/api/export` and reading the PDF bytes back, not
+assumed.
+
+`web/styles.css` gained `@page { size: A4 landscape; margin: 10mm; }` inside
+the existing `@media print` block, which the browser's own Print button
+(`window.print()`) reads — it had no page-size rule before and printed
+whatever the OS or printer driver defaulted to. The drawing sheet's own
+scroll box (`.draw.sheet .draw-svg`) is also unlocked for print — on screen it
+scrolls inside a bordered box with padding, which on paper would clip the
+sheet to whatever the box happened to show; printed, it goes `overflow:
+visible` and the SVG fills the available width.
+
+`core/verify/export.test.ts`'s one hard-coded `420` (A3's width, in the "fits
+the page" assertion) became `297`. `npm run check` still prints `ALL ROWS
+MATCH across 3 jobs`, same 9 deviations — a page size cannot move a BOQ
+figure. All 258 tests pass.
+
 ## What landed on 5 October 2026 — fifth change: angled (non-rectangular) outlines
 
 **Phase E, the last of the 5 October drawing-types list, and the one that

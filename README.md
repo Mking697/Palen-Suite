@@ -30,7 +30,8 @@ A job goes out as a **`.xlsx` workbook** and a **PDF drawing set**, both written
 by hand in `core/export/` so the no-dependency rule survives. An export counts
 nothing of its own: every figure is one `buildJob` already produced, the
 workbook's totals are the engine's rather than an Excel `=SUM`, and each PDF
-page prints the scale it was fitted at. The **DXF is still the 1:1 file** the
+page prints the scale it was fitted at — **on A4 paper**, each view turned to
+landscape or portrait to suit itself. The **DXF is still the 1:1 file** the
 machine cuts from.
 
 An **Email** button sends both to a customer through Brevo — subject prefilled
@@ -320,7 +321,8 @@ core/export/zip.ts          a stored ZIP and CRC32 — no compressor, no package
 core/export/xlsx.ts         BOQ -> .xlsx. Rounded figures as numbers, and the
                             engine's own totals — never an Excel =SUM
 core/export/pdf.ts          Drawing -> PDF, a page per view, each stating the
-                            scale it was fitted at. The DXF stays the 1:1 one
+                            scale it was fitted at. A4, the paper every view
+                            is fitted to. The DXF stays the 1:1 one
 core/jobs/                  job inputs, transcribed from drawings only
 core/verify/                expected sheets + diff runner + tests
 core/verify/web.test.ts     web/app.js and web/guide.js, booted headless in a

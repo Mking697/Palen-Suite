@@ -646,12 +646,25 @@ tr.total td.desc { text-transform: uppercase; letter-spacing: .5px; font-size: 1
 
 /* ---------- print ---------- */
 
+/* A4 — the shop, 5 October 2026: the drawing must come out on A4 when printed
+   or saved as a PDF through the browser's own print dialog, not whatever the
+   OS defaults to. Landscape, because a job sheet is wider than it is tall. */
+@page {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
 @media print {
   .top, .form { display: none; }
   .app { display: block; }
   .out { padding: 0; }
   .block { border: none; page-break-inside: avoid; }
   .summary { gap: 8px; }
+  /* the drawing sheet scrolls on screen; printed, it must fit the page
+     rather than being clipped to whatever the scroll box shows */
+  .draw.sheet .draw-svg { overflow: visible; border: none; padding: 0; }
+  .draw.sheet .draw-svg svg { width: 100%; height: auto; max-width: 100%; }
+  .draw-tools, .dl-row { display: none; }
 }
 
 /* ---------- narrow screens ---------- */

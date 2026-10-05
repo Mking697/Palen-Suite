@@ -253,9 +253,9 @@ t('a whole-job sheet fits the page too, whatever its size', () => {
   const cm = s.match(/^([\d.]+) 0 0 -([\d.]+) /m)!;
   const k = Number(cm[1]);
   assert.ok(k > 0, 'the fit matrix is not positive');
-  // A3 landscape is 420mm wide; the drawing plus its margins must land inside
+  // A4 landscape is 297mm wide; the drawing plus its margins must land inside
   const span = Math.max(jobPlan(HI_15191).w, jobPlan(HI_15191).l);
-  assert.ok(k * span < 420 * (72 / 25.4), 'the drawing runs off the page');
+  assert.ok(k * span < 297 * (72 / 25.4), 'the drawing runs off the page');
 });
 
 t('many drawings become many pages, each one referenced and each one real', () => {

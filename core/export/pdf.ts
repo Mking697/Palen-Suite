@@ -33,9 +33,10 @@ import { boundsOf } from '../draw/sheet.ts';
 
 export interface PdfOptions {
   /**
-   * Paper size in mm. Default A3. The *orientation* is not taken from this —
-   * see `orient` — so `{ w: 420, h: 297 }` and `{ w: 297, h: 420 }` mean the
-   * same sheet of paper.
+   * Paper size in mm. Default A4 — the shop, 5 October 2026: the drawing
+   * must print or download on an A4 sheet, not the A3 this used to default
+   * to. The *orientation* is not taken from this — see `orient` — so
+   * `{ w: 297, h: 210 }` and `{ w: 210, h: 297 }` mean the same sheet.
    */
   page?: { w: number; h: number };
   /**
@@ -51,7 +52,7 @@ export interface PdfOptions {
   footer?: string;
 }
 
-const A3_LANDSCAPE = { w: 420, h: 297 };
+const A4_LANDSCAPE = { w: 297, h: 210 };
 const MM2PT = 72 / 25.4;
 
 /** The light palette `toSvg` prints with — these sheets go out with the BOQ. */
@@ -195,7 +196,7 @@ function pageOf(d: Drawing, opts: PdfOptions = {}): Page {
    * orientation leaves half the sheet blank and shrinks the drawing to fit the
    * wrong dimension. Same paper, turned.
    */
-  const paper = opts.page ?? A3_LANDSCAPE;
+  const paper = opts.page ?? A4_LANDSCAPE;
   const long = Math.max(paper.w, paper.h);
   const short = Math.min(paper.w, paper.h);
   const page =
