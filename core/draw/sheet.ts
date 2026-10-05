@@ -85,6 +85,10 @@ export function boundsOf(d: Drawing): Box {
   };
 
   for (const p of d.fill ?? []) grow(p[0], p[1]);
+  for (const t of d.tiles ?? []) {
+    grow(t.x0, t.y0);
+    grow(t.x1, t.y1);
+  }
   for (const l of d.lines) {
     grow(l.x1, l.y1);
     grow(l.x2, l.y2);
@@ -165,6 +169,10 @@ export function composeSheet(views: Drawing[], opts: SheetOptions = {}): Sheet {
       if (i === 0) fill.push(...pts);
     }
 
+    for (const t of view.tiles ?? []) {
+      out.tiles = out.tiles ?? [];
+      out.tiles.push({ x0: t.x0 + ox, y0: t.y0 + oy, x1: t.x1 + ox, y1: t.y1 + oy, fill: t.fill });
+    }
     for (const l of view.lines) out.lines.push(shiftLine(l, ox, oy));
     for (const c of view.cells) out.cells.push({ ...c, x0: c.x0 + ox, y0: c.y0 + oy, x1: c.x1 + ox, y1: c.y1 + oy, fs });
     for (const n of view.notes) out.notes.push({ ...n, x: n.x + ox, y: n.y + oy, fs });

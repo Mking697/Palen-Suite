@@ -69,6 +69,13 @@ export function toSvg(d: Drawing, opts: SvgOptions = {}): string {
 
   const p: string[] = [];
 
+  for (const t of d.tiles ?? []) {
+    p.push(
+      `<rect x="${Math.min(t.x0, t.x1)}" y="${Math.min(t.y0, t.y1)}" ` +
+        `width="${Math.abs(t.x1 - t.x0)}" height="${Math.abs(t.y1 - t.y0)}" fill="${t.fill}"/>`,
+    );
+  }
+
   if (d.fill?.length) {
     p.push(
       `<polygon points="${d.fill.map((pt) => pt.join(',')).join(' ')}" fill="${C.paper}"/>`,

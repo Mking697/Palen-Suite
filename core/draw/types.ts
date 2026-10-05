@@ -65,6 +65,22 @@ export interface DrawCell extends TextHeight {
   std: boolean;
 }
 
+/**
+ * A plain filled rectangle — the coloured background behind a room's
+ * specification table, so several rooms on one sheet stay easy to tell apart.
+ * SVG only: the DXF export draws its border as ordinary TEXT-layer lines and
+ * leaves the colour out, because a fill colour means nothing to the machine
+ * that cuts from the DXF.
+ */
+export interface DrawTile {
+  x0: Mm;
+  y0: Mm;
+  x1: Mm;
+  y1: Mm;
+  /** CSS colour for the fill */
+  fill: string;
+}
+
 export interface Drawing {
   /** e.g. "Freezer Room — Wall Panel Layout" */
   title: string;
@@ -74,6 +90,7 @@ export interface Drawing {
   l: Mm;
   /** solid background shape, usually the room outline */
   fill?: Pt[];
+  tiles?: DrawTile[];
   lines: DrawLine[];
   dims: DrawDim[];
   notes: DrawNote[];

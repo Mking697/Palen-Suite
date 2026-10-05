@@ -208,12 +208,16 @@ go and nothing else to press.
 - **Output** — every view of the job on **one drawing sheet**, the way a drawing
   office issues them: the WALL PANEL LAYOUT first, with the rooms where they
   actually sit — sharing a wall means touching along it — then each room's
-  ceiling, floor and door. **A wall elevation per wall is off by default**
-  (the shop, 5 October 2026) — tick **Add elevation** on a room to put its
-  Wall N/E/S/W elevations on the sheet too. The door elevation is unaffected
-  by that tick and is drawn whenever the room has a door, exactly as before.
-  Each view sits in its own framed cell with its title under it.
-  `core/draw/sheet.ts` composes it by
+  ceiling, floor, door and its own **specification box** — WALL / CEILING /
+  FLOOR / DOOR, tinted its own colour so several rooms on one sheet stay easy
+  to tell apart, the way HK-005 and HI-15815 colour theirs. Nothing in it is
+  counted: it prints the room's own build-up, exactly as every other view
+  only translates what `layoutRoom` already worked out. **A wall elevation per
+  wall is off by default** (the shop, 5 October 2026) — tick **Add elevation**
+  on a room to put its Wall N/E/S/W elevations on the sheet too. The door
+  elevation is unaffected by that tick and is drawn whenever the room has a
+  door, exactly as before. Each view sits in its own framed cell with its
+  title under it. `core/draw/sheet.ts` composes it by
   **translation only**: nothing is scaled or redrawn, so the sheet is 1:1 in
   millimetres and exports as one DXF. A cell is sized from what a view really
   occupies — dimension chains and labels included, not just the room — so no
@@ -288,6 +292,8 @@ core/layout.ts              room -> wall / ceiling / floor panels
 core/boq.ts                 SHEET FABRICATION generator
 core/format.ts              Excel-compatible half-up rounding
 core/draw/                  plan, elevation, ceiling, floor -> SVG and DXF
+core/draw/spec.ts           room specification box (WALL/CEILING/FLOOR/DOOR),
+                            tinted per room -> translation only, nothing counted
 core/draw/sheet.ts          many drawings -> one 1:1 sheet, by translation only
 core/draw/model3d.ts        the job as flat faces in space, for the 3D toggle
 core/export/zip.ts          a stored ZIP and CRC32 — no compressor, no package
@@ -413,6 +419,24 @@ Reaching for them to make a total line up is the one thing that would make this
 engine worthless — see `CLAUDE.md`.
 
 ## Open items
+
+- **Drawing types from the shop's reference sheets, not yet built**, requested
+  5 October 2026 alongside the room specification box (now built — see
+  `core/draw/spec.ts`). In rough order of value:
+  - **Detail of "A"/"B"** — the zoomed panel-joint cross-section circle every
+    source sheet carries (wall thickness, L cut, camlock). Derivable from
+    existing `core/rules.ts` figures; needs its own small drawing module.
+  - **AL. CHQ Sheet Layout** — a panel-split layout for the floor's top
+    chequered sheet, alongside the existing Ceiling/Floor layouts. The
+    build-up data is already on `FloorSpec.layers`; only the view is missing.
+  - **Standalone door catalog sheets** (HK-009, HI-15822, HI-15821 style) and
+    **standalone single-panel component sheets** (HI-15469 style) — these are
+    not part of a job's drawing set; they are a separate small tool an
+    estimator would use to print one or several door/panel types on their
+    own, without building a room around them.
+  - **Non-rectangular site plans** (HI-15815 style, walls at odd angles) — the
+    biggest of the four. `core/plan.ts` only compiles right-angled outlines
+    today; this needs real geometry work and must not move any BOQ figure.
 
 - **HI-15191's ante room hands over the wrong side.** The new cross-room check
   reports it: the ante marks edge 0 — its far, outside wall — as the freezer's,

@@ -193,7 +193,7 @@ function sheetViews(job: JobSpec): Drawing[] {
   for (const room of job.rooms) {
     if (!canDraw(room)) continue;
     try {
-      views.push(...roomDrawings(room));
+      views.push(...roomDrawings(room, job.rooms.indexOf(room)));
     } catch {
       /* drawingsFor reports why, room by room */
     }

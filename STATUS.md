@@ -6,7 +6,34 @@ file says what has actually happened and what is next.
 
 Last updated: 5 October 2026.
 
-## What landed on 5 October 2026
+## What landed on 5 October 2026 — second change: room specification box
+
+**Every room now prints its own WALL / CEILING / FLOOR / DOOR box**, tinted
+its own colour, sitting right under that room's own views — matching
+HI-14516D, HK-005 and HI-15815, the shop's reference sheets. New
+`core/draw/spec.ts` (`roomSpecTable`) reads straight off `RoomSpec` —
+`wallTh`/`ceilTh`/skin for the first two rows, `floor.desc` (or a fallback)
+for the third, and every door's label/clear opening/AL. CHQ/lift for the
+fourth, `NOT REQUIRED.` when the room has none. **Nothing is counted or
+derived here** — it is a translation of fields the BOQ already prices,
+exactly like every other view in `core/draw/`.
+
+Colour is per room, not per sheet: `roomTileColour(index)` cycles six tints
+so two or more rooms on one job stay easy to tell apart on screen, the way
+the shop's own multi-room sheets do. `Drawing` gained an optional `tiles`
+array for this — `composeSheet` shifts them onto the sheet same as every
+other element, `toSvg` paints them as a plain filled rect, and `toDxf` draws
+only the border on the TEXT layer (a fill colour means nothing to the
+machine cutting from the DXF).
+
+`roomDrawings(room, colourIndex)` appends the spec table after ceiling/floor;
+`server/serve.ts` passes each room's index in the job so colours stay stable
+and distinct. `npm run check` still prints `ALL ROWS MATCH across 3 jobs`
+with the same 9 deviations — no BOQ figure moved, and all 252 tests pass.
+Checked in a live browser: a two-room job shows a pink and a green spec tile,
+each naming its own room, size, build-up and door (or `NOT REQUIRED.`).
+
+## What landed on 5 October 2026 — first change: wall elevations
 
 **Wall elevations are off by default.** The shop: a Wall N/E/S/W elevation per
 wall cluttered every sheet, and it is wanted only when asked for. A new

@@ -47,6 +47,13 @@ export function toDxf(d: Drawing): string {
 
   for (const l of d.lines) line(l.x1, l.y1, l.x2, l.y2, l.layer);
 
+  for (const t of d.tiles ?? []) {
+    line(t.x0, t.y0, t.x1, t.y0, 'TEXT');
+    line(t.x1, t.y0, t.x1, t.y1, 'TEXT');
+    line(t.x1, t.y1, t.x0, t.y1, 'TEXT');
+    line(t.x0, t.y1, t.x0, t.y0, 'TEXT');
+  }
+
   for (const c of d.cells) {
     text((c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2, c.fs ?? H_CELL, c.text, 'TEXT');
   }
