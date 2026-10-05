@@ -3915,9 +3915,12 @@ function renderUpload() {
 
   const drop = el('div', { class: 'upload-drop' }, [
     el('p', { text: uploadState.file ? uploadState.file.name : 'Click to choose a drawing, or drop one here' }),
-    el('p', { class: 'hint', text: 'PNG or JPEG, up to 5MB — a photo or scan of a WALL PANEL LAYOUT drawing works.' }),
+    el('p', {
+      class: 'hint',
+      text: 'PNG, JPEG or PDF, up to 5MB (32MB for a PDF) — a photo/scan of a WALL PANEL LAYOUT drawing, or a PDF exported from AutoCAD, works. A raw DWG/DXF cannot be read directly — export it to PDF first (AutoCAD: File → Export → PDF).',
+    }),
   ]);
-  const input = el('input', { type: 'file', accept: 'image/png,image/jpeg' });
+  const input = el('input', { type: 'file', accept: 'image/png,image/jpeg,.jpg,.jpeg,.png,application/pdf,.pdf' });
   drop.append(input);
   drop.addEventListener('click', () => input.click());
   drop.addEventListener('dragover', (e) => {
@@ -3949,7 +3952,10 @@ function renderUpload() {
   const parts = [drop];
 
   if (uploadState.file) {
-    const preview = el('img', { class: 'upload-preview', src: URL.createObjectURL(uploadState.file) });
+    const isPdf = (uploadState.file.type || '').includes('pdf') || /\.pdf$/i.test(uploadState.file.name);
+    const preview = isPdf
+      ? el('p', { class: 'hint', text: `PDF selected: ${uploadState.file.name}` })
+      : el('img', { class: 'upload-preview', src: URL.createObjectURL(uploadState.file) });
     parts.push(preview);
 
     const msg = el('p', { class: 'settings-msg' });
@@ -3965,10 +3971,17 @@ function renderUpload() {
       renderUpload();
       try {
         const imageBase64 = await fileToBase64(uploadState.file);
+        const mimeType =
+          uploadState.file.type ||
+          (/\.pdf$/i.test(uploadState.file.name)
+            ? 'application/pdf'
+            : /\.(jpe?g)$/i.test(uploadState.file.name)
+              ? 'image/jpeg'
+              : 'image/png');
         const res = await fetch('/api/extract-drawing', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ imageBase64, mimeType: uploadState.file.type || 'image/png' }),
+          body: JSON.stringify({ imageBase64, mimeType }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'could not read the drawing');

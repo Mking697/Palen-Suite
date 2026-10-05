@@ -28,8 +28,21 @@
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-5';
 
-/** Anthropic's own request-body cap is generous; images are the real limit. */
+/**
+ * Anthropic's own request-body cap is generous; the file itself is the real
+ * limit — 5MB for an image, 32MB for a PDF (Anthropic's own PDF cap, and
+ * comfortably under their 100-page-per-document limit for a single-sheet
+ * drawing export).
+ */
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_BYTES = 32 * 1024 * 1024;
+
+/** What the model can actually read. DWG/DXF are vector CAD data, not a
+ * raster or a document Claude's vision API accepts — there is no honest way
+ * to "support" them without a CAD-parsing dependency this repo does not
+ * carry (see CLAUDE.md: no dependencies). The estimator exports to PDF from
+ * AutoCAD instead (File -> Export -> PDF, one click) and uploads that. */
+const SUPPORTED_MIME = /^image\/(png|jpe?g)$|^application\/pdf$/;
 
 export interface ExtractedDoor {
   clearW: number | null;
@@ -105,9 +118,9 @@ Rules:
 - Respond with the JSON object only.`;
 
 export interface ExtractRequest {
-  /** raw image bytes */
+  /** raw file bytes */
   bytes: Uint8Array;
-  /** e.g. "image/png", "image/jpeg" */
+  /** e.g. "image/png", "image/jpeg", "application/pdf" */
   mimeType: string;
 }
 
@@ -154,11 +167,15 @@ export interface ExtractProblem {
 /** Everything wrong with a request, before a byte is sent. */
 export function problemWith(req: ExtractRequest): string | null {
   if (!req.bytes?.length) return 'No drawing was uploaded.';
-  if (req.bytes.length > MAX_IMAGE_BYTES) {
-    return `The image is ${(req.bytes.length / 1024 / 1024).toFixed(1)}MB and the limit is 5MB. Try a smaller export or a lower-resolution scan.`;
+  if (!SUPPORTED_MIME.test(req.mimeType)) {
+    return `${req.mimeType} is not a file Claude can read. Upload a PNG or JPEG photo/scan of the drawing, or a PDF export of it — AutoCAD's own File -> Export -> PDF makes one from a DWG in a click. DWG/DXF itself cannot be read directly: it is vector CAD data, not something a vision model opens.`;
   }
-  if (!/^image\//.test(req.mimeType)) {
-    return `${req.mimeType} is not an image Claude can read. Upload a PNG or JPEG of the drawing.`;
+  if (req.mimeType === 'application/pdf') {
+    if (req.bytes.length > MAX_PDF_BYTES) {
+      return `The PDF is ${(req.bytes.length / 1024 / 1024).toFixed(1)}MB and the limit is 32MB. Try a single-page export of just the drawing sheet.`;
+    }
+  } else if (req.bytes.length > MAX_IMAGE_BYTES) {
+    return `The image is ${(req.bytes.length / 1024 / 1024).toFixed(1)}MB and the limit is 5MB. Try a smaller export or a lower-resolution scan.`;
   }
   return null;
 }
@@ -166,13 +183,13 @@ export function problemWith(req: ExtractRequest): string | null {
 const toBase64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
 
 /**
- * Read a drawing. `apiKey` is an environment variable on the server and
- * never reaches the browser — the whole reason this goes through our own
- * host rather than straight from the page.
+ * Read a drawing. The second parameter is an environment variable on the
+ * server and never reaches the browser — the whole reason this goes through
+ * our own host rather than straight from the page.
  */
 export async function extractDrawing(
   req: ExtractRequest,
-  apiKey: string,
+  secretKey: string,
   model: string = DEFAULT_MODEL,
 ): Promise<ExtractionResult> {
   const problem = problemWith(req);
@@ -183,7 +200,7 @@ export async function extractDrawing(
     res = await fetch(ANTHROPIC_ENDPOINT, {
       method: 'POST',
       headers: {
-        'x-api-key': apiKey,
+        'x-api-key': secretKey,
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json',
       },
@@ -194,10 +211,9 @@ export async function extractDrawing(
           {
             role: 'user',
             content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: req.mimeType, data: toBase64(req.bytes) },
-              },
+              req.mimeType === 'application/pdf'
+                ? { type: 'document', source: { type: 'base64', media_type: req.mimeType, data: toBase64(req.bytes) } }
+                : { type: 'image', source: { type: 'base64', media_type: req.mimeType, data: toBase64(req.bytes) } },
               { type: 'text', text: PROMPT },
             ],
           },
