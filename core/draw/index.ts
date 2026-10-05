@@ -10,9 +10,10 @@ import type { RoomSpec } from '../types.ts';
 import type { Drawing } from './types.ts';
 import { roomPlan } from './roomplan.ts';
 import { wallElevations } from './elevation.ts';
-import { ceilingPlan, floorPlan } from './ceiling.ts';
+import { ceilingPlan, floorPlan, alChqSheetLayout } from './ceiling.ts';
 import { doorElevations } from './door.ts';
 import { roomSpecTable, roomTileColour } from './spec.ts';
+import { panelJointDetail } from './detail.ts';
 
 export * from './types.ts';
 export { toSvg } from './svg.ts';
@@ -20,10 +21,11 @@ export { toDxf } from './dxf.ts';
 export { roomPlan } from './roomplan.ts';
 export { jobPlan, drawableRooms } from './jobplan.ts';
 export { wallElevations } from './elevation.ts';
-export { ceilingPlan, floorPlan } from './ceiling.ts';
+export { ceilingPlan, floorPlan, alChqSheetLayout } from './ceiling.ts';
 export { doorElevations, doorElevation, defaultFrame } from './door.ts';
 export { composeSheet, boundsOf, type Box, type Sheet, type SheetCell, type SheetOptions } from './sheet.ts';
 export { roomSpecTable, roomTileColour } from './spec.ts';
+export { panelJointDetail, camlockStep } from './detail.ts';
 export { model3d, type Face3, type FaceKind, type Model3, type Pt3 } from './model3d.ts';
 
 /**
@@ -36,17 +38,21 @@ export { model3d, type Face3, type FaceKind, type Model3, type Pt3 } from './mod
  * sheet stay easy to tell apart, the way HK-005 and HI-15815 colour theirs.
  */
 export function roomDrawings(room: RoomSpec, colourIndex = 0): Drawing[] {
+  const chq = alChqSheetLayout(room);
   return [
     // off by default — the shop, 5 October 2026: a wall elevation per wall
     // cluttered every sheet, and it is wanted only when `showElevations` asks
     // for it. The door elevation is unaffected and is still drawn below
-    // whenever the room has a door.
-    ...(room.showElevations ? wallElevations(room) : []),
+    // whenever the room has a door. The panel joint detail rides along with
+    // the elevation on every reference sheet, so it is gated the same way.
+    ...(room.showElevations ? [...wallElevations(room), panelJointDetail(room)] : []),
     ...doorElevations(room),
     // a ceiling or a floor the customer did not take is not drawn either: a
     // sheet showing a panel nobody is buying is a sheet somebody cuts from
     ...(room.ceiling.fitted === false ? [] : [ceilingPlan(room)]),
     ...(room.floor.fitted === false ? [] : [floorPlan(room)]),
+    // only drawn when the floor is panelised with a chequered top sheet
+    ...(chq ? [chq] : []),
     // the room's own WALL / CEILING / FLOOR / DOOR box, sitting with its views
     roomSpecTable(room, roomTileColour(colourIndex)),
   ];

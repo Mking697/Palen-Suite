@@ -6,6 +6,33 @@ file says what has actually happened and what is next.
 
 Last updated: 5 October 2026.
 
+## What landed on 5 October 2026 — third change: panel joint detail and AL. CHQ layout
+
+**Two more views from the shop's reference sheets.** `core/draw/detail.ts`
+draws the "DETAIL OF A/B" panel-joint cross-section every reference sheet
+carries next to its elevation — the camlock step cut into a wall panel's
+edge. It rides along with `showElevations` (off by default, same tick as the
+wall elevations). **The step is derived from three samples, not stated by the
+shop**: HI-14516D, HI-15824 and HI-15469 all step at exactly half the panel
+thickness, but all three also have `wallTh === ceilTh`, so "half the wall"
+and "half the ceiling" cannot be told apart yet — flagged in README.md "Open
+items", the same shape of gap the L cut formula had until 14 August.
+
+`core/draw/ceiling.ts` gained `alChqSheetLayout` — a panelised floor whose
+build-up names a chequered top layer (`FloorLayer.material` matching
+`/chq|chequered/i`) now also prints its own AL. CHQ. Sheet Layout view
+(HK-005, HI-15815), **reusing the floor's own split** rather than inventing a
+new one: the chequered sheet sits on the same panels the Floor Layout already
+lays out. A one-piece puf slab has no separate top sheet, so nothing is drawn
+for it.
+
+Both wired into `roomDrawings`; `npm run check` still prints `ALL ROWS MATCH
+across 3 jobs` with the same 9 deviations — no BOQ figure moved, and all 252
+tests pass. Checked in a live browser: ticking Add elevation shows a "Room 1
+— Detail of panel joint, 100mm thick panel" view beside the elevations, and
+switching a floor to Panelised shows "Room 1 — AL. CHQ. Sheet Layout" with
+the same panel split as the Floor Layout beside it.
+
 ## What landed on 5 October 2026 — second change: room specification box
 
 **Every room now prints its own WALL / CEILING / FLOOR / DOOR box**, tinted

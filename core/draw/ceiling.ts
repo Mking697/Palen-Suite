@@ -100,3 +100,38 @@ export function floorPlan(room: RoomSpec): Drawing {
   stripes(d, widths, axis === 'w' ? 'x' : 'y', w, l, module, panelLength);
   return d;
 }
+
+/**
+ * The floor's top chequered sheet, laid out separately — HK-005 and
+ * HI-15815 print an "AL. CHQ. SHEET LAYOUT" view beside the Floor Panel
+ * Layout. It sits on top of the same floor panels, so this **reuses the
+ * floor's own split** rather than inventing a different one: a translation
+ * of `layoutRoom`'s floor widths, not a new rule.
+ *
+ * Only drawn when the floor is panelised and its build-up names a chequered
+ * top layer — a one-piece puf slab has no separate top sheet to lay out.
+ */
+export function alChqSheetLayout(room: RoomSpec): Drawing | null {
+  if (room.floor.fitted === false || room.floor.kind !== 'panelised') return null;
+  const topLayer = room.floor.layers?.at(-1);
+  if (!topLayer || !/chq|chequered/i.test(topLayer.material)) return null;
+
+  const L = layoutRoom(room);
+  const { w, l, widths, panelLength } = L.floor;
+  if (!widths) return null;
+
+  const module = room.floor.module ?? 1220;
+  const axis = room.floor.splitAxis ?? 'w';
+  const d = emptyDrawing(`${room.name} — AL. CHQ. Sheet Layout`, w, l);
+  d.subtitle =
+    `${Math.round(w)} x ${Math.round(l)} mm · ${widths.length} sheets · ` +
+    `${topLayer.th}mm ${topLayer.material} · same split as the floor panels below`;
+  d.fill = [
+    [0, 0],
+    [w, 0],
+    [w, l],
+    [0, l],
+  ];
+  stripes(d, widths, axis === 'w' ? 'x' : 'y', w, l, module, panelLength);
+  return d;
+}

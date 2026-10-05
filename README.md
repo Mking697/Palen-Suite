@@ -176,6 +176,11 @@ go and nothing else to press.
   length, the same choice the ceiling has; the slab has no direction because it
   is not split. Turning a floor round moves the cuts and nothing else — the area
   it covers is identical, which `core/verify/split.test.ts` asserts.
+  **A panelised floor with a chequered top layer also prints its own AL. CHQ.
+  Sheet Layout view** (HK-005, HI-15815), reusing the same split as the floor
+  panels below rather than inventing a new one — the chequered sheet sits on
+  top of those same panels. Nothing on a one-piece puf slab, which has no
+  separate top sheet to lay out.
 - **Floor build-up** — a panelised floor states its four layers bottom up: the
   bottom sheet, the puf core, the sheet above it and the top sheet, each with
   its own material and thickness. **The top sheet is optional**: turned off it
@@ -216,8 +221,12 @@ go and nothing else to press.
   wall is off by default** (the shop, 5 October 2026) — tick **Add elevation**
   on a room to put its Wall N/E/S/W elevations on the sheet too. The door
   elevation is unaffected by that tick and is drawn whenever the room has a
-  door, exactly as before. Each view sits in its own framed cell with its
-  title under it. `core/draw/sheet.ts` composes it by
+  door, exactly as before. **The panel joint detail — "DETAIL OF A/B" on every
+  reference sheet — rides along with the elevation**, the camlock step cut
+  into the panel's edge at half the wall thickness; see "Open items" for why
+  that half is a figure read off three samples rather than stated by the shop.
+  Each view sits in its own framed cell with its title under it.
+  `core/draw/sheet.ts` composes it by
   **translation only**: nothing is scaled or redrawn, so the sheet is 1:1 in
   millimetres and exports as one DXF. A cell is sized from what a view really
   occupies — dimension chains and labels included, not just the room — so no
@@ -294,6 +303,8 @@ core/format.ts              Excel-compatible half-up rounding
 core/draw/                  plan, elevation, ceiling, floor -> SVG and DXF
 core/draw/spec.ts           room specification box (WALL/CEILING/FLOOR/DOOR),
                             tinted per room -> translation only, nothing counted
+core/draw/detail.ts         panel joint ("camlock") detail -- derived from
+                            samples, see README "Open items"
 core/draw/sheet.ts          many drawings -> one 1:1 sheet, by translation only
 core/draw/model3d.ts        the job as flat faces in space, for the 3D toggle
 core/export/zip.ts          a stored ZIP and CRC32 — no compressor, no package
@@ -421,14 +432,8 @@ engine worthless — see `CLAUDE.md`.
 ## Open items
 
 - **Drawing types from the shop's reference sheets, not yet built**, requested
-  5 October 2026 alongside the room specification box (now built — see
-  `core/draw/spec.ts`). In rough order of value:
-  - **Detail of "A"/"B"** — the zoomed panel-joint cross-section circle every
-    source sheet carries (wall thickness, L cut, camlock). Derivable from
-    existing `core/rules.ts` figures; needs its own small drawing module.
-  - **AL. CHQ Sheet Layout** — a panel-split layout for the floor's top
-    chequered sheet, alongside the existing Ceiling/Floor layouts. The
-    build-up data is already on `FloorSpec.layers`; only the view is missing.
+  5 October 2026 alongside the room specification box (built) and the panel
+  joint detail / AL. CHQ layout (also now built — see below). Remaining:
   - **Standalone door catalog sheets** (HK-009, HI-15822, HI-15821 style) and
     **standalone single-panel component sheets** (HI-15469 style) — these are
     not part of a job's drawing set; they are a separate small tool an
@@ -437,6 +442,14 @@ engine worthless — see `CLAUDE.md`.
   - **Non-rectangular site plans** (HI-15815 style, walls at odd angles) — the
     biggest of the four. `core/plan.ts` only compiles right-angled outlines
     today; this needs real geometry work and must not move any BOQ figure.
+
+- **The camlock step is read off three samples, not stated by the shop.**
+  `core/draw/detail.ts`'s `camlockStep` is half the panel thickness — HI-14516D
+  (80→40), HI-15824 (120→60), HI-15469 (60→30) all agree, but every one of
+  them also has `wallTh === ceilTh`, so "half the wall thickness" and "half
+  the ceiling thickness" cannot be told apart yet, the same gap the L cut
+  formula had until the shop settled it on 14 August. A job whose wall and
+  ceiling thickness differ would decide it.
 
 - **HI-15191's ante room hands over the wrong side.** The new cross-room check
   reports it: the ante marks edge 0 — its far, outside wall — as the freezer's,
