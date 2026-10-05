@@ -440,12 +440,25 @@ engine worthless — see `CLAUDE.md`.
 
 ## Open items
 
-- **Drawing types from the shop's reference sheets, not yet built**, requested
-  5 October 2026 alongside the room specification box, panel joint detail and
-  AL. CHQ layout (all now built). Remaining:
-  - **Non-rectangular site plans** (HI-15815 style, walls at odd angles) — the
-    biggest of the four. `core/plan.ts` only compiles right-angled outlines
-    today; this needs real geometry work and must not move any BOQ figure.
+- **Drawing types from the shop's reference sheets, now all built.** Requested
+  5 October 2026: the room specification box, panel joint detail, AL. CHQ
+  layout, the standalone door/panel catalog, and now non-rectangular site
+  plans too. See below for the last one.
+
+- **Non-rectangular site plans (angled vertices) — built at the engine
+  level.** `core/plan.ts`'s `VertexOverride.cut` accepts a non-90° vertex when
+  the job states `{ cut: true }`: neither wall meeting it gets a corner panel
+  or a butt allowance, and both must state their own panel split (`panels` or
+  `equalPieces`) — the automatic module split assumes a square end and would
+  otherwise invent a trapezoid's width, which the shop has not confirmed how
+  to blank. `roomPlan` already drew any polygon through plain vector math with
+  no right-angle assumption, so the only change needed was accepting the
+  vertex rather than throwing on it. **The calculator's chain builder is still
+  four-direction (L/R turns) only** — an angled room is entered as a job file
+  today, the same way a job is always added (see "Adding a job" in
+  CLAUDE.md); the free-angle case is rare enough in the reference sheets (one
+  of nine) that a form control for an arbitrary heading is left for when the
+  shop asks for it in the browser.
 
 - **The door/panel catalog does not price anything, by design.** The Catalog
   button (`core/draw/catalog.ts`, `/api/catalog`) draws HK-009/HI-15822/

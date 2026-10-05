@@ -445,4 +445,87 @@ t('a shared edge is not compiled into a wall at all', () => {
   assert.equal(walls.reduce((n, w) => n + (w.cornerStart ? 1 : 0) + (w.cornerEnd ? 1 : 0), 0), 4);
 });
 
+console.log('\n  angled (non-90°) vertices — a stated cut, never guessed\n');
+
+/** A square room with its NE corner sliced off at 45°, HI-15815-style. */
+const cutCorner: RoomOutline = {
+  points: [
+    [0, 0],
+    [2500, 0],
+    [3000, 500],
+    [3000, 3000],
+    [0, 3000],
+  ],
+  vertices: {
+    1: { cut: true },
+    2: { cut: true },
+  },
+  edges: {
+    // the two walls meeting each cut vertex, and the angled edge itself —
+    // all three have no square end to split from automatically. Their other
+    // ends are ordinary corners, so the run is the wall length less that
+    // corner's leg (300, the room default) — 2500 - 300 = 2200.
+    0: { panels: [2200] },
+    1: { panels: [707] },
+    2: { panels: [2200] },
+  },
+};
+
+t('an angled vertex throws unless the job states it is a cut', () => {
+  assert.throws(
+    () =>
+      compileWalls({
+        points: cutCorner.points,
+        edges: cutCorner.edges,
+      }),
+    /not 90.*cut: true/s,
+  );
+});
+
+t('stated cut: true is accepted, and neither wall there gets a corner panel', () => {
+  const walls = compileWalls(cutCorner);
+  assert.equal(walls.length, 5);
+  const angled = walls.find((w) => w.id === 'E1')!;
+  assert.equal(angled.cornerStart, false);
+  assert.equal(angled.cornerEnd, false);
+  // the square corners elsewhere are completely unaffected
+  const square = walls.filter((w) => w.id !== 'E0' && w.id !== 'E1' && w.id !== 'E4');
+  assert.ok(square.every((w) => w.cornerStart || w.cornerEnd));
+});
+
+t('a wall meeting a cut vertex with no stated split throws rather than guessing one', () => {
+  assert.throws(
+    () =>
+      compileWalls({
+        points: cutCorner.points,
+        vertices: cutCorner.vertices,
+        // no edges stated at all — E0 and E2 touch a cut vertex and have no split
+      }),
+    /no stated split/,
+  );
+});
+
+t('a wall away from the cut vertex keeps its ordinary automatic split', () => {
+  const room: RoomSpec = {
+    name: 'Angled test room',
+    ext: { w: 3000, l: 3000, h: 2590 },
+    wallTh: 100,
+    ceilTh: 100,
+    module: 1180,
+    cornerLeg: 300,
+    minPanelWidth: 150,
+    maxSplitPieces: 2,
+    floor: { fitted: false, kind: 'pufSlab', th: 100, desc: '' },
+    ceiling: { fitted: false, splitAxis: 'w', wEnds: ['own', 'own'], lEnds: ['own', 'own'] },
+    walls: [],
+    outline: cutCorner,
+  };
+  room.walls = compileWalls(room.outline!);
+  // E3 (west wall, 0,3000 -> 0,0) and E0 (north, square at both ends) never
+  // touch the cut vertices and are not forced to state a split
+  const L = layoutRoom(room);
+  const west = L.wallRuns.find((r) => r.wallId === 'E3')!;
+  assert.ok(west.widths.length > 0, 'the automatic split still ran on an unaffected wall');
+});
+
 console.log(`\n  ${passed} passed${process.exitCode ? ' — WITH FAILURES' : ''}\n`);

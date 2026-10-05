@@ -67,6 +67,21 @@ export interface VertexOverride {
    * the commonest of them.
    */
   leg?: Mm;
+  /**
+   * This vertex is not 90 degrees and is accepted as cut at an angle, rather
+   * than being the engine's error. **Neither wall gets a corner panel or a
+   * butt allowance here** — there is no shop rule for either on an angled
+   * junction, so the wall simply runs its own edge length and stops; the leg
+   * is whatever the drawing shows, carried in the panel figures themselves.
+   *
+   * Both owned walls meeting this vertex must state their own panel widths
+   * (`panels` or `equalPieces`) — the automatic split assumes a wall meeting
+   * a square end, and the panel nearest an angled vertex is very likely a
+   * trapezoid the shop has not confirmed how to blank (see README "Open
+   * items": trapezoid blanking). This flag only lets the geometry and the
+   * drawing exist; it invents no panel of its own.
+   */
+  cut?: boolean;
 }
 
 /**

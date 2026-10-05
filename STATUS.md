@@ -6,6 +6,46 @@ file says what has actually happened and what is next.
 
 Last updated: 5 October 2026.
 
+## What landed on 5 October 2026 — fifth change: angled (non-rectangular) outlines
+
+**Phase E, the last of the 5 October drawing-types list, and the one that
+touched the engine rather than only `core/draw/`.** `core/plan.ts`'s
+`compileWalls` threw on any vertex that was not 90°; it now accepts one when
+the job states `vertices: { v: { cut: true } }`. **Nothing is guessed about
+the panel there**: neither wall meeting a cut vertex gets a corner panel or a
+butt allowance, and both must state their own split (`panels` or
+`equalPieces`) — the automatic module split assumes a square end, and the
+panel against an angled vertex is very likely a trapezoid the shop has not
+confirmed how to blank. A wall with no stated split there throws, naming
+which wall and why, the same shape of guard as every other draftsman-override
+path in the file.
+
+`roomPlan` needed **no change at all** — it was already drawing the outline
+through plain vector math (`offsetPolygon`, `wallSegments`, dimension chains
+off unit vectors), with no right-angle assumption anywhere. The only thing
+stopping an angled room from drawing was `compileWalls` refusing to compile
+one.
+
+Six new tests in `core/verify/plan.test.ts`: the vertex throws without `cut:
+true`, is accepted with it and takes no corner panel, a wall with no stated
+split at a cut vertex throws, and a wall untouched by the cut keeps its
+ordinary automatic split. A standalone smoke test (not committed, run once
+from the repo root) confirmed `roomPlan` and `roomDrawings` both render a
+45°-cut room end to end with no error.
+
+`npm run check` still prints `ALL ROWS MATCH across 3 jobs`, same 9
+deviations — none of the three verified jobs has an angled vertex, so nothing
+here could move a BOQ figure. All 258 tests pass (252 + 6 new).
+
+**The calculator's chain builder is still four-direction only.** An angled
+room is entered as a job file today, the way a job is always added — see
+README.md "Open items" for why a free-angle form control is not worth
+building yet (one of nine reference sheets needs it).
+
+**The 5 October drawing-types list is now fully built**: room specification
+box, panel joint detail, AL. CHQ layout, standalone door/panel catalog, and
+angled outlines.
+
 ## What landed on 5 October 2026 — fourth change: standalone door/panel catalog
 
 **Phase D of the 5 October drawing-types list.** A new **Catalog** button

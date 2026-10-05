@@ -172,11 +172,25 @@ export function compileWalls(outline: RoomOutline): WallSpec[] {
       continue;
     }
 
-    throw new Error(
-      `Vertex ${v} is ${angle.toFixed(1)} degrees, not 90. Angled and triangle ` +
-        `rooms are not supported yet: the end panel is a trapezoid and the ` +
-        `shop has not confirmed how one is blanked. See DESIGN.md.`,
-    );
+    /*
+     * Not 90 degrees. The shop has not confirmed how a trapezoid panel is
+     * blanked at an angled corner — see README "Open items" — so this is
+     * only accepted when the job states `cut: true` on the vertex, and even
+     * then neither wall gets a corner panel or a butt allowance here: the
+     * run is the plain edge length and both walls meeting it must state
+     * their own panel widths. `layoutRoom`'s existing guard already throws
+     * if a stated `panels` list does not add up, so nothing here needs to
+     * duplicate that check.
+     */
+    if (vertices[v]?.cut !== true) {
+      throw new Error(
+        `Vertex ${v} is ${angle.toFixed(1)} degrees, not 90. State ` +
+          `vertices: { ${v}: { cut: true } } to accept it as a cut corner — ` +
+          `neither wall gets a corner panel there, and both must state their ` +
+          `own panel widths (panels or equalPieces), because the shop has not ` +
+          `confirmed how the end panel there is blanked. See README "Open items".`,
+      );
+    }
   }
 
   const walls: WallSpec[] = [];
@@ -191,6 +205,19 @@ export function compileWalls(outline: RoomOutline): WallSpec[] {
      * same panel — and the sheet would print a size the drawing does not show.
      */
     const legAt = (v: number) => vertices[v]?.leg;
+
+    // a wall meeting a cut (non-90°) vertex at either end has no automatic
+    // split to fall back on — the panel against that end is very likely a
+    // trapezoid, and the shop has not confirmed how one is blanked
+    const cutAt = (v: number) => vertices[v]?.cut === true;
+    if ((cutAt(startVertex(i)) || cutAt(endVertex(i))) && !o.panels && !o.equalPieces) {
+      throw new Error(
+        `Wall ${o.id ?? `E${i}`} meets a cut (non-90°) vertex and has no ` +
+          `stated split. Give it edges: { ${i}: { panels: [...] } } or ` +
+          `{ equalPieces: n } read off the drawing — the automatic module ` +
+          `split assumes a square end and would invent a trapezoid's width.`,
+      );
+    }
 
     walls.push({
       id: o.id ?? `E${i}`,
