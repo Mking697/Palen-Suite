@@ -502,8 +502,25 @@ t('LHS and RHS hinge at opposite jambs, one leaf width apart', () => {
   const door = HI_15191.rooms[0].walls.find((w) => w.door)!.door!;
   const lhs = leafOf(handed('LHS'))[0];
   const rhs = leafOf(handed('RHS'))[0];
-  // reading the wall from outside the room, left is the way the edge runs
-  assert.equal(Math.round(rhs.x1 - lhs.x1), door.clearW);
+  // reading the wall from outside the room, left is the way the edge runs, so
+  // on the top wall (edge runs plan-left to plan-right) RHS hinges plan-left
+  assert.equal(Math.round(lhs.x1 - rhs.x1), door.clearW);
+});
+
+t('RHS hinges at the start of the opening along the edge, LHS at its end', () => {
+  // regression: the hinge used to be drawn at the opposite end, so HI-15420's
+  // RHS doors came out mirrored against the print
+  const room = HI_15191.rooms[0];
+  const edgeDoor = room.outline!.edges![0].door!;
+  const wall = compileWalls(room.outline!).find((w) => w.door)!;
+  const run = layoutRoom(room).wallRuns.find((r) => r.wallId === wall.id)!;
+  const seg = wallSegments(run, wall, room.module).find((s) => s.door)!;
+  const { start } = runBounds(wall, room.ext.w, room.cornerLeg, room.wallTh);
+  const frame = defaultFrame(edgeDoor);
+  const x0 = start + seg.a + frame;
+  const x1 = start + seg.b - frame;
+  assert.equal(Math.round(leafOf(handed('RHS'))[0].x1), Math.round(x0), 'RHS at the start');
+  assert.equal(Math.round(leafOf(handed('LHS'))[0].x1), Math.round(x1), 'LHS at the end');
 });
 
 t('the hand rewrites the label\'s own token, and only when it is stated', () => {

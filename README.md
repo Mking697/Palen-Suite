@@ -20,7 +20,7 @@ weight and area — with no BOQ figures fed in as input.
 | HI-15279 | Ambient + Milk 60mm merged block | ⬜ needs BOQ-group merging, partition panels, Door TOP |
 | HI-15252 | Freezer 120 + Chiller 60 + F&V 60, module 1030 | ⬜ not yet |
 
-237 unit tests, 3 jobs verified line by line, no dependencies. A local viewer
+334 unit tests, 3 jobs verified line by line, one dependency (`mysql2`, accounts only). A local viewer
 (`npm run dev`) renders the generated sheet and its drawings, runs the verifier
 in the browser, and lets you rebuild from an edited input. The two browser
 scripts are covered too — `core/verify/web.test.ts` boots them headless in a
@@ -239,17 +239,18 @@ go and nothing else to press.
   expects (`WALL`, `PANEL`, `DOOR`, `DIM`, `LIGHT`, `TEXT`, `CUT`). Print gives the lot as a job
   pack.
 - **Accounts** — sign up, confirm by email, and each estimator's saved jobs are
-  their own. **Row level security in the database is what makes that true**, not
-  a filter in the browser: every policy is `auth.uid() = user_id`, so a request
-  without a session is refused by Postgres whatever the client asks for. The
+  their own. **The server is what makes that true**, not a filter in the browser:
+  every `jobs` query in `server/auth.ts` carries `WHERE user_id = ?`, so a
+  request without a session is refused whatever the client asks for (MySQL has
+  no row level security behind it). The
   header's **File** menu is New / Open / Save / Save As, and `unique (user_id,
   job_no)` makes Save an upsert — two estimators may each have their own
   HI-15191. Only the job's **spec** is stored; the BOQ is always generated,
   because a stored figure is how a saved job and a fresh one start to disagree.
   **Signing in comes first**: the calculator is behind the account, not beside
   it. Signup is verified by a **six digit code** rather than a link — a code
-  depends on no URL at all, where a link once depended on a Supabase setting
-  that broke three times. A new account gets **14 days**, and an
+  depends on no URL at all, where a link once broke three times on a
+  hosting setting. A new account gets **14 days**, and an
   **administrator** grants more, stops an account without losing its jobs, or
   deletes one for good. **Access is checked on every saved-job request**:
   `server/auth.ts`'s `hasAccess` runs again on the server for every read or
@@ -284,8 +285,20 @@ go and nothing else to press.
   `VISION_MODEL`) and fills the form: room, floor, door wall / position / hand
   (opens outward), butt-joint corners. The model only transcribes printed
   figures; code derives the settings, and warns when a chain does not add up.
-  After opening, the BOQ's panels are held against the drawing's printed ones
-  and any difference is shown. It never builds a BOQ by itself.
+  A sheet with several rooms opens every room (placed clear of each other); a
+  wall drawn dashed with no panel chain is set as the neighbour's, and printed
+  panel widths that differ from the shop rule are applied as marked Exact
+  widths. The uploaded file itself is shown unchanged above the generated sheet
+  (not saved with the job). After opening, each room's BOQ is held against its
+  own drawing figures — panels, corners, ceiling as an overall size — walls
+  taken from the drawing are listed as such, never counted as a pass. The
+  corner and roof panels take the walls' inner/outer sheets (room-level "Roof
+  and corner sheets" on the form), a door figure the drawing does not print
+  (CHQ sheet, lift) is left off rather than defaulted, and every figure the
+  reading left null is named in the room's warnings with the default the form
+  uses. Exact widths from the drawing are released back to the shop rule, and
+  said, when the estimator changes something that sets the wall's run. It never
+  builds a BOQ by itself.
 - **Catalog** — a button beside Guide opens a standalone door/panel sheet
   generator (HK-009, HI-15822, HI-15469 style): type one or several door or
   panel types and draw them onto their own sheet, SVG and DXF, **outside any
@@ -588,12 +601,30 @@ engine worthless — see `CLAUDE.md`.
   the panel module — the engine makes one panel and does not split.
 
 - **Which end an LHS door is hinged on has not been confirmed.** The plan draws
-  the swing hinged at the start of the opening for LHS and the end for RHS,
-  reading the wall from outside the room, with the leaf opening inwards. That
-  convention was worked out from the drawings, not stated by the shop, and it is
+  the swing hinged at the start of the opening (along the wall's own clockwise
+  direction) for RHS and the end for LHS, reading the wall from outside the room
+  — which is the plan-right end of HI-15420's bottom-wall RHS doors, as printed
+  — with the leaf opening outwards. It was the other way round until 6 October
+  2026, against its own comment. That
+  convention was worked out from one drawing (HI-15420), not stated by the shop, and it is
   in one function — `drawSwing` in `core/draw/roomplan.ts`. The BOQ is
   unaffected either way; only the drawing is. Whether a cold room door should
   swing out rather than in is the same question and equally unanswered.
+- **HI-15420 (uploaded drawing) questions for the shop.** (1) Room 2's top wall is
+  drawn dashed with one overall dimension and no panel chain. The upload sets it
+  as the neighbour's wall (shared); it could equally be an existing structure or a
+  wall nobody builds. Until answered, the plan check lists it as "a wall in
+  nobody's BOQ" and the flashing counts it as a wall; evidence for it being
+  shared is the printed ceiling 3400 x 4110, which is exactly one own end and one
+  shared end. (2) Door sheets read "PP/SS": the upload takes the first as the
+  outside face and the second as the inside, the way the wall sheets are marked
+  — inferred from this one sheet. (3) The hatched, framed 860 x 1350 block in
+  room 2 is not modelled. (4) The ceiling panels' order along the room (room 2
+  prints the 570 strip first, the engine lays the odd piece last) is not read,
+  so the generated ceiling may show it at the other end; sizes and BOQ are the
+  same. (5) The floor description on the BOQ is the form's wording
+  ("Puf Slab With Single Layer Tarfelt."), not the drawing's own ("PUF SLAB WITH
+  TARFELT - 60 MM THICK").
 - **No machine maximum panel length is modelled.** The legacy calculator splits
   any panel longer than a configurable limit; this engine has no limit and will
   happily generate a panel the line cannot make. The legacy default of 3050 is

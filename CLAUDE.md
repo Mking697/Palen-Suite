@@ -47,8 +47,9 @@ npm run check   # both
 ```
 
 Node >= 22.6 runs the TypeScript directly, so there is **no build step for
-development** — and **still no dependencies**, which is the rule that matters.
-Keep it that way for as long as possible. That applies to the server and the
+development** — and **one dependency only**: `mysql2`, for the accounts database
+(Node has no MySQL client). The engine, the server routes and the viewer add
+none, which is the rule that matters. Keep it that way for as long as possible. That applies to the server and the
 viewer too: `server/serve.ts` is `node:http` only and `web/` is plain
 HTML/CSS/JS loaded straight from disk.
 
@@ -130,6 +131,12 @@ code runs. Nothing in development should need it: run the source.
   `.scroller`) and `body` keeps `overflow-x: hidden`. On a phone every control
   is at least 40px and inputs are 16px, because anything smaller means a missed
   tap or an iOS zoom on focus.
+- **What an upload applied is marked, and checked as such.** A wall set to Exact
+  widths from a drawing, or to shared because the drawing shows it open, carries
+  `edge.fromDrawing` and says so on its card; editing it clears the mark. The
+  check beside the BOQ lists those walls as "taken from the drawing" and never
+  counts them as a pass — they agree by construction. The uploaded file is shown
+  as received above the sheet and is never saved with a job.
 - **CSS can defeat an attribute, and no test here will catch it.** `.gate {
   display: grid }` outranked the browser's own `[hidden] { display: none }` and
   put an empty card on the live site while all the tests passed. Presentation is

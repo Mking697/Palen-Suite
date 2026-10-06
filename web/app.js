@@ -142,6 +142,14 @@ const newEdge = (id) => ({
   equalPieces: 2,
   /** split 'exact': the widths read off the drawing, as typed */
   panelsText: '',
+  /**
+   * What on this wall came off an uploaded drawing rather than the shop rule or
+   * the estimator's own hand: `open` — drawn dashed with no panel chain, set as
+   * the neighbour's — and `exact` — the printed panel widths, applied as Exact
+   * widths. Only ever a mark: nothing is computed from it. Editing the widths
+   * or the split clears `exact`, because they are then the estimator's.
+   */
+  fromDrawing: { open: false, exact: false },
   skinOuter: defaultSkin(),
   skinInner: defaultSkin(),
 });
@@ -186,6 +194,13 @@ const newRoom = (n = 1) => ({
   topSheetOn: true,
   /** the sheet the flashing is folded from */
   flashingSkin: defaultSkin(),
+  /**
+   * The sheets on the roof panels and the corner panels (the walls have their
+   * own, per wall). Both default to PPGI 0.4, which is what every verified job
+   * is, so sending them changes nothing there; an upload sets them from the
+   * wall sheets the drawing marks.
+   */
+  skin: { outer: defaultSkin(), inner: defaultSkin() },
   /** flashing typed in on top of the three the engine works out */
   extraFlashingOn: false,
   extraFlashing: [],
@@ -472,6 +487,7 @@ function createRoomOn(edgeIndex) {
   r.floorLayers = parent.floorLayers.map((l) => ({ ...l }));
   r.topSheetOn = parent.topSheetOn;
   r.flashingSkin = { ...parent.flashingSkin };
+  r.skin = { outer: { ...parent.skin.outer }, inner: { ...parent.skin.inner } };
   // extra flashing is per room and typed off the drawing, so it is not inherited
 
   // Sit the new room hard against that wall, so the job plan draws them
@@ -550,11 +566,48 @@ const state = {
   rooms: [newRoom()],
   active: 0,
   lastPayload: null,
-  /** what an uploaded drawing printed, to hold the BOQ against — see drawingCheckPanel */
+  /**
+   * What an uploaded drawing printed, per room, to hold the BOQ against — see
+   * drawingCheckPanel. `{ rooms: [{ name, expected, warnings, panels }], notes }`,
+   * rooms in the same order as `state.rooms`.
+   */
   drawingCheck: null,
+  /**
+   * The drawing as it was uploaded, shown unchanged above the generated sheet:
+   * `{ url, name, pdf }`, `url` an object URL for the file in this browser. Never
+   * saved with a job and never sent anywhere — see clearUploadedDrawing.
+   */
+  uploadedDrawing: null,
   /** the title of the one view opened off the sheet, or null for the sheet */
   openView: null,
 };
+
+/**
+ * Let go of an uploaded drawing and what was read off it. Called wherever the
+ * job on screen stops being the one that drawing produced — New, Open — so a
+ * drawing is never left above a BOQ it has nothing to do with.
+ */
+function clearUploadedDrawing() {
+  const u = state.uploadedDrawing;
+  if (u?.url) {
+    try {
+      URL.revokeObjectURL(u.url);
+    } catch {
+      /* an object URL that cannot be revoked is only a small leak */
+    }
+  }
+  state.uploadedDrawing = null;
+  state.drawingCheck = null;
+}
+
+/**
+ * Stand a new room clear of the rooms already placed, so a room that shares no
+ * wall with them is not drawn on top of them. Used by "+ Room" and by an upload
+ * that read several rooms, so both place rooms the same way.
+ */
+function placeClear(room, among) {
+  room.x = Math.max(0, ...among.map((o) => o.x + o.w)) + 2000;
+}
 
 /* ---------- form state -> JobSpec ---------- */
 
@@ -643,6 +696,7 @@ function roomSpec(r) {
     // engine builds are then the same thing by construction
     lCut: lCutOf(r),
     flashingSkin: { ...r.flashingSkin },
+    skin: { outer: { ...r.skin.outer }, inner: { ...r.skin.inner } },
     // a length of nothing is a row still being typed, so it is not sent
     ...(r.extraFlashingOn && r.extraFlashing.some((x) => +x.length > 0)
       ? {
@@ -1074,7 +1128,7 @@ function renderForm() {
     // a room added here shares no wall, so it stands clear of the others on
     // the layout instead of being drawn on top of them
     const room = newRoom(state.rooms.length + 1);
-    room.x = Math.max(0, ...state.rooms.map((o) => o.x + o.w)) + 2000;
+    placeClear(room, state.rooms);
     state.rooms.push(room);
     state.active = state.rooms.length - 1;
     renderForm();
@@ -1138,6 +1192,10 @@ function renderForm() {
     del.addEventListener('click', () => {
       const gone = state.active;
       state.rooms.splice(gone, 1);
+      // the drawing check holds block i of the BOQ against room i of the
+      // drawing, so it loses the same entry or it would be held against the
+      // wrong room
+      if (state.drawingCheck?.rooms) state.drawingCheck.rooms.splice(gone, 1);
       // partitions point at rooms by index, so drop the ones that pointed at
       // this room and shift the rest down. A wall it used to own comes back to
       // whoever is left on the other side.
@@ -1400,6 +1458,23 @@ function renderForm() {
     ]),
   );
 
+  /* roof and corner sheets */
+  parts.push(
+    el('div', { class: 'group' }, [
+      el('h3', { text: 'Roof and corner sheets' }),
+      el('p', {
+        class: 'hint',
+        text:
+          'The sheets on the roof panels and the corner panels. Each wall has its own ' +
+          'outer and inner sheet on its card below.',
+      }),
+      el('div', { class: 'skins' }, [
+        skinPicker('Outer sheet', r.skin.outer, refresh),
+        skinPicker('Inner sheet', r.skin.inner, refresh),
+      ]),
+    ]),
+  );
+
   /* flashing */
   parts.push(
     el('div', { class: 'group' }, [
@@ -1441,6 +1516,10 @@ function renderForm() {
     const card = el('div', { class: `wall${e.shared ? ' is-shared' : ''}` }, [
       el('div', { class: 'wall-head' }, [
         el('b', { text: `${e.id} · ${SIDE_OF[shape.sides[i]]}` }),
+        // which walls came off an uploaded drawing, visible without opening each card
+        ...(e.fromDrawing?.open || e.fromDrawing?.exact
+          ? [el('span', { class: 'from-tag', text: e.fromDrawing.open ? 'open - from drawing' : 'widths - from drawing' })]
+          : []),
         el('span', { class: 'wall-len', text: `${shape.lengths[i]} mm` }),
       ]),
       el('div', { class: 'wall-toggles' }, [
@@ -1450,12 +1529,16 @@ function renderForm() {
           'Shared with neighbour',
           e.partition || e.shared,
           (v) => {
+            // an edge the drawing showed open is the estimator's to take back
+            if (e.fromDrawing) e.fromDrawing.open = false;
             setPartition(state.active, i, v);
             renderForm();
             refresh();
           },
           '',
-          e.shared,
+          // locked when a neighbour decided it; a wall the drawing showed open
+          // has no neighbour in the form, so it stays the estimator's to change
+          e.shared && !e.fromDrawing?.open,
         ),
         toggle(
           'Door',
@@ -1605,7 +1688,9 @@ function renderForm() {
       card.append(
         el('p', {
           class: 'hint shared-note',
-          text: mate
+          text: e.fromDrawing?.open
+            ? 'Taken from the uploaded drawing: this wall is drawn dashed with one overall dimension and no panel chain, so it is read as not built by this room. No panels are made for it here, and the ceiling and floor stop at it. Untick "Shared with neighbour" if this room does build it.'
+            : mate
             ? `${mate.name} builds this wall, so it is not built again here. Untick it over there to move it to this room.`
             : 'The room on the other side builds this wall, so it is not built again here.',
         }),
@@ -1632,6 +1717,7 @@ function renderForm() {
           ],
           (v) => {
             e.split = v;
+            if (e.fromDrawing) e.fromDrawing.exact = false;
             renderForm();
             refresh();
           },
@@ -1652,6 +1738,7 @@ function renderForm() {
         card.append(
           field('Widths', e.panelsText, (v) => {
             e.panelsText = v;
+            if (e.fromDrawing) e.fromDrawing.exact = false;
             renderForm();
             refresh();
           }, { type: 'text', placeholder: '1180, 240, 200' }),
@@ -1663,7 +1750,15 @@ function renderForm() {
           }),
         );
       }
-      if (e.split !== 'auto') {
+      if (e.split === 'exact' && e.fromDrawing?.exact) {
+        // a typed figure is never dressed up as a derived one
+        card.append(
+          el('p', {
+            class: 'override from-drawing',
+            text: 'Taken from the uploaded drawing: these are the widths the drawing prints for this wall (the door is not in the list). They are applied as printed, not worked out by the shop rule — confirm them with the shop.',
+          }),
+        );
+      } else if (e.split !== 'auto') {
         card.append(
           el('p', {
             class: 'override',
@@ -1858,49 +1953,233 @@ function refresh() {
 
 /**
  * An uploaded drawing's own figures, held against the BOQ the engine just built
- * from them. The printed panel widths were never fed to the engine — only the
- * room, its door and its corners were — so agreement is a real check: the
+ * from them, room by room (block i of the BOQ is room i of the drawing).
+ *
+ * Most of what was printed was never fed to the engine — only the room, its
+ * door, its corners and its open walls were — so agreement is a real check: the
  * engine's shop rule arrived at the same panels the drafter drew. A difference
  * is stated, never adjusted away.
+ *
+ * The exception is a wall whose printed widths were applied as Exact widths
+ * because the shop rule would have split it differently. Those agree by
+ * construction, so they are not counted as a pass: they are listed as taken
+ * from the drawing, and the rule-built walls are checked on their own.
  */
+const EDGE_NAMES = ['top', 'right', 'bottom', 'left'];
+
 function drawingCheckPanel(data) {
   const chk = state.drawingCheck;
-  if (!chk) return null;
-  const rows = data.blocks.flatMap((b) => b.rows);
-  const expand = (prefix) =>
-    rows.filter((r) => r.desc.startsWith(prefix)).flatMap((r) => Array(r.panelQty || 0).fill(r.panelW));
+  if (!chk || !chk.rooms?.length) return null;
   const asc = (a) => [...a].sort((x, y) => x - y);
   const same = (a, b) => a.length === b.length && asc(a).every((v, i) => v === asc(b)[i]);
-  const problems = [...(chk.warnings || [])];
-  const ok = [];
-  const exp = chk.expected;
-  if (exp) {
-    const test = (label, want, got) => {
-      if (!want.length) return;
-      if (same(want, got)) ok.push(label);
-      else problems.push(`${label}: the drawing prints ${asc(want).join(', ')} but the BOQ has ${asc(got).join(', ') || 'none'}.`);
-    };
-    test('Wall panels', exp.wallPanels, expand('Wall Panel (Outer)'));
-    test('Corner panels', exp.cornerPanels, expand('Corner Panel (Outer)'));
-    if (exp.roof) {
-      const roof = rows.find((r) => r.desc.startsWith('Roof Panel'));
-      const got = roof ? [roof.panelW, roof.panelL] : [];
-      test('Roof panel', exp.roof, got);
+  /** a without b, as lists of widths: what is left, and what b held that a did not */
+  const minus = (a, b) => {
+    const rest = [...a];
+    const missing = [];
+    for (const v of b) {
+      const k = rest.indexOf(v);
+      if (k < 0) missing.push(v);
+      else rest.splice(k, 1);
     }
+    return { rest, missing };
+  };
+
+  const many = chk.rooms.length > 1;
+  let anyProblem = false;
+  const sections = chk.rooms.map((room, i) => {
+    const block = data.blocks[i];
+    const rows = block ? block.rows : [];
+    const expand = (prefix) =>
+      rows.filter((r) => r.desc.startsWith(prefix)).flatMap((r) => Array(r.panelQty || 0).fill(r.panelW));
+    // `released`: exact widths taken off a wall because the estimator changed
+    // something they depend on — see releaseStaleExact
+    const problems = [...(room.warnings || []), ...(room.released || [])];
+    const ok = [];
+    const taken = [];
+    const exp = room.expected;
+    if (!block) {
+      problems.push('There is no BOQ block for this room, so nothing could be checked.');
+    }
+    if (exp && block) {
+      const test = (label, want, got, always = false) => {
+        if (!want.length && !always) return;
+        if (same(want, got)) ok.push(label);
+        else problems.push(`${label}: the drawing prints ${asc(want).join(', ') || 'none'} but the BOQ has ${asc(got).join(', ') || 'none'}.`);
+      };
+
+      // Walls whose printed widths were applied as Exact widths: they cannot
+      // disagree with the drawing, so they are taken out of the comparison and
+      // said — but the BOQ still has to hold every one of those panels.
+      let want = exp.wallPanels;
+      let got = expand('Wall Panel (Outer)');
+      (room.panels || []).forEach((list, edge) => {
+        // only a wall that still carries the drawing's mark: once the estimator
+        // has changed its widths or split they are theirs, and the wall is
+        // compared like any other so the difference reads as their change
+        if (!list || !list.length || !state.rooms[i]?.edges[edge]?.fromDrawing?.exact) return;
+        taken.push(`wall ${EDGE_NAMES[edge]} ${list.join(' + ')}`);
+        const w = minus(want, list);
+        const g = minus(got, list);
+        want = w.rest;
+        if (g.missing.length) {
+          problems.push(
+            `Wall ${EDGE_NAMES[edge]}: the drawing prints ${list.join(' + ')} and that was applied as Exact widths, but the BOQ has no ${g.missing.join(', ')} panel to match.`,
+          );
+        } else {
+          got = g.rest;
+        }
+      });
+      test(taken.length ? 'Wall panels (walls the shop rule built)' : 'Wall panels', want, got, exp.wallPanels.length > 0);
+      test('Corner panels', exp.cornerPanels, expand('Corner Panel (Outer)'));
+
+      if (exp.roof) {
+        // a ceiling is several panels side by side, never one, so the printed
+        // overall size is held against the total span they cover and their length
+        const roofRows = rows.filter((r) => r.desc.startsWith('Roof Panel'));
+        const span = roofRows.reduce((t, r) => t + (r.panelW || 0) * (r.panelQty || 0), 0);
+        const len = roofRows.length ? Math.max(...roofRows.map((r) => r.panelL || 0)) : 0;
+        const covered = roofRows.length ? [span, len] : [];
+        if (roofRows.length && same(exp.roof, covered)) ok.push('Ceiling');
+        else {
+          problems.push(
+            `Ceiling: the drawing prints ${asc(exp.roof).join(' x ')} but the BOQ's roof panels cover ${asc(covered).join(' x ') || 'nothing'}.`,
+          );
+        }
+      }
+    }
+    if (problems.length) anyProblem = true;
+
+    const kids = [];
+    if (many) kids.push(el('h4', { text: room.name || `Room ${i + 1}` }));
+    if (ok.length) kids.push(el('p', { class: 'hint', text: `✓ Same as the drawing: ${ok.join(', ')}.` }));
+    if (taken.length) {
+      kids.push(
+        el('p', {
+          class: 'hint',
+          text: `Taken from the drawing, not worked out by the shop rule: ${taken.join('; ')}. The door is not in these lists.`,
+        }),
+      );
+    }
+    if (problems.length) kids.push(el('ul', {}, problems.map((p) => el('li', { text: p }))));
+    return kids;
+  });
+
+  const children = [
+    el('h3', { text: anyProblem ? 'Checked against the uploaded drawing — please look' : 'Checked against the uploaded drawing' }),
+    ...sections.flat(),
+  ];
+  // everything on the sheet the reading did not transcribe (a hatched block, a
+  // column) is listed here, in a readable block rather than as grey hint text
+  if (chk.notes) {
+    children.push(el('div', { class: 'upload-notes', text: `Not modelled / not sure - the reading tool noted:\n${chk.notes}` }));
   }
-  const notes = chk.notes ? el('p', { class: 'hint', text: `The reading tool noted: ${chk.notes}` }) : null;
-  const children = [el('h3', { text: problems.length ? 'Checked against the uploaded drawing — please look' : 'Checked against the uploaded drawing' })];
-  if (ok.length) {
-    children.push(el('p', { class: 'hint', text: `✓ Same as the drawing: ${ok.join(', ')}.` }));
+  return el('section', { class: anyProblem ? 'problems' : 'drawing-check' }, children);
+}
+
+/**
+ * The uploaded drawing, as received. An image or the PDF itself — nothing is
+ * redrawn, cropped or re-encoded, so what the factory sees on screen is the
+ * file the estimator was given. Built once per upload and kept (see
+ * `outTargets`), because a PDF viewer reloads whenever its node is rebuilt and
+ * `render()` runs on every edit.
+ */
+function uploadedDrawingPanel(u) {
+  const view = u.pdf
+    ? el('embed', { class: 'uploaded-view', src: u.url, type: 'application/pdf' })
+    : el('img', { class: 'uploaded-view', src: u.url, alt: `Uploaded drawing ${u.name}` });
+  return el('details', { class: 'uploaded-drawing', open: true }, [
+    el('summary', { text: 'Uploaded drawing - as received' }),
+    el('p', { class: 'hint', text: `${u.name} — exactly as uploaded, not redrawn. It is not saved with the job.` }),
+    el('div', { class: 'uploaded-box' }, [view]),
+    el('a', { class: 'link-go', href: u.url, target: '_blank', rel: 'noopener', text: 'Open in a new tab' }),
+    // some phone browsers draw nothing for an embedded PDF, or only its first page
+    ...(u.pdf ? [el('p', { class: 'hint', text: 'If the PDF does not show here (some phones show only page 1), open it in a new tab.' })] : []),
+  ]);
+}
+
+/**
+ * The output column is two parts: a slot for the uploaded drawing, which
+ * survives every render, and a body that is rebuilt each time.
+ */
+let outSlot = null;
+let outBody = null;
+let shownDrawing = null;
+
+function outTargets() {
+  const root = $('#out');
+  if (!outBody || outBody.parentNode !== root) {
+    outSlot = el('div', { class: 'out-slot' });
+    outBody = el('div', { class: 'out-body' });
+    shownDrawing = null;
+    root.replaceChildren(outSlot, outBody);
   }
-  if (problems.length) {
-    children.push(el('ul', {}, problems.map((p) => el('li', { text: p }))));
+  // only rebuilt when the drawing itself changes: its node survives every edit
+  if (shownDrawing !== state.uploadedDrawing) {
+    shownDrawing = state.uploadedDrawing;
+    outSlot.replaceChildren(...(shownDrawing ? [uploadedDrawingPanel(shownDrawing)] : []));
   }
-  if (notes) children.push(notes);
-  return el('section', { class: problems.length ? 'problems' : 'drawing-check' }, children);
+  return outBody;
+}
+
+/**
+ * Everything that sets the length of a wall's run: the room's size and outline,
+ * the wall thickness, the corner legs and ticks, which walls are the neighbour's
+ * and butt joints, and each door's module. Exact widths off an uploaded drawing
+ * fill one particular run exactly, so when this changes they no longer fit.
+ */
+function runKey(r) {
+  try {
+    const sp = roomSpec(r);
+    return JSON.stringify([
+      sp.ext,
+      sp.wallTh,
+      sp.cornerLeg,
+      sp.minPanelWidth,
+      sp.module,
+      sp.outline.points,
+      sp.outline.vertices ?? null,
+      Object.entries(sp.outline.edges).map(([i, e]) => [i, !!e.shared, !!e.buttJoint, e.door ? e.door.moduleW : null]),
+    ]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Exact widths that came off the uploaded drawing are right for the room as it
+ * was read. Change the room's width, the wall thickness, a corner or a door
+ * module and the run they were cut to no longer exists, the engine refuses
+ * them, and the BOQ is replaced by an error on every keystroke. A job that
+ * refuses to build is a job nobody can edit, so the marked walls go back to
+ * the shop rule at that moment — and the check beside the BOQ says so. Widths
+ * the estimator typed themselves (no drawing mark) are never touched.
+ */
+function releaseStaleExact() {
+  let changed = false;
+  state.rooms.forEach((r, i) => {
+    if (!r.exactKey) return;
+    const key = runKey(r);
+    if (key === null || key === r.exactKey) return;
+    r.edges.forEach((e, idx) => {
+      if (!e.fromDrawing?.exact) return;
+      e.split = 'auto';
+      e.panelsText = '';
+      e.fromDrawing.exact = false;
+      changed = true;
+      const entry = state.drawingCheck?.rooms?.[i];
+      if (entry) {
+        (entry.released ??= []).push(
+          `Wall ${EDGE_NAMES[idx]}: the exact widths taken from the drawing no longer fit after the room was changed, so this wall is back on the shop rule.`,
+        );
+      }
+    });
+    r.exactKey = key;
+  });
+  if (changed) renderForm();
 }
 
 async function render() {
+  releaseStaleExact();
   const spec = jobSpec();
   const res = await fetch('/api/render', {
     method: 'POST',
@@ -1909,7 +2188,7 @@ async function render() {
   });
   const data = await res.json();
 
-  const out = $('#out');
+  const out = outTargets();
   if (!res.ok) {
     out.replaceChildren(
       el('p', { class: 'error', text: data.error }),
@@ -2685,6 +2964,7 @@ function drawingDownloads(data) {
 
 /** Pull a verified job back into the form so its dimensions can be inspected. */
 function loadExample(job) {
+  clearUploadedDrawing();
   state.jobNo = job.jobNo;
   state.density = job.density;
   state.rooms = job.rooms.map((room) => {
@@ -2718,6 +2998,10 @@ function loadExample(job) {
       ...l,
     }));
     r.flashingSkin = { ...(room.flashingSkin ?? RULES.defaultSkin) };
+    r.skin = {
+      outer: { ...(room.skin?.outer ?? RULES.defaultSkin) },
+      inner: { ...(room.skin?.inner ?? RULES.defaultSkin) },
+    };
     r.extraFlashing = (room.extraFlashing ?? []).map((x) => ({ ...x }));
     r.extraFlashingOn = r.extraFlashing.length > 0;
     if (room.labels) r.labels = room.labels;
@@ -3655,7 +3939,7 @@ async function fileAction(what) {
     savedAs = '';
     state.jobNo = 'HI-';
     state.rooms = [newRoom()];
-    state.drawingCheck = null;
+    clearUploadedDrawing();
     state.active = 0;
     $('#jobNo').value = state.jobNo;
     renderForm();
@@ -3958,12 +4242,167 @@ function fileToBase64(file) {
   });
 }
 
-const uploadState = { file: null, result: null, error: '', busy: false };
+const uploadState = { file: null, url: null, result: null, error: '', busy: false };
+
+const isPdfFile = (file) => (file.type || '').includes('pdf') || /\.pdf$/i.test(file.name);
+
+/** A file object URL, or null where the browser will not make one. */
+function objectUrlFor(file) {
+  try {
+    return URL.createObjectURL(file);
+  } catch {
+    return null;
+  }
+}
+
+/** Take a new file: let go of the old preview's URL, forget the old reading. */
+function setUploadFile(file) {
+  if (uploadState.url) {
+    try {
+      URL.revokeObjectURL(uploadState.url);
+    } catch {
+      /* only a small leak */
+    }
+  }
+  uploadState.file = file;
+  uploadState.url = isPdfFile(file) ? null : objectUrlFor(file);
+  uploadState.result = null;
+  uploadState.error = '';
+}
+
+/**
+ * One room of a reading, as the form's own room. Everything beyond the printed
+ * dimensions was worked out from the printed chains by server/vision.ts, never
+ * decided by the reading model:
+ *
+ *  - `open` edges are set as the neighbour's (shared), so the room builds no
+ *    panels there — marked as from the drawing, and the estimator can take it back;
+ *  - `panels` are the printed widths where they differ from the shop rule, set
+ *    as Exact widths on that wall and marked as from the drawing.
+ *
+ * Neither is applied to make a total line up: both are what the drawing prints,
+ * and the check beside the BOQ says so.
+ */
+function roomFromReading(entry, n) {
+  const r = entry.room || {};
+  const f = entry.form;
+  const room = newRoom(n);
+  room.name = r.name || `Room ${n}`;
+  if (r.w) room.w = r.w;
+  if (r.l) room.l = r.l;
+  if (r.h) room.h = r.h;
+  if (r.wallTh) room.wallTh = r.wallTh;
+  // A ceiling or floor thickness the drawing did not give follows the wall
+  // thickness when that was read (the shop builds them alike, and the server's
+  // prediction assumes the same), and only otherwise the form's own default.
+  // Either way server/vision.ts says so in the room's warnings.
+  if (r.ceilTh) room.ceilTh = r.ceilTh;
+  else if (r.wallTh) room.ceilTh = r.wallTh;
+  if (!f) return room;
+
+  if (f.floorKind) room.floorKind = f.floorKind;
+  if (f.floorTh) room.floorTh = f.floorTh;
+  else if (r.wallTh) room.floorTh = r.wallTh;
+  room.corners = f.corners.slice();
+  room.through = f.through.slice();
+  room.cornerLegs = f.cornerLegs.map((x) => (x === '' ? '' : String(x)));
+  for (const e of room.edges) {
+    if (f.wallSkin.outer) e.skinOuter = { ...f.wallSkin.outer };
+    if (f.wallSkin.inner) e.skinInner = { ...f.wallSkin.inner };
+  }
+  // The corner and roof panels follow the walls' sheets. Single-sample
+  // inference (HI-15420, 6 October 2026, not confirmed by the shop): the plan
+  // marks PPGI outside and SS inside the walls and labels the ceiling PP/SS,
+  // so the whole room is one skin pair. Without this the corner inner and roof
+  // rows printed PPGI 0.4 beside SS wall inners. Said in the room's warnings.
+  if (f.wallSkin.outer) room.skin.outer = { ...f.wallSkin.outer };
+  if (f.wallSkin.inner) room.skin.inner = { ...f.wallSkin.inner };
+
+  // An open wall is set as the neighbour's (shared). That reading — dashed, one
+  // overall dimension, no chain — comes from HI-15420 room 2's top wall alone
+  // (one sample, 6 October 2026) and is NOT confirmed by the shop; README
+  // "Open items" holds the question. The same goes for the door's PP/SS sheets
+  // below: first outside, second inside, inferred from the wall sheets.
+  (f.open || []).forEach((isOpen, i) => {
+    const e = room.edges[i];
+    if (!isOpen || !e) return;
+    e.shared = true;
+    e.fromDrawing.open = true;
+  });
+  (f.panels || []).forEach((list, i) => {
+    const e = room.edges[i];
+    if (!list || !list.length || !e || e.shared) return;
+    e.split = 'exact';
+    e.panelsText = list.join(', ');
+    e.fromDrawing.exact = true;
+  });
+
+  const fd = f.door;
+  if (fd && !room.edges[fd.edge]?.shared) {
+    // A door figure the drawing does not print is not invented: the calculator
+    // keeps its own default for the opening and module (each named in the
+    // room's warnings by deriveForm), and the optional extras — the chequered
+    // sheet and the lift — are simply left OFF unless the drawing printed them.
+    const door = newDoor();
+    door.chqOn = false;
+    door.liftOn = false;
+    if (fd.clearW) door.clearW = fd.clearW;
+    if (fd.clearH) door.clearH = fd.clearH;
+    if (fd.moduleW) door.moduleW = fd.moduleW;
+    door.frame = Math.round((door.moduleW - door.clearW) / 2);
+    if (fd.fromLeft != null) door.fromLeft = fd.fromLeft;
+    door.label = fd.label;
+    if (fd.hand) {
+      door.handOn = true;
+      door.hand = fd.hand;
+      door.swing = fd.swing;
+    }
+    if (fd.skinOuter) door.skinOuter = { ...fd.skinOuter };
+    if (fd.skinInner) door.skinInner = { ...fd.skinInner };
+    if (fd.chqHeight) {
+      door.chqOn = true;
+      door.chqHeight = fd.chqHeight;
+    }
+    if (fd.lift != null) {
+      door.liftOn = true;
+      door.liftAboveFloor = fd.lift;
+    }
+    room.edges[fd.edge].door = door;
+  }
+  // what the exact widths were cut to, so a later edit that changes the run
+  // releases them instead of leaving the engine to refuse them (releaseStaleExact)
+  if (room.edges.some((e) => e.fromDrawing.exact)) room.exactKey = runKey(room);
+  return room;
+}
+
+/**
+ * The figures read for one room, as plain text. They are not editable here: the
+ * calculator opens straight after a reading, and the wall layout was worked out
+ * from these exact figures, so an edit on this screen could only put the layout
+ * out of step with them. Anything misread is corrected in the calculator.
+ */
+function readingFields(r) {
+  const d = r.door || null;
+  const show = (label, v, unit = 'mm') => `${label} ${v ?? 'not read'}${v == null ? '' : ` ${unit}`}`;
+  const lines = [
+    [show('Width', r.w), show('Length', r.l), show('Height', r.h)].join(' · '),
+    [show('Wall', r.wallTh), show('Ceiling', r.ceilTh)].join(' · '),
+  ];
+  if (d) {
+    lines.push(
+      `Door on ${d.wall ?? 'an unread wall'}: clear ${d.clearW ?? '?'} x ${d.clearH ?? '?'} mm, module ${d.moduleW ?? 'not read'}${d.moduleW == null ? '' : ' mm'}${d.hand ? `, ${d.hand}` : ''}`,
+    );
+  }
+  return el('p', { class: 'hint upload-read', text: lines.join('\n') });
+}
 
 /**
  * The upload screen: pick a drawing, read it, show what was found, open the
  * calculator with the form pre-filled so the estimator checks and corrects
  * before Build — never a BOQ straight from the image. See server/vision.ts.
+ *
+ * A sheet can carry several rooms: every one is shown here and every one is
+ * opened in the calculator.
  */
 function renderUpload() {
   const body = $('#uploadBody');
@@ -3985,7 +4424,7 @@ function renderUpload() {
     el('p', { text: uploadState.file ? uploadState.file.name : 'Click to choose a drawing, or drop one here' }),
     el('p', {
       class: 'hint',
-      text: 'PNG, JPEG or PDF, up to 5MB (32MB for a PDF) — a photo/scan of a WALL PANEL LAYOUT drawing, or a PDF exported from AutoCAD, works. A raw DWG/DXF cannot be read directly — export it to PDF first (AutoCAD: File → Export → PDF).',
+      text: 'PNG, JPEG or PDF, up to 5MB (32MB for a PDF) — a photo/scan of a WALL PANEL LAYOUT drawing, or a PDF exported from AutoCAD, works. One room or several on the sheet. A raw DWG/DXF cannot be read directly — export it to PDF first (AutoCAD: File → Export → PDF).',
     }),
   ]);
   const input = el('input', { type: 'file', accept: 'image/png,image/jpeg,.jpg,.jpeg,.png,application/pdf,.pdf' });
@@ -4001,18 +4440,14 @@ function renderUpload() {
     drop.classList.remove('is-over');
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      uploadState.file = file;
-      uploadState.result = null;
-      uploadState.error = '';
+      setUploadFile(file);
       renderUpload();
     }
   });
   input.addEventListener('change', () => {
     const file = input.files?.[0];
     if (file) {
-      uploadState.file = file;
-      uploadState.result = null;
-      uploadState.error = '';
+      setUploadFile(file);
       renderUpload();
     }
   });
@@ -4020,11 +4455,13 @@ function renderUpload() {
   const parts = [drop];
 
   if (uploadState.file) {
-    const isPdf = (uploadState.file.type || '').includes('pdf') || /\.pdf$/i.test(uploadState.file.name);
-    const preview = isPdf
-      ? el('p', { class: 'hint', text: `PDF selected: ${uploadState.file.name}` })
-      : el('img', { class: 'upload-preview', src: URL.createObjectURL(uploadState.file) });
-    parts.push(preview);
+    parts.push(
+      isPdfFile(uploadState.file)
+        ? el('p', { class: 'hint', text: `PDF selected: ${uploadState.file.name}` })
+        : uploadState.url
+          ? el('img', { class: 'upload-preview', src: uploadState.url })
+          : null,
+    );
 
     const msg = el('p', { class: 'settings-msg' });
     const read = el('button', {
@@ -4053,6 +4490,7 @@ function renderUpload() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'could not read the drawing');
+        if (!Array.isArray(data.rooms) || !data.rooms.length) throw new Error('no room was read from that drawing');
         uploadState.result = data;
         uploadState.autoOpen = true;
       } catch (err) {
@@ -4070,91 +4508,69 @@ function renderUpload() {
   }
 
   if (uploadState.result) {
-    const r = uploadState.result.room || {};
-    const d = r.door || null;
+    const result = uploadState.result;
+    const many = result.rooms.length > 1;
     parts.push(
       el('h3', { text: 'What was read' }),
-      el('div', { class: 'upload-fields' }, [
-        field('Width', r.w ?? '', (v) => (r.w = v), { unit: 'mm' }),
-        field('Length', r.l ?? '', (v) => (r.l = v), { unit: 'mm' }),
-        field('Height', r.h ?? '', (v) => (r.h = v), { unit: 'mm' }),
-        field('Wall thickness', r.wallTh ?? '', (v) => (r.wallTh = v), { unit: 'mm' }),
-        field('Ceiling thickness', r.ceilTh ?? '', (v) => (r.ceilTh = v), { unit: 'mm' }),
-        ...(d
-          ? [
-              field('Door clear W', d.clearW ?? '', (v) => (d.clearW = v), { unit: 'mm' }),
-              field('Door clear H', d.clearH ?? '', (v) => (d.clearH = v), { unit: 'mm' }),
-              field('Door module', d.moduleW ?? '', (v) => (d.moduleW = v), { unit: 'mm' }),
-            ]
-          : []),
-      ]),
+      el('p', {
+        class: 'hint',
+        text: many
+          ? `${result.rooms.length} rooms were read off this drawing; all of them open in the calculator, where anything misread can be corrected.`
+          : 'The calculator opens with these figures, where anything misread can be corrected.',
+      }),
     );
-    const warns = uploadState.result.form?.warnings ?? [];
-    if (warns.length) {
-      parts.push(
-        el('div', { class: 'upload-notes', text: `Check before relying on this:\n${warns.join('\n')}` }),
-      );
-    }
-    if (uploadState.result.notes) {
+    result.rooms.forEach((entry, i) => {
+      const r = entry.room || {};
+      parts.push(el('h4', { text: r.name || `Room ${i + 1}` }), readingFields(r));
+      const warns = entry.form?.warnings ?? [];
+      if (warns.length) {
+        parts.push(
+          el('div', {
+            class: 'upload-notes',
+            text: `${many ? `${r.name || `Room ${i + 1}`} — check` : 'Check'} before relying on this:\n${warns.join('\n')}`,
+          }),
+        );
+      }
+    });
+    if (result.notes) {
       parts.push(
         el('div', {
           class: 'upload-notes',
-          text: `The reading tool was not sure about some of this:\n${uploadState.result.notes}`,
+          text: `The reading tool was not sure about some of this:\n${result.notes}`,
         }),
       );
     }
-    const openIt = el('button', { class: 'btn primary', type: 'button', text: 'Open in the calculator' });
+    const openIt = el('button', {
+      class: 'btn primary',
+      type: 'button',
+      text: many ? `Open all ${result.rooms.length} rooms in the calculator` : 'Open in the calculator',
+    });
     const openResult = () => {
-      const room = newRoom();
-      const f = uploadState.result.form;
-      room.name = r.name || 'Room 1';
-      if (r.w) room.w = r.w;
-      if (r.l) room.l = r.l;
-      if (r.h) room.h = r.h;
-      if (r.wallTh) room.wallTh = r.wallTh;
-      if (r.ceilTh) room.ceilTh = r.ceilTh;
-      if (f) {
-        // everything below was worked out from the printed chains by
-        // server/vision.ts, never decided by the reading model
-        if (f.floorKind) room.floorKind = f.floorKind;
-        if (f.floorTh) room.floorTh = f.floorTh;
-        room.corners = f.corners.slice();
-        room.through = f.through.slice();
-        room.cornerLegs = f.cornerLegs.map((x) => (x === '' ? '' : String(x)));
-        for (const e of room.edges) {
-          if (f.wallSkin.outer) e.skinOuter = { ...f.wallSkin.outer };
-          if (f.wallSkin.inner) e.skinInner = { ...f.wallSkin.inner };
-        }
-        if (f.door) {
-          const fd = f.door;
-          const door = newDoor();
-          if (fd.clearW) door.clearW = fd.clearW;
-          if (fd.clearH) door.clearH = fd.clearH;
-          if (fd.moduleW) door.moduleW = fd.moduleW;
-          door.frame = Math.round((door.moduleW - door.clearW) / 2);
-          if (fd.fromLeft != null) door.fromLeft = fd.fromLeft;
-          door.label = fd.label;
-          if (fd.hand) {
-            door.handOn = true;
-            door.hand = fd.hand;
-            door.swing = fd.swing;
-          }
-          if (fd.skinOuter) door.skinOuter = { ...fd.skinOuter };
-          if (fd.skinInner) door.skinInner = { ...fd.skinInner };
-          if (fd.chqHeight) {
-            door.chqOn = true;
-            door.chqHeight = fd.chqHeight;
-          }
-          if (fd.lift != null) {
-            door.liftOn = true;
-            door.liftAboveFloor = fd.lift;
-          }
-          room.edges[fd.edge].door = door;
-        }
-      }
-      state.drawingCheck = f ? { expected: f.expected, warnings: f.warnings, notes: uploadState.result.notes || '' } : null;
-      state.jobNo = uploadState.result.jobNo || state.jobNo;
-      state.rooms = [room];
+      const rooms = result.rooms.map((entry, i) => roomFromReading(entry, i + 1));
+      // rooms that share no wall stand clear of each other on the job plan
+      rooms.forEach((room, i) => {
+        if (i) placeClear(room, rooms.slice(0, i));
+      });
+
+      clearUploadedDrawing();
+      state.drawingCheck = {
+        rooms: result.rooms.map((entry, i) => ({
+          name: rooms[i].name,
+          expected: entry.form?.expected ?? null,
+          warnings: entry.form?.warnings ?? [],
+          panels: entry.form?.panels ?? [],
+        })),
+        notes: result.notes || '',
+      };
+      // the drawing as it was handed over, kept for the output column; its own
+      // object URL, so a later upload cannot pull it out from under the sheet
+      const url = uploadState.file ? objectUrlFor(uploadState.file) : null;
+      if (url) state.uploadedDrawing = { url, name: uploadState.file.name, pdf: isPdfFile(uploadState.file) };
+
+      state.jobNo = result.jobNo || state.jobNo;
+      const jobBox = $('#jobNo');
+      if (jobBox) jobBox.value = state.jobNo;
+      state.rooms = rooms;
       state.active = 0;
       landingDismissed = true;
       showCalculator();

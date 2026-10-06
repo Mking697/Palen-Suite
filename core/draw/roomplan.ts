@@ -35,15 +35,18 @@ const SWING_STEPS = 8;
  * without one: a swing the job has not stated would be the drawing inventing a
  * fact about the building.
  *
- * **The convention, which came from reading the drawings and not from the
- * shop:** facing a wall from outside the room, the left hand points along that
- * edge's own direction — the outlines run clockwise, so this holds on every
- * wall — which puts an LHS hinge at the start of the opening and an RHS hinge
- * at its end. The leaf swings *out of* the room unless `DoorSpec.swing` says
- * 'in' — outward is the default, stated by the shop on 6 October 2026. The
- * hand is the same either way: it is read facing the wall from outside. If
- * the shop hangs them the other way, this function is the only place that
- * changes.
+ * **The convention, read off the HI-15420 print (one sample, 6 October 2026,
+ * not stated by the shop):** facing a wall from outside the room, the *left*
+ * hand points along that edge's own direction (the outlines run clockwise in a
+ * y-down plan, so this holds on every wall). That puts an RHS hinge at the
+ * *start* of the opening and an LHS hinge at its *end*. HI-15420 posts both
+ * RHS doors on the bottom wall, whose edge runs right to left, and the print
+ * hinges them at the plan-right end — the start of that edge. An earlier
+ * version had this the other way round, against its own docstring. The leaf
+ * swings *out of* the room unless `DoorSpec.swing` says 'in' — outward is the
+ * default, stated by the shop on 6 October 2026. The hand is the same either
+ * way: it is read facing the wall from outside. If the shop hangs them the
+ * other way, this function is the only place that changes.
  */
 function drawSwing(d: Drawing, door: DoorSpec, p0: Pt, p1: Pt, u: Pt, n: Pt): void {
   if (!door.hand) return;
@@ -52,8 +55,8 @@ function drawSwing(d: Drawing, door: DoorSpec, p0: Pt, p1: Pt, u: Pt, n: Pt): vo
   const frame = defaultFrame(door);
   const left = add(p0, scale(u, frame));
   const right = add(p1, scale(u, -frame));
-  const hinge = door.hand === 'RHS' ? right : left;
-  const jamb = door.hand === 'RHS' ? left : right;
+  const hinge = door.hand === 'RHS' ? left : right;
+  const jamb = door.hand === 'RHS' ? right : left;
 
   const r = length([jamb[0] - hinge[0], jamb[1] - hinge[1]]);
   if (r < 1) return;

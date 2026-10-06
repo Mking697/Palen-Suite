@@ -17,6 +17,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createContext, runInContext } from 'node:vm';
+import { FORM_DEFAULTS, parseExtraction } from '../../server/vision.ts';
+import { buildJob } from '../boq.ts';
+import { checkJob } from '../checks.ts';
+import { jobFlashing } from '../flashing.ts';
+import { fmt2, round } from '../format.ts';
+import { compileWalls } from '../plan.ts';
+import { roomPlan } from '../draw/index.ts';
+import { HI_15420 } from './hi-15420.reading.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8');
@@ -371,6 +379,28 @@ function harness(
     clearTimeout,
     URL,
     Blob: class {},
+    /*
+     * Enough of a FileReader for the upload screen, which reads the drawing as
+     * a data: URL. It reads a real Blob/File handed in by the test.
+     */
+    FileReader: class {
+      result: unknown = null;
+      error: unknown = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL(file: Blob) {
+        file.arrayBuffer().then(
+          (buf) => {
+            this.result = `data:${file.type};base64,${Buffer.from(buf).toString('base64')}`;
+            this.onload?.();
+          },
+          (err) => {
+            this.error = err;
+            this.onerror?.();
+          },
+        );
+      }
+    },
     Math,
     JSON,
     Date,
@@ -1578,5 +1608,530 @@ await t('what was typed survives going back and opening it again', async () => {
     'a half typed email must not be thrown away',
   );
 });
+
+/* ---------- uploading a drawing: two rooms on one sheet ---------- */
+
+console.log('\n  uploading a drawing — HI-15420, two rooms\n');
+
+/**
+ * What /api/render answers, from the real engine rather than a stub, so the
+ * BOQ the page shows and checks is the one the shop rule really produces from
+ * what the form posted. `serialise` and `withWalls` in server/serve.ts do the
+ * same.
+ */
+function enginePayload(spec: any) {
+  const job = {
+    ...spec,
+    rooms: spec.rooms.map((r: any) =>
+      r.outline && !r.walls?.length ? { ...r, walls: compileWalls(r.outline) } : r,
+    ),
+  };
+  const blocks = buildJob(job);
+  const grand = blocks.reduce(
+    (a, b) => ({
+      panelQty: a.panelQty + b.totals.panelQty,
+      ppgiQty: a.ppgiQty + b.totals.ppgiQty,
+      plyQty: a.plyQty + b.totals.plyQty,
+      chemWeight: a.chemWeight + b.totals.chemWeight,
+      areaSqmt: a.areaSqmt + b.totals.areaSqmt,
+    }),
+    { panelQty: 0, ppgiQty: 0, plyQty: 0, chemWeight: 0, areaSqmt: 0 },
+  );
+  return {
+    jobNo: job.jobNo,
+    density: job.density,
+    rooms: job.rooms.map((r: any) => r.name),
+    problems: checkJob(job),
+    flashing: jobFlashing(job),
+    blocks: blocks.map((b) => ({
+      title: b.title,
+      spec: b.spec,
+      rows: b.rows.map((r) => ({
+        ...r,
+        chemWeightText: r.chemWeight ? fmt2(r.chemWeight) : '',
+        areaSqmtText: r.areaSqmt ? String(round(r.areaSqmt, 5)) : '',
+      })),
+      totals: { ...b.totals, chemWeightText: fmt2(b.totals.chemWeight), areaSqmtText: fmt2(b.totals.areaSqmt) },
+    })),
+    grand: { ...grand, chemWeightText: fmt2(grand.chemWeight), areaSqmtText: fmt2(grand.areaSqmt) },
+    layout: { drawable: false, reason: 'stub' },
+    sheet: { drawable: false, reason: 'stub' },
+    drawings: [],
+    model3d: { faces: [], skipped: [] },
+  };
+}
+
+const UPLOAD_IDS = [
+  ...APP_IDS,
+  '#landing',
+  '#upload',
+  '#uploadBody',
+  '#landingCreate',
+  '#landingUpload',
+  '#uploadBack',
+];
+
+/** The page, with the vision feature on and the extractor answering with this reading. */
+function uploadApp(reading: unknown) {
+  const seen: { data: ReturnType<typeof enginePayload> | null; error: unknown } = { data: null, error: null };
+  const h = harness(APP_SOURCES, UPLOAD_IDS, {
+    '/api/config': { accounts: false, accountsReason: 'no database', vision: true },
+    '/api/rules': {
+      materials: { PPGI: [0.4], SS: [0.5] },
+      defaultSkin: { material: 'PPGI', thickness: 0.4 },
+      doorTypes: [{ key: 'flush', label: 'Flush Door', thickness: 0 }],
+      doorCores: ['Puf'],
+      doorHands: ['LHS', 'RHS'],
+      lCutMinWallTh: 50,
+      doorTopMinWallHeight: 3050,
+      floorMaterials: ['PPGI', 'Ply', 'AL. CHQ'],
+      floorLayers: [
+        { material: 'PPGI', th: 0.4 },
+        { material: 'Puf', th: 0 },
+        { material: 'Ply', th: 12 },
+        { material: 'AL. CHQ', th: 2 },
+      ],
+      flashingTypes: ['U Flashing', 'Gutter Flashing'],
+    },
+    '/api/jobs': [],
+    '/api/extract-drawing': () => reading,
+    '/api/render': (_url: string, init?: { body?: string }) => {
+      try {
+        seen.data = enginePayload(JSON.parse(init!.body!));
+        return seen.data;
+      } catch (err) {
+        seen.error = err;
+        return { error: (err as Error).message };
+      }
+    },
+  });
+  return { h, seen };
+}
+
+/** Walk the upload screen: choose the file, press Read, and let it open the calculator. */
+async function uploadFile(h: Harness, file: File) {
+  await settle();
+  h.ids.get('#landingUpload')!.fire('click');
+  const body = h.ids.get('#uploadBody')!;
+  const input = [...walk(body)].find((n) => n.tag === 'input' && n.attrs.type === 'file');
+  assert.ok(input, 'the upload screen has no file box');
+  (input as unknown as { files: File[] }).files = [file];
+  input!.fire('change');
+  const read = [...walk(body)].find((n) => n.tag === 'button' && textOf(n).includes('Read this drawing'));
+  assert.ok(read, 'no Read button after choosing a file');
+  read!.fire('click');
+  await settle();
+  await settle();
+}
+
+const HI_15420_PDF = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'HI-15420-Model.pdf', {
+  type: 'application/pdf',
+});
+const reading2 = parseExtraction(HI_15420);
+
+const two = uploadApp(reading2);
+await uploadFile(two.h, HI_15420_PDF);
+
+type PostedRoom = {
+  name: string;
+  ext: { w: number; l: number; h: number };
+  wallTh: number;
+  ceilTh: number;
+  floor: { kind: string; th: number };
+  at: [number, number];
+  outline: { edges: Record<string, any> };
+};
+const lastSpec = () => {
+  const posts = two.h.posts.filter((p) => p.url.includes('/api/render'));
+  return posts.at(-1)!.body as { jobNo: string; rooms: PostedRoom[] };
+};
+const form2 = () => two.h.ids.get('#form')!;
+const formText = () => textOf(form2());
+const tabs = () => [...walk(form2())].filter((n) => n.tag === 'button' && n.className.startsWith('room-tab'));
+
+await t('the drawing is sent to be read, as the PDF it is', () => {
+  const sent = two.h.posts.find((p) => p.url.includes('/api/extract-drawing'));
+  assert.ok(sent, 'nothing was posted for reading');
+  const body = sent!.body as { mimeType: string; imageBase64: string };
+  assert.equal(body.mimeType, 'application/pdf');
+  assert.equal(Buffer.from(body.imageBase64, 'base64').toString('latin1'), '%PDF');
+});
+
+await t('reading it opens the calculator, and the engine took what the form posted', () => {
+  assert.deepEqual(two.h.errors, []);
+  assert.equal(two.seen.error, null, `the engine refused what the form posted: ${(two.seen.error as Error)?.message}`);
+  assert.equal(two.h.ids.get('#upload')!.hidden, true, 'the upload screen should have closed');
+  assert.equal(two.h.ids.get('#landing')!.hidden, true);
+});
+
+await t('BOTH rooms are opened, each with its own dimensions', () => {
+  const spec = lastSpec();
+  assert.equal(spec.jobNo, 'HI-15420');
+  assert.deepEqual(spec.rooms.map((r) => r.name), ['CHILLER ROOM.1', 'CHILLER ROOM.2']);
+  assert.deepEqual(spec.rooms.map((r) => r.ext), [
+    { w: 4120, l: 4720, h: 2240 },
+    { w: 3460, l: 4140, h: 2080 },
+  ]);
+  for (const r of spec.rooms) {
+    assert.equal(r.wallTh, 60);
+    assert.equal(r.ceilTh, 60);
+    assert.equal(r.floor.kind, 'pufSlab');
+    assert.equal(r.floor.th, 60);
+  }
+  assert.equal(tabs().filter((n) => textOf(n).startsWith('CHILLER')).length, 2, 'a tab for each room');
+});
+
+await t('the rooms stand clear of each other on the job plan', () => {
+  const [a, b] = lastSpec().rooms;
+  assert.ok(b.at[0] >= a.at[0] + a.ext.w, 'room 2 overlaps room 1');
+});
+
+await t('each room has its own door: clear opening, module, hand, sheets, lift', () => {
+  const [a, b] = lastSpec().rooms;
+  const doors = (r: PostedRoom) => Object.entries(r.outline.edges).filter(([, e]) => e.door);
+  assert.equal(doors(a).length, 1);
+  assert.equal(doors(b).length, 1);
+  const [ai, ad] = doors(a)[0];
+  const [bi, bd] = doors(b)[0];
+  assert.equal(ai, '2', 'room 1 door is on the bottom wall');
+  assert.equal(bi, '2', 'room 2 door is on the bottom wall');
+  for (const [d, clearH] of [
+    [ad.door, 1900],
+    [bd.door, 1750],
+  ] as const) {
+    assert.equal(d.clearW, 900);
+    assert.equal(d.clearH, clearH);
+    assert.equal(d.moduleW, 1180);
+    assert.equal(d.frame, 140);
+    assert.equal(d.hand, 'RHS');
+    assert.equal(d.swing, 'out');
+    assert.equal(d.liftAboveFloor, 110);
+    assert.equal(d.skin.outer.material, 'PPGI', 'PP outside');
+    assert.equal(d.skin.inner.material, 'SS', 'SS inside');
+    assert.equal(d.label, 'Flush Door PP/SS');
+  }
+  assert.equal(ad.door.fromLeft, reading2.rooms[0].form!.door!.fromLeft);
+  assert.equal(bd.door.fromLeft, reading2.rooms[1].form!.door!.fromLeft);
+});
+
+await t('room 1 bottom wall carries the printed panel widths, as Exact widths', () => {
+  const bottom = lastSpec().rooms[0].outline.edges['2'];
+  assert.deepEqual([...bottom.panels].sort((x: number, y: number) => x - y), [625, 625, 1090]);
+  assert.deepEqual(bottom.panels, reading2.rooms[0].form!.panels[2], 'the form must carry what the server derived');
+});
+
+await t('room 2 top wall is the neighbour’s: shared, no panels', () => {
+  assert.deepEqual(lastSpec().rooms[1].outline.edges['0'], { shared: true });
+});
+
+await t('the exact widths show on the wall card as the marked Exact mode, not hidden', () => {
+  const text = formText();
+  assert.ok(text.includes('Exact widths off the drawing'), 'the split control is not in Exact mode');
+  assert.ok(
+    text.includes('Taken from the uploaded drawing: these are the widths the drawing prints'),
+    'not marked as from the drawing',
+  );
+  const exact = [...walk(form2())].find(
+    (n) =>
+      n.tag === 'select' &&
+      n.children.some((o) => o instanceof StubEl && o.attrs.value === 'exact' && 'selected' in o.attrs),
+  );
+  assert.ok(exact, 'no panel split control set to exact');
+  // every wall that carries printed widths shows them, in a Widths box; the
+  // bottom wall's is the one that differs from the shop rule's split
+  const boxes = [...walk(form2())].filter(
+    (n) => n.tag === 'input' && n.parentNode?.tag === 'label' && textOf(n.parentNode).trim() === 'Widths',
+  );
+  const lists = boxes.map((n) => String(n.value).split(/\D+/).map(Number).sort((x, y) => x - y).join(','));
+  assert.ok(lists.includes('625,625,1090'), `the bottom wall's widths are not on its card: ${lists.join(' | ')}`);
+});
+
+/** The check section the page prints beside the BOQ. */
+const checkText = () => {
+  const out = two.h.ids.get('#out')!;
+  const sec = [...walk(out)].find(
+    (n) => n.tag === 'section' && /problems|drawing-check/.test(n.className) && textOf(n).startsWith('Checked against'),
+  );
+  assert.ok(sec, 'no check against the uploaded drawing');
+  return textOf(sec!);
+};
+
+await t('the uploaded drawing sits above everything generated, as received, in its own box', () => {
+  const out = two.h.ids.get('#out')!;
+  const slot = out.children[0] as StubEl;
+  const details = slot.children[0] as StubEl;
+  assert.equal(details.tag, 'details');
+  assert.equal(details.attrs.open, '', 'it should start open');
+  assert.equal(textOf(details.children[0] as StubEl), 'Uploaded drawing - as received');
+  const embed = [...walk(details)].find((n) => n.tag === 'embed');
+  assert.ok(embed, 'a PDF is shown with an embed');
+  assert.ok(String(embed!.attrs.src).startsWith('blob:'), 'it is the uploaded file itself, not a redraw');
+  assert.equal(embed!.attrs.type, 'application/pdf');
+  assert.ok([...walk(details)].some((n) => n.className === 'uploaded-box'), 'it has its own scroll box');
+  assert.ok(textOf(out.children[1] as StubEl).includes('SHEET FABRICATION'), 'the BOQ follows it');
+});
+
+await t('the page hides the uploaded drawing when printed, and never lets it widen the page', () => {
+  const css = read('web/styles.css');
+  assert.ok(/@media print\s*\{[^@]*\.uploaded-drawing/s.test(css), 'not hidden in print');
+  assert.ok(/\.uploaded-box\s*\{[^}]*overflow:\s*auto/s.test(css), 'no scroll box of its own');
+  assert.ok(/\.uploaded-drawing\[hidden\]\s*\{\s*display:\s*none/.test(css), 'the [hidden] rule is missing');
+});
+
+await t('the BOQ has each door, built from what the drawing printed', () => {
+  const data = two.seen.data!;
+  assert.equal(data.blocks.length, 2);
+  data.blocks.forEach((b, i) => {
+    const door = b.rows.filter((r: { desc: string }) => /door/i.test(r.desc));
+    assert.ok(door.length > 0, `room ${i + 1} has no door rows in its BOQ`);
+  });
+});
+
+await t('a door figure the drawing does not print is left off, not defaulted: no CHQ sheet, and the lift is the printed 110', () => {
+  // regression: newDoor() defaults chqOn true / 600, so a reading with no CHQ
+  // height posted "AL. CHQ 600" onto a door whose drawing prints none
+  for (const r of lastSpec().rooms) {
+    const d = Object.values(r.outline.edges).find((e: any) => e.door)!.door;
+    assert.equal(d.chqHeight, undefined, 'a CHQ height nobody read was posted');
+    assert.equal(d.liftAboveFloor, 110);
+  }
+  for (const b of two.seen.data!.blocks) {
+    assert.ok(!/CHQ/i.test(JSON.stringify(b.spec)), `the spec box prints a CHQ the drawing does not: ${JSON.stringify(b.spec)}`);
+  }
+});
+
+await t('the corner and roof panels follow the wall sheets: inner SS, outer PPGI, the way the plan marks them', () => {
+  // regression: no room-level skin was posted, so corner inner and roof rows
+  // printed PPGI 0.4 beside SS wall inners
+  for (const r of lastSpec().rooms as Array<PostedRoom & { skin: any }>) {
+    assert.equal(r.skin.outer.material, 'PPGI');
+    assert.equal(r.skin.inner.material, 'SS');
+  }
+  for (const b of two.seen.data!.blocks) {
+    const inner = b.rows.filter((r: { desc: string }) => r.desc.startsWith('Corner Panel (Inner)'));
+    assert.ok(inner.length > 0);
+    for (const r of inner) assert.equal((r as { skin?: string }).skin, 'SS 0.5', `a corner inner row is ${(r as { skin?: string }).skin}`);
+    const wallInner = b.rows.filter((r: { desc: string }) => r.desc.startsWith('Wall Panel (Inner)'));
+    for (const r of wallInner) assert.equal((r as { skin?: string }).skin, 'SS 0.5');
+  }
+});
+
+await t('the generated plan hinges each RHS door at the plan-right end of the opening, as the print does', () => {
+  // both doors are RHS on the bottom wall, whose edge runs right to left: the
+  // hinge is the start of the edge, which is plan-right. The module spans the
+  // opening plus a frame leg either side.
+  const spec = lastSpec();
+  spec.rooms.forEach((room) => {
+    const planRoom = { ...room, walls: compileWalls((room as any).outline) } as any;
+    const plan = roomPlan(planRoom);
+    const leaf = plan.lines.find((l: any) => l.layer === 'DOOR' && l.x1 === l.x2 && !l.dash);
+    assert.ok(leaf, 'no door leaf is drawn');
+    const bottomDoor = plan.lines.find((l: any) => l.layer === 'DOOR' && l.y1 === l.y2 && !l.dash && l.y1 === room.ext.l);
+    assert.ok(bottomDoor, 'no door opening on the bottom wall');
+    const mid = (Math.min(bottomDoor.x1, bottomDoor.x2) + Math.max(bottomDoor.x1, bottomDoor.x2)) / 2;
+    assert.ok(leaf.x1 > mid, `the RHS hinge is at x=${leaf.x1}, left of the opening's middle ${mid}`);
+  });
+});
+
+await t('the check is per room, and each room is held against its own BOQ block', () => {
+  const text = checkText();
+  assert.ok(text.includes('CHILLER ROOM.1') && text.includes('CHILLER ROOM.2'), 'a room is missing from the check');
+  // a multi-panel ceiling is held against the printed overall size, as a pair
+  assert.ok(!/Ceiling: the drawing prints/.test(text), `the ceiling check disagrees: ${text}`);
+  assert.ok(text.includes('Ceiling'), 'the ceiling was not held against the drawing');
+  assert.ok(!/Wall panels[^:]*: the drawing prints/.test(text), `a wall panel check disagrees: ${text}`);
+  assert.ok(!/Corner panels: the drawing prints/.test(text), `a corner check disagrees: ${text}`);
+});
+
+await t('walls whose widths were applied from the drawing are stated, not counted as a pass', () => {
+  const text = checkText();
+  assert.ok(text.includes('Taken from the drawing, not worked out by the shop rule'));
+  assert.ok(/wall bottom 1090 \+ 625 \+ 625/.test(text), `the bottom wall is not stated: ${text}`);
+  assert.ok(text.includes('Wall panels (walls the shop rule built)'));
+});
+
+await t('the notes from the reading are shown once', () => {
+  const text = checkText();
+  assert.equal(text.split('the reading tool noted').length - 1, 1);
+  assert.ok(text.includes('hatched'));
+});
+
+await t('room 2’s card says the top wall came off the drawing, and the estimator can take it back', async () => {
+  const tab = tabs().find((n) => textOf(n) === 'CHILLER ROOM.2');
+  assert.ok(tab, 'no tab for room 2');
+  tab!.fire('click');
+  await settle();
+  assert.ok(formText().includes('Taken from the uploaded drawing: this wall is drawn dashed'), 'the open wall is not explained');
+  const shared = [...walk(form2())].find(
+    (n) => n.tag === 'label' && n.className.startsWith('chk') && textOf(n).trim() === 'Shared with neighbour',
+  );
+  assert.ok(shared, 'no shared box on the wall card');
+  assert.ok(!shared!.className.includes('is-locked'), 'an open wall off a drawing must stay editable');
+});
+
+await t('editing a figure does not rebuild the uploaded drawing, so a PDF viewer is not reloaded', async () => {
+  const out = two.h.ids.get('#out')!;
+  const before = (out.children[0] as StubEl).children[0];
+  const box = dimension(form2(), 'Height');
+  box.value = '2100';
+  box.fire('input');
+  await settle();
+  assert.equal((out.children[0] as StubEl).children[0], before, 'the uploaded drawing was rebuilt');
+});
+
+await t('the panel check still reports a real difference', async () => {
+  // room 1's top wall, retyped with widths of the estimator's own that close on
+  // the same run (3520) but are not what the drawing prints (1160 + 1180 + 1180)
+  tabs().find((n) => textOf(n) === 'CHILLER ROOM.1')!.fire('click');
+  await settle();
+  const widths = dimension(form2(), 'Widths');
+  widths.value = '1000, 1180, 1340';
+  widths.fire('input');
+  await settle();
+  assert.equal(two.seen.error, null, `the engine refused it: ${(two.seen.error as Error)?.message}`);
+  assert.ok(
+    /Wall panels[^:]*: the drawing prints .* but the BOQ has/.test(checkText()),
+    `a wall that differs from the drawing was not reported: ${checkText()}`,
+  );
+});
+
+await t('nothing on the page, upload screen included, is a number input', () => {
+  for (const id of ['#form', '#out', '#uploadBody']) {
+    for (const n of walk(two.h.ids.get(id)!)) {
+      assert.notEqual(n.attrs.type, 'number', `a ${n.tag} in ${id} is a number input`);
+    }
+  }
+});
+
+await t('New lets go of the uploaded drawing and what was read from it', async () => {
+  two.h.fileButtons.find((b) => b.attrs['data-file'] === 'new')!.fire('click');
+  await settle();
+  const out = two.h.ids.get('#out')!;
+  assert.equal((out.children[0] as StubEl).children.length, 0, 'the drawing is still on screen');
+  assert.ok(!textOf(out).includes('Checked against the uploaded drawing'), 'the old check is still on screen');
+});
+
+/* a single room, as a PNG: the original shape of the feature keeps working */
+
+const oneRoom = JSON.parse(HI_15420);
+oneRoom.rooms = [oneRoom.rooms[0]];
+const single = uploadApp(parseExtraction(JSON.stringify(oneRoom)));
+await uploadFile(
+  single.h,
+  new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'one-room.png', { type: 'image/png' }),
+);
+
+await t('a one-room drawing still opens one room, with its drawing shown as an image', () => {
+  assert.equal(single.seen.error, null);
+  const spec = single.h.posts.filter((p) => p.url.includes('/api/render')).at(-1)!.body as { rooms: unknown[] };
+  assert.equal(spec.rooms.length, 1);
+  const out = single.h.ids.get('#out')!;
+  const img = [...walk(out)].find((n) => n.tag === 'img');
+  assert.ok(img, 'an image upload is shown as an img');
+  assert.ok(String(img!.attrs.src).startsWith('blob:'));
+  assert.ok(![...walk(out)].some((n) => n.tag === 'embed'));
+  assert.ok(![...walk(out)].some((n) => n.tag === 'h4'), 'a single room needs no room heading in the check');
+});
+
+
+
+/* ---------- upload: what the estimator does next must not break the build ---------- */
+
+console.log('\n  uploading a drawing — editing after the read\n');
+
+const forms = (u: ReturnType<typeof uploadApp>) => u.h.ids.get('#form')!;
+const roomTabs = (u: ReturnType<typeof uploadApp>) =>
+  [...walk(forms(u))].filter((n) => n.tag === 'button' && n.className.startsWith('room-tab'));
+const checkOf = (u: ReturnType<typeof uploadApp>) => {
+  const sec = [...walk(u.h.ids.get('#out')!)].find(
+    (n) => n.tag === 'section' && /problems|drawing-check/.test(n.className) && textOf(n).startsWith('Checked against'),
+  );
+  return sec ? textOf(sec) : '';
+};
+const lastPosted = (u: ReturnType<typeof uploadApp>) =>
+  (u.h.posts.filter((p) => p.url.includes('/api/render')).at(-1)!.body as { rooms: PostedRoom[] }).rooms;
+
+await t("the form defaults the server assumes are the form's own (newRoom / newDoor)", () => {
+  const [room, door] = JSON.parse(
+    runInContext('JSON.stringify([newRoom(), newDoor()])', two.h.ctx as never) as string,
+  );
+  assert.deepEqual(
+    { w: room.w, l: room.l, h: room.h, thickness: room.wallTh, ceil: room.ceilTh, floor: room.floorTh },
+    {
+      w: FORM_DEFAULTS.w,
+      l: FORM_DEFAULTS.l,
+      h: FORM_DEFAULTS.h,
+      thickness: FORM_DEFAULTS.thickness,
+      ceil: FORM_DEFAULTS.thickness,
+      floor: FORM_DEFAULTS.thickness,
+    },
+  );
+  assert.equal(room.module, FORM_DEFAULTS.module);
+  assert.equal(room.cornerLeg, FORM_DEFAULTS.cornerLeg);
+  assert.equal(room.minPanelWidth, FORM_DEFAULTS.minPanelWidth);
+  assert.equal(door.moduleW, FORM_DEFAULTS.doorModule);
+  assert.equal(door.clearW, FORM_DEFAULTS.doorClearW);
+  assert.equal(door.clearH, FORM_DEFAULTS.doorClearH);
+});
+
+const three = uploadApp(parseExtraction(HI_15420));
+await uploadFile(three.h, HI_15420_PDF);
+
+await t("removing room 1 takes its check with it, so room 2 is not held against room 1's figures", async () => {
+  // regression: the check was matched to the BOQ blocks by index and removal
+  // did not touch it, so room 2's block was compared with room 1's expected
+  // widths, ceiling and "taken from the drawing" list
+  roomTabs(three).find((n) => textOf(n) === 'CHILLER ROOM.1')!.fire('click');
+  await settle();
+  const del = [...walk(forms(three))].find((n) => n.tag === 'button' && textOf(n) === 'Remove this room');
+  assert.ok(del, 'no Remove button');
+  del!.fire('click');
+  await settle();
+  assert.equal(lastPosted(three).length, 1);
+  assert.equal(lastPosted(three)[0].name, 'CHILLER ROOM.2');
+  const text = checkOf(three);
+  assert.ok(text.length > 0, 'the check disappeared');
+  assert.ok(!/4060|4660|1090 [+] 625/.test(text), "room 1's figures are still held against room 2: " + text);
+  assert.ok(!/no BOQ block/.test(text), 'a check is left without a block');
+  assert.ok(!/Ceiling: the drawing prints/.test(text), "room 2's ceiling is reported as different: " + text);
+});
+
+const four = uploadApp(parseExtraction(HI_15420));
+await uploadFile(four.h, HI_15420_PDF);
+
+await t('a wall the drawing gave exact widths for says so in its header, not only inside the card', () => {
+  const heads = [...walk(forms(four))].filter((n) => n.tag === 'div' && n.className === 'wall-head');
+  assert.ok(heads.some((h) => /from drawing/.test(textOf(h))), 'no wall header is tagged');
+});
+
+
+await t('changing the room after an upload releases the exact widths instead of letting the engine refuse them', async () => {
+  // regression: width 4120 -> 4130 left "explicit panels ... but the run is ..."
+  // on every wall that carried the drawing's widths, and the BOQ was replaced
+  // by an error
+  assert.ok(roomTabs(four).length >= 2);
+  const w = [...walk(forms(four))].find(
+    (n) => n.tag === 'label' && n.className === 'f' && [...walk(n)].some((k) => k.tag === 'span' && textOf(k).trim() === 'Width'),
+  );
+  assert.ok(w, 'no Width box');
+  const box = [...walk(w!)].find((n) => n.tag === 'input')!;
+  assert.equal(String(box.value), '4120');
+  box.value = '4130';
+  box.fire('input');
+  await settle();
+  await settle();
+  assert.equal(four.seen.error, null, 'the engine refused it: ' + (four.seen.error as Error)?.message);
+  const room1 = lastPosted(four)[0];
+  assert.equal(room1.ext.w, 4130);
+  for (const e of Object.values(room1.outline.edges)) {
+    assert.equal((e as { panels?: number[] }).panels, undefined, 'a stale exact width was posted');
+  }
+  assert.ok(/no longer fit/.test(checkOf(four)), 'the release is not said: ' + checkOf(four));
+  assert.ok(
+    !textOf(forms(four)).includes('Taken from the uploaded drawing: these are the widths'),
+    'the card still says the widths are from the drawing',
+  );
+});
+
 
 console.log(`\n  ${passed} passed\n`);

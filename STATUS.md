@@ -4,7 +4,135 @@ Read this first if you are picking the project up — on this machine or another
 `README.md` says what the engine does, `DESIGN.md` says where it is going, this
 file says what has actually happened and what is next.
 
-Last updated: 5 October 2026.
+Last updated: 6 October 2026.
+
+## What landed on 6 October 2026 — multi-room upload, in one place
+
+Summary of the three entries below (HI-15420: two chiller rooms, 60 mm, puf slab
+floors, one 900 RHS door each, lift 110). `npm run check` prints ALL ROWS MATCH
+across 3 jobs, 9 deviations; 334 tests pass.
+
+- **Every room opens.** `ExtractionResult` is `{ jobNo, rooms: [{ room, form }], notes }`.
+- **The drawing is shown as received** above the generated sheet; never saved
+  with the job.
+- **Printed widths are applied as a marked Exact-widths override** where they
+  close on the engine's run and differ from the shop rule (room 1 bottom:
+  625 + 625 | door | 1090, where the rule gives 1160 + 1180). The rule's answer is
+  stated in the room's warnings, and the walls are listed as "taken from the
+  drawing", never as a pass.
+- **Open wall inferred from evidence:** room 2's dashed top wall has one
+  dimension and no chain, and its printed ceiling 3400 x 4110 is exactly
+  4140 - 30 (one own end, one shared end). It is set shared; the 300 beside it
+  is a plain panel. Still a guess until the shop answers (README Open items).
+- **Door PP/SS:** first is outer, second inner. An assumption from the wall
+  convention, flagged. SS thickness 0.5 was already assumed and flagged.
+- **Roof check fixed:** the printed ceiling is compared as an unordered pair
+  against (sum of roof panelW x qty, panelL), because a multi-panel ceiling never
+  equals one panel.
+- **Still unverified:** a live model reading of the two-room PDF (the tests use
+  the hand-reconciled fixture `core/verify/hi-15420.reading.ts`; the local key
+  answered 401). Room 2's hatched 860 x 1350 block is not modelled.
+
+## What landed on 6 October 2026 — review fixes to the multi-room upload
+
+Found by reviewing the two-room upload end to end (HI-15420); each has a
+regression test. `npm run check` still prints ALL ROWS MATCH across 3 jobs,
+9 deviations.
+
+- **Hinge drawn at the wrong end.** `drawSwing` put an RHS hinge at the end of
+  the opening along the edge; facing the wall from outside, the left hand points
+  along the edge, so RHS is at the start (plan-right on a bottom wall, as
+  HI-15420 prints). Swapped; one sample, not shop-confirmed (README Open items).
+- **Door figures never invented.** The upload no longer leaves `newDoor()`'s
+  CHQ 600 / lift 150 on a door whose drawing prints neither (both are off unless
+  read). A missing module falls back to the form's 1180 *in the server's
+  prediction too*, so a printed-panels override can no longer close on a door-less
+  run and then fail with the browser's door in place (400 from `/api/render`).
+- **Nothing defaulted silently.** Every null width/length/height/thickness,
+  door clear size or module is named in the room's warnings with the default
+  used; a ceiling/floor thickness not read follows the wall thickness. A
+  door in a chain with no door placed, and a thickness with no door blank
+  preset, are warned instead of failing later.
+- **Corner and roof sheets** follow the wall sheets (room-level `skin`, with a
+  "Roof and corner sheets" card on the form; default PPGI 0.4 so verified jobs
+  are unchanged). Single sample, said in the code.
+- **Drawing check** is spliced when a room is removed, and walls count as
+  "taken from the drawing" only while they still carry the mark. Exact widths
+  are released back to the shop rule (and said) when the room/wall
+  thickness/corner/door-module changes, instead of the BOQ turning into an error.
+- Smaller: notes shown in a readable block, wall header tags "from drawing",
+  uploaded drawing box 40vh with a visible chevron, the "What was read" screen is
+  read-only (it was unreachable and its door edits were ignored), the reader
+  accepts prose around the JSON, a bare room or a bare array of rooms.
+- **Not done, on purpose:** a ceiling panel order override (the odd piece is
+  laid last; warned when the print might differ), the floor description
+  wording (open item), a softer message for a wall the drawing marks as not built.
+
+## What landed on 6 October 2026 — drawing upload reads every room
+
+**Client half (done, same day).** `web/app.js` now reads `ExtractionResult.rooms`:
+
+- The upload screen shows "What was read" per room (editable, room name as
+  heading), warnings per room, notes once. `openResult` builds every room with
+  `roomFromReading`; rooms after the first go through `placeClear` (the same
+  placement `+ Room` uses). `form.open[i]` becomes `edge.shared` and
+  `form.panels[i]` becomes split `exact` + `panelsText`, each marked on the edge
+  as `fromDrawing.{open,exact}` and said on the wall card ("Taken from the
+  uploaded drawing"). Editing the widths or split clears the mark; the shared box on an open wall is not locked, so the estimator can take it back.
+- `state.drawingCheck` is `{ rooms: [{ name, expected, warnings, panels }], notes }`;
+  `drawingCheckPanel` holds block i of the BOQ against room i. The roof is held as
+  an unordered pair against (sum of roof panelW x qty, panelL). Walls whose
+  widths were applied from the drawing are taken out of the comparison and listed
+  as "Taken from the drawing" (the BOQ must still hold each of those panels);
+  the rule-built walls are compared on their own, so it is still a genuine check.
+- The uploaded file (object URL, `state.uploadedDrawing`, cleared on New and on
+  opening a job, never saved) sits in a persistent `.out-slot` above the
+  generated output as a `details` "Uploaded drawing - as received" (img for
+  PNG/JPEG, embed for PDF), in its own scroll box, hidden in print. The slot is
+  not rebuilt on edits, so a PDF viewer does not reload on every keystroke.
+- `core/verify/web.test.ts` (71 tests) drives the whole flow with the HI-15420
+  fixture, now shared as `core/verify/hi-15420.reading.ts`, against the real
+  engine for `/api/render`. `npm run check` still prints ALL ROWS MATCH across 3
+  jobs, 9 deviations.
+- Not looked at in a real browser (no browser was reachable) and not run with a
+  live key: CSS of the new box and the embed on a phone are untested by eye.
+
+### Server half
+
+HI-15420 (two chiller rooms on one sheet) read as one room. `server/vision.ts`
+now asks for a `rooms` array (a legacy single `room` answer is wrapped) and
+`ExtractionResult` is `{ jobNo, rooms: [{ room, form }], notes }`. (The client half is done — see above.)
+
+- `ExtractedRoom.openWalls` — a wall drawn dashed with one overall dimension and
+  no chain. `DerivedForm.open[4]` per edge: the form marks that edge shared, so
+  the engine gives it no panels, no corner panel at either end and a ceiling and
+  floor that stop at the neighbour's wall. A chain-end `corner` beside an open
+  wall is re-kinded to a plain panel (warned) and left out of
+  `expected.cornerPanels`. HI-15420 room 2's printed ceiling 3400 x 4110 is
+  exactly what the engine gives with the top open (4140 - 30), where a walled
+  room would be 4080 — cited in the warning only when the data shows it.
+- `DerivedForm.panels[4]` — the printed widths per edge (the edge's own
+  direction, door excluded), set only where they fill the engine's run exactly
+  and are not what `core/split.ts` would give *in that order*. Computed by
+  calling `compileWalls` + `layoutRoom`, not re-derived. To be applied as the
+  marked "Exact widths" override; each one is a warning stating the rule's
+  split beside the printed one. On HI-15420 that is room 1 bottom (the rule
+  would give 1160 + 1180 against the printed 625 + 625 | door | 1090, a real
+  BOQ difference), and four walls where the rule gives the same panels with the
+  odd one at the other end (room 1 top and left, room 2 right) — order only,
+  BOQ unchanged, but the drawing then matches the printed one.
+- Corner legs are now stated wherever they differ from the form's 300 (they
+  used to be stated only where they differed from the drawing's commonest).
+- Door PP/SS: first is outer, second inner, warned as an assumption.
+- `core/verify/vision.test.ts` (41 tests) holds both fixtures, including the
+  BOQ and the drawn panel order through `buildRoomBlock` / `wallSegments`.
+  `npm run verify` is unchanged: ALL ROWS MATCH across 3 jobs, 9 deviations.
+- Not done: an open wall is `shared`, so `checkJob` lists it as "in nobody's
+  BOQ" until a room is placed behind it. Honest for a wall someone must build;
+  a false alarm for an existing structure. A "not built by anyone" flag would
+  need `EdgeOverride`, `checkJob` and a form control together — left for the
+  shop's answer on what that dashed top wall is. The hatched 860 x 1350 block
+  in room 2 is not modelled.
 
 ## What landed on 6 October 2026 — door opens outward by default
 

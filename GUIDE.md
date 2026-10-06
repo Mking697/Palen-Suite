@@ -74,6 +74,7 @@ tab chahiye jab kisi purane job ko verify karna ho.
 | Chahiye | Kahan |
 |---|---|
 | **Pehli baar chala rahe hain** | [Pehli baar? Ye 6 step kaafi hain](#pehli-baar-ye-6-step-kaafi-hain) |
+| **Drawing upload karke shuru karna** | [Drawing upload](#drawing-upload--ek-ya-kai-room-ek-sheet-par) |
 | Screen kaise chalti hai | [Sabse aasan raasta](#sabse-aasan-raasta--panel-calculator) |
 | **Har control kya karta hai** | [Screen par har control](#screen-par-har-control--ek-ek-karke) |
 | Ceiling ya floor nahi chahiye | [Ceiling](#ceiling--chhat-chahiye-ya-nahi) · [Floor](#floor--farsh-chahiye-ya-nahi) |
@@ -95,6 +96,42 @@ tab chahiye jab kisi purane job ko verify karna ho.
 > **Guide** button hai — dabate hi yahi page **naye tab me** khul jayega, taaki
 > form me jo job aap type kar rahe the wo bacha rahe. Do copies nahi hain: jo
 > file aap padh rahe hain, wahi screen par bhi dikhti hai.
+
+## Drawing upload — ek ya kai room, ek sheet par
+
+Landing screen par **Upload** dabaiye aur drawing ki PNG, JPEG ya PDF chuniye
+(AutoCAD se **File → Export → PDF**). Sheet par ek room ho ya kai, **saare room
+khul jate hain** — har room ka apna tab, apni dimensions, apna door.
+
+- **Drawing jaisi upload ki, waisi hi dikhti hai.** Output ke sabse upar
+  **"Uploaded drawing - as received"** hai: aapki file, bina kuch badle. Uske
+  neeche tool ki banayi hui drawing aur BOQ hai. Ye job ke saath save nahi hoti,
+  aur Print me nahi aati.
+- **Jo wall ki panel width drawing par shop-rule se alag chhapi hai**, wo us wall
+  par **Exact widths** me aati hai aur card par likha hota hai "Taken from the
+  uploaded drawing" (aur wall ke header par "widths - from drawing" ka tag).
+  Usse badalte hi wo likha hata diya jata hai, kyunki tab wo aapka number hai.
+  Room ki width/length, wall thickness, corner ya door module badalne par bhi
+  ye drawing wali widths shop-rule par wapas aa jati hain (BOQ ke paas likha
+  aata hai), warna engine purani widths ko naye run par lagane se mana kar deta hai.
+- **Jo wall dashed hai aur uski sirf ek overall dimension hai (koi panel chain
+  nahi)**, wo is room ki nahi maani jati: "Shared with neighbour" tick ho jata
+  hai aur likha aata hai ki drawing se aaya. Agar wo wall asal me ban rahi hai to
+  tick hata dijiye.
+- BOQ ke paas **"Checked against the uploaded drawing"** har room ke liye alag
+  dikhta hai. Jo walls drawing ke widths se li gayi hain wo "Taken from the
+  drawing" me alag likhi jati hain — unko "match ho gaya" nahi gina jata. Baaki
+  walls, corners aur ceiling ka size drawing se milaye jate hain.
+- Corner aur roof panels wall ki hi sheets (bahar PPGI, andar SS) lete hain —
+  form me **Roof and corner sheets** me dikhta hai, wahan badal sakte hain.
+  Jo figure drawing par chhapi nahi (jaise door ka CHQ sheet ya lift) wo
+  **band** rehti hai, apne aap nahi bharti. Jo number padha nahi gaya
+  (height, thickness, door module...) wo room ke warnings me naam ke saath
+  likha aata hai ki form ka kaun sa default lag raha hai.
+- Door ke naap, hand, PP/SS sheet aur lift drawing se aate hain. **PP/SS me
+  pehla bahar ki sheet maani jati hai, doosra andar ki** — ye anuman hai, shop se
+  confirm kijiye. Drawing ke jo hisse (jaise hatched block) model nahi hue, wo
+  "The reading tool noted" me likhe aate hain.
 
 ## Sabse aasan raasta — Panel Calculator
 
